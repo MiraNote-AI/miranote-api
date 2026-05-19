@@ -1,0 +1,16 @@
+# templates/target-workflow.yml -- synced verbatim into each target repo as
+# `.github/workflows/checks.yml`. Targets call the reusable workflow in
+# MiraNote-AI/.github@main; their entire CI gate is these 6 lines.
+
+name: Checks
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  checks:
+    uses: MiraNote-AI/.github/.github/workflows/checks.yml@main
+    with:
+      mode: target
