@@ -1,6 +1,6 @@
 """
 MiraNote POC -- Voice-to-Text API
-Whisper transcription + optional Gemini correction for high accuracy.
+Whisper transcription + optional LLM correction (any OpenAI-compatible provider).
 """
 
 import os
@@ -16,15 +16,16 @@ load_dotenv()
 
 # ---------- Config ----------
 WHISPER_MODEL = os.getenv("WHISPER_MODEL", "medium")
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-GEMINI_BASE_URL = os.getenv("GEMINI_BASE_URL")
+LLM_API_KEY = os.getenv("LLM_API_KEY")
+LLM_BASE_URL = os.getenv("LLM_BASE_URL")
+LLM_MODEL = os.getenv("LLM_MODEL", "gemini-2.5-flash")
 
 # ---------- Load models ----------
 print(f"Loading Whisper model: {WHISPER_MODEL} ...")
 model = whisper.load_model(WHISPER_MODEL)
 print("Whisper model loaded.")
 
-gemini = OpenAI(api_key=GEMINI_API_KEY, base_url=GEMINI_BASE_URL) if GEMINI_API_KEY else None
+llm = OpenAI(api_key=LLM_API_KEY, base_url=LLM_BASE_URL) if LLM_API_KEY else None
 
 app = FastAPI(title="MiraNote Voice-to-Text", version="0.1.0")
 
@@ -39,14 +40,14 @@ if os.path.exists(_PROMPT_PATH):
 
 
 async def correct_with_ai(raw_text: str) -> str:
-    """Use Gemini to correct Whisper transcription errors, with retry on rate limit."""
-    if not gemini or not CORRECTION_PROMPT:
+    """Use the configured LLM to correct Whisper transcription errors, with retry on rate limit."""
+    if not llm or not CORRECTION_PROMPT:
         return raw_text
     for attempt in range(3):
         try:
             resp = await asyncio.to_thread(
-                gemini.chat.completions.create,
-                model="gemini-2.5-flash",
+                llm.chat.completions.create,
+                model=LLM_MODEL,
                 messages=[
                     {"role": "user", "content": CORRECTION_PROMPT + "\n\n" + raw_text},
                 ],
@@ -110,4 +111,8 @@ async def transcribe(
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "whisper_model": WHISPER_MODEL, "ai_correction": gemini is not None}
+    return {
+        "status": "ok",
+        "whisper_model": WHISPER_MODEL,
+        "llm_model": LLM_MODEL if llm else None,
+    }
