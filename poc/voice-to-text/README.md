@@ -94,12 +94,22 @@ Response:
   "language": "zh",
   "raw_text": "...",
   "corrected_text": "...",
+  "correction_status": "ok",
   "segments": [{"start": 0.0, "end": 4.2, "text": "..."}]
 }
 ```
 
-`corrected_text` is `null` only when `correct=false`. When `LLM_API_KEY`
-is unset, it falls back to `raw_text` (same content, easier client code).
+`correction_status` is one of:
+
+| Value     | `corrected_text` | When |
+|-----------|------------------|------|
+| `ok`      | LLM-corrected string | LLM call succeeded |
+| `skipped` | `null`               | `correct=false`, or no `LLM_API_KEY`, or `raw_text` is empty |
+| `failed`  | `null`               | LLM call errored after retries (rate-limit exhausted, quota, network, ...). Server stderr logs the underlying error. |
+
+Clients that just want "best available text" should read `corrected_text
+or raw_text`. Clients that care whether the LLM ran should check
+`correction_status`.
 
 **`GET /health`**
 

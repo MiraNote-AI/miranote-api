@@ -6,6 +6,7 @@ Whisper transcription + optional LLM correction (any OpenAI-compatible provider)
 import os
 import tempfile
 import asyncio
+from typing import Optional, Tuple
 
 import whisper
 from fastapi import FastAPI, UploadFile, File, Query
@@ -39,10 +40,16 @@ if os.path.exists(_PROMPT_PATH):
         CORRECTION_PROMPT = f.read()
 
 
-async def correct_with_ai(raw_text: str) -> str:
-    """Use the configured LLM to correct Whisper transcription errors, with retry on rate limit."""
+async def correct_with_ai(raw_text: str) -> Tuple[Optional[str], str]:
+    """Use the configured LLM to correct Whisper transcription errors.
+
+    Returns (corrected_text, status) where status is one of:
+      "ok"      -- corrected_text is the LLM response
+      "skipped" -- no LLM configured; corrected_text is None
+      "failed"  -- LLM call errored after retries; corrected_text is None
+    """
     if not llm or not CORRECTION_PROMPT:
-        return raw_text
+        return None, "skipped"
     for attempt in range(3):
         try:
             resp = await asyncio.to_thread(
@@ -53,7 +60,7 @@ async def correct_with_ai(raw_text: str) -> str:
                 ],
                 max_tokens=4096,
             )
-            return resp.choices[0].message.content
+            return resp.choices[0].message.content, "ok"
         except Exception as e:
             if "429" in str(e) and attempt < 2:
                 wait = 45 * (attempt + 1)
@@ -61,8 +68,8 @@ async def correct_with_ai(raw_text: str) -> str:
                 await asyncio.sleep(wait)
             else:
                 print(f"AI correction failed: {e}")
-                return raw_text
-    return raw_text
+                return None, "failed"
+    return None, "failed"
 
 
 @app.post("/transcribe")
@@ -95,14 +102,16 @@ async def transcribe(
             for seg in result.get("segments", [])
         ]
 
-        corrected_text = None
+        corrected_text: Optional[str] = None
+        correction_status = "skipped"
         if correct and raw_text.strip():
-            corrected_text = await correct_with_ai(raw_text)
+            corrected_text, correction_status = await correct_with_ai(raw_text)
 
         return {
             "language": language,
             "raw_text": raw_text,
             "corrected_text": corrected_text,
+            "correction_status": correction_status,
             "segments": segments,
         }
     finally:
