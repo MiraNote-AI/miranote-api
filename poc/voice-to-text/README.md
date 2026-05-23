@@ -6,6 +6,10 @@ OpenAI-compatible provider).
 
 This is a POC. No auth, no upload size limit, no SLAs. Run locally.
 
+> New here? Start with [SETUP.md](SETUP.md) -- a linear first-time
+> setup guide. This README is the reference (env vars, response
+> schema, provider matrix).
+
 ## Quick start
 
 ```bash
