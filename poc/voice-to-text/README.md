@@ -49,7 +49,7 @@ LLM_MODEL=gemini-2.5-flash
 ```bash
 LLM_API_KEY=sk-...
 LLM_BASE_URL=https://api.deepseek.com/v1
-LLM_MODEL=deepseek-chat
+LLM_MODEL=deepseek-v4-flash
 ```
 
 **Moonshot**
@@ -104,7 +104,7 @@ is unset, it falls back to `raw_text` (same content, easier client code).
 **`GET /health`**
 
 ```json
-{"status": "ok", "whisper_model": "medium", "llm_model": "deepseek-chat"}
+{"status": "ok", "whisper_model": "medium", "llm_model": "deepseek-v4-flash"}
 ```
 
 `llm_model` is `null` when no LLM key is configured.
