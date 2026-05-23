@@ -17,6 +17,13 @@ uvicorn main:app --host 0.0.0.0 --port 8000
 
 First run downloads the Whisper model (~1.5 GB for `medium`).
 
+## Try it without recording anything
+
+`demo_data/` ships three short TTS clips (Chinese, Chinese + English
+mixed, English) so you can hit `/transcribe` immediately. See
+[`demo_data/README.md`](demo_data/README.md) for what each file
+exercises and copy-paste curl commands.
+
 ## Web UI
 
 Once the server is running, open <http://localhost:8000/> in a browser.
