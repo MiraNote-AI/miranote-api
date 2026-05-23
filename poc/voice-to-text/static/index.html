@@ -487,6 +487,11 @@
 
     $("record-start").addEventListener("click", async () => {
       clearError();
+      const startBtn = $("record-start");
+      // Immediate feedback: getUserMedia + OS mic warm-up can take 1-4s on
+      // macOS, during which a silent button looks broken.
+      startBtn.disabled = true;
+      startBtn.textContent = "Initializing mic...";
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         const mime = pickMime();
@@ -520,9 +525,11 @@
         state.timerHandle = setInterval(() => {
           $("record-timer").textContent = fmtTimer(Date.now() - state.timerStart);
         }, 250);
-        $("record-start").disabled = true;
+        startBtn.textContent = "Recording...";
         $("record-stop").disabled = false;
       } catch (e) {
+        startBtn.disabled = false;
+        startBtn.textContent = "Start recording";
         showError("Microphone access failed: " + (e.message || e.name || e));
       }
     });
@@ -536,6 +543,7 @@
         state.timerHandle = null;
       }
       $("record-start").disabled = false;
+      $("record-start").textContent = "Start recording";
       $("record-stop").disabled = true;
     });
 
