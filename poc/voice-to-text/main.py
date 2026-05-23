@@ -9,7 +9,7 @@ import asyncio
 from typing import Optional, Tuple
 
 import whisper
-from fastapi import FastAPI, UploadFile, File, Query
+from fastapi import FastAPI, UploadFile, File, Query, HTTPException
 from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -83,15 +83,39 @@ async def transcribe(
     - Accepts audio file upload
     - Returns Whisper transcription + optional AI-corrected version
     """
+    raw_bytes = await file.read()
+    print(f"/transcribe: filename={file.filename!r} size={len(raw_bytes)} bytes")
+    # MediaRecorder can emit empty/headers-only blobs if the user stops before
+    # any audio chunks arrive. ffmpeg then fails to parse the container and
+    # Whisper bubbles a 500. Cheap pre-check turns this into a clean 422.
+    if len(raw_bytes) < 1024:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"Audio too small ({len(raw_bytes)} bytes). "
+                "Recording may be empty or truncated -- try again and record for at least 1 second."
+            ),
+        )
+
     suffix = os.path.splitext(file.filename or "audio.wav")[1]
     with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
-        tmp.write(await file.read())
+        tmp.write(raw_bytes)
         tmp_path = tmp.name
 
     try:
-        result = await asyncio.to_thread(
-            model.transcribe, tmp_path, verbose=False
-        )
+        try:
+            result = await asyncio.to_thread(
+                model.transcribe, tmp_path, verbose=False
+            )
+        except Exception as e:
+            print(f"Whisper/ffmpeg failed on {file.filename!r}: {e}")
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    f"Could not decode audio ({type(e).__name__}). "
+                    "Check that the file is a real audio recording in a supported format. See server logs for details."
+                ),
+            )
         raw_text = result["text"]
         language = result.get("language", "unknown")
         segments = [

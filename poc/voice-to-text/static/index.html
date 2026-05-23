@@ -174,6 +174,21 @@
       margin-right: 6px;
     }
     @keyframes spin { to { transform: rotate(360deg); } }
+    .level-meter {
+      width: 100%;
+      max-width: 240px;
+      height: 6px;
+      background: var(--border);
+      border-radius: 3px;
+      overflow: hidden;
+      margin-top: 10px;
+    }
+    .level-bar {
+      height: 100%;
+      width: 0%;
+      background: var(--ok);
+      transition: width 60ms linear;
+    }
     .health {
       font-size: 12px;
       color: var(--muted);
@@ -213,8 +228,11 @@
             Apply LLM correction
           </label>
         </div>
+        <div class="level-meter" id="level-meter" hidden>
+          <div class="level-bar" id="level-bar"></div>
+        </div>
         <p class="subtitle" style="margin-top:10px">
-          First click requests microphone permission. Recording happens in the browser; the resulting clip is uploaded only when you press stop.
+          First click requests microphone permission. Recording happens in the browser; the resulting clip is uploaded only when you press stop. The green bar shows live mic level.
         </p>
       </div>
     </div>
@@ -337,9 +355,9 @@
       try {
         const resp = await fetch(url, { method: "POST", body: fd });
         if (!resp.ok) {
-          let msg = "HTTP " + resp.status;
-          try { const j = await resp.json(); msg += " - " + (j.detail || JSON.stringify(j)); }
-          catch (_) {}
+          let msg;
+          try { const j = await resp.json(); msg = j.detail || ("HTTP " + resp.status); }
+          catch (_) { msg = "HTTP " + resp.status; }
           throw new Error(msg);
         }
         const data = await resp.json();
@@ -387,6 +405,50 @@
       return String(Math.floor(s / 60)).padStart(2, "0") + ":" + String(s % 60).padStart(2, "0");
     }
 
+    // Web Audio level meter: shows RMS of the mic stream as a horizontal bar.
+    let _audioCtx = null;
+    let _analyser = null;
+    let _levelRAF = null;
+    function startLevelMeter(stream) {
+      try {
+        const Ctx = window.AudioContext || window.webkitAudioContext;
+        _audioCtx = new Ctx();
+        const src = _audioCtx.createMediaStreamSource(stream);
+        _analyser = _audioCtx.createAnalyser();
+        _analyser.fftSize = 256;
+        src.connect(_analyser);
+        const buf = new Uint8Array(_analyser.fftSize);
+        const bar = $("level-bar");
+        $("level-meter").hidden = false;
+        const tick = () => {
+          if (!_analyser) return;
+          _analyser.getByteTimeDomainData(buf);
+          let sum = 0;
+          for (let i = 0; i < buf.length; i++) {
+            const d = (buf[i] - 128) / 128;
+            sum += d * d;
+          }
+          const rms = Math.sqrt(sum / buf.length);
+          // Scale: typical speech RMS ~0.05-0.2; *400 maps that into a visible bar.
+          bar.style.width = Math.min(100, rms * 400) + "%";
+          _levelRAF = requestAnimationFrame(tick);
+        };
+        tick();
+      } catch (e) {
+        // Level meter is best-effort; recording still works without it.
+        console.warn("Level meter init failed:", e);
+      }
+    }
+    function stopLevelMeter() {
+      if (_levelRAF) { cancelAnimationFrame(_levelRAF); _levelRAF = null; }
+      if (_audioCtx) { try { _audioCtx.close(); } catch (_) {} _audioCtx = null; }
+      _analyser = null;
+      const meter = $("level-meter");
+      const bar = $("level-bar");
+      if (bar) bar.style.width = "0%";
+      if (meter) meter.hidden = true;
+    }
+
     $("record-start").addEventListener("click", async () => {
       clearError();
       try {
@@ -400,13 +462,23 @@
         };
         state.mediaRecorder.onstop = () => {
           stream.getTracks().forEach((t) => t.stop());
+          stopLevelMeter();
           const mimeUsed = state.recordedMime || (state.chunks[0] && state.chunks[0].type) || "audio/webm";
           const blob = new Blob(state.chunks, { type: mimeUsed });
+          const durationMs = Date.now() - state.timerStart;
           const name = "recording." + extFor(mimeUsed);
           state.mediaRecorder = null;
+          if (durationMs < 500 || blob.size < 1024) {
+            showError(
+              "Recording too short (" + (durationMs / 1000).toFixed(1) + "s, " +
+              blob.size + " bytes). Record for at least 1 second."
+            );
+            return;
+          }
           transcribe(blob, name, $("record-correct").checked);
         };
         state.mediaRecorder.start();
+        startLevelMeter(stream);
         state.timerStart = Date.now();
         $("record-timer").textContent = "00:00";
         state.timerHandle = setInterval(() => {
