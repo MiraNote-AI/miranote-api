@@ -6,7 +6,7 @@ Whisper transcription + optional LLM correction (any OpenAI-compatible provider)
 import os
 import tempfile
 import asyncio
-from typing import Optional, Tuple
+from typing import Literal, Optional, Tuple
 
 import whisper
 from fastapi import FastAPI, UploadFile, File, Query, HTTPException
@@ -77,6 +77,16 @@ async def correct_with_ai(raw_text: str) -> Tuple[Optional[str], str]:
 async def transcribe(
     file: UploadFile = File(..., description="Audio file (mp3, wav, flac, m4a, ogg, webm)"),
     correct: bool = Query(True, description="Apply AI correction after Whisper transcription"),
+    lang: Literal["zh", "en"] = Query(
+        "zh",
+        description=(
+            "Audio language. `zh` (default) is the right choice for Chinese, "
+            "Chinese + English code-switching, or any audio dominated by Mandarin -- "
+            "the multilingual Whisper model handles inline English tokens. "
+            "`en` is for pure English audio. We disable Whisper's auto-detect because "
+            "on short or noisy clips it misfires (e.g. classifies Mandarin as Javanese)."
+        ),
+    ),
 ):
     """
     Voice-to-text endpoint.
@@ -105,7 +115,7 @@ async def transcribe(
     try:
         try:
             result = await asyncio.to_thread(
-                model.transcribe, tmp_path, verbose=False
+                model.transcribe, tmp_path, language=lang, verbose=False
             )
         except Exception as e:
             print(f"Whisper/ffmpeg failed on {file.filename!r}: {e}")
