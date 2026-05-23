@@ -10,6 +10,7 @@ from typing import Optional, Tuple
 
 import whisper
 from fastapi import FastAPI, UploadFile, File, Query
+from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
 from openai import OpenAI
 
@@ -125,3 +126,10 @@ async def health():
         "whisper_model": WHISPER_MODEL,
         "llm_model": LLM_MODEL if llm else None,
     }
+
+
+# Mount static UI at "/" last so explicit API routes above take precedence.
+# Visit http://localhost:8000/ in a browser.
+_STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
+if os.path.isdir(_STATIC_DIR):
+    app.mount("/", StaticFiles(directory=_STATIC_DIR, html=True), name="ui")
