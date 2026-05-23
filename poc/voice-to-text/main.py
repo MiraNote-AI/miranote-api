@@ -6,10 +6,11 @@ Whisper transcription + optional LLM correction (any OpenAI-compatible provider)
 import os
 import tempfile
 import asyncio
-from typing import Optional, Tuple
+from typing import Literal, Optional, Tuple
 
 import whisper
-from fastapi import FastAPI, UploadFile, File, Query
+from fastapi import FastAPI, UploadFile, File, Query, HTTPException
+from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
 from openai import OpenAI
 
@@ -76,21 +77,55 @@ async def correct_with_ai(raw_text: str) -> Tuple[Optional[str], str]:
 async def transcribe(
     file: UploadFile = File(..., description="Audio file (mp3, wav, flac, m4a, ogg, webm)"),
     correct: bool = Query(True, description="Apply AI correction after Whisper transcription"),
+    lang: Literal["zh", "en"] = Query(
+        "zh",
+        description=(
+            "Audio language. `zh` (default) is the right choice for Chinese, "
+            "Chinese + English code-switching, or any audio dominated by Mandarin -- "
+            "the multilingual Whisper model handles inline English tokens. "
+            "`en` is for pure English audio. We disable Whisper's auto-detect because "
+            "on short or noisy clips it misfires (e.g. classifies Mandarin as Javanese)."
+        ),
+    ),
 ):
     """
     Voice-to-text endpoint.
     - Accepts audio file upload
     - Returns Whisper transcription + optional AI-corrected version
     """
+    raw_bytes = await file.read()
+    print(f"/transcribe: filename={file.filename!r} size={len(raw_bytes)} bytes")
+    # MediaRecorder can emit empty/headers-only blobs if the user stops before
+    # any audio chunks arrive. ffmpeg then fails to parse the container and
+    # Whisper bubbles a 500. Cheap pre-check turns this into a clean 422.
+    if len(raw_bytes) < 1024:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"Audio too small ({len(raw_bytes)} bytes). "
+                "Recording may be empty or truncated -- try again and record for at least 1 second."
+            ),
+        )
+
     suffix = os.path.splitext(file.filename or "audio.wav")[1]
     with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
-        tmp.write(await file.read())
+        tmp.write(raw_bytes)
         tmp_path = tmp.name
 
     try:
-        result = await asyncio.to_thread(
-            model.transcribe, tmp_path, verbose=False
-        )
+        try:
+            result = await asyncio.to_thread(
+                model.transcribe, tmp_path, language=lang, verbose=False
+            )
+        except Exception as e:
+            print(f"Whisper/ffmpeg failed on {file.filename!r}: {e}")
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    f"Could not decode audio ({type(e).__name__}). "
+                    "Check that the file is a real audio recording in a supported format. See server logs for details."
+                ),
+            )
         raw_text = result["text"]
         language = result.get("language", "unknown")
         segments = [
@@ -125,3 +160,10 @@ async def health():
         "whisper_model": WHISPER_MODEL,
         "llm_model": LLM_MODEL if llm else None,
     }
+
+
+# Mount static UI at "/" last so explicit API routes above take precedence.
+# Visit http://localhost:8000/ in a browser.
+_STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
+if os.path.isdir(_STATIC_DIR):
+    app.mount("/", StaticFiles(directory=_STATIC_DIR, html=True), name="ui")

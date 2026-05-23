@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Voice -> Text (POC)</title>
+  <style>
+    :root {
+      --bg: #fafafa;
+      --panel: #ffffff;
+      --border: #e3e3e3;
+      --text: #1a1a1a;
+      --muted: #6b6b6b;
+      --accent: #2563eb;
+      --accent-hover: #1d4ed8;
+      --ok: #16a34a;
+      --warn: #d97706;
+      --err: #dc2626;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+    }
+    .container {
+      max-width: 880px;
+      margin: 0 auto;
+      padding: 32px 20px 80px;
+    }
+    h1 { font-size: 24px; margin: 0 0 4px; }
+    .subtitle { color: var(--muted); margin: 0 0 24px; font-size: 14px; }
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 16px;
+    }
+    .tabs {
+      display: flex;
+      gap: 4px;
+      margin-bottom: 16px;
+      border-bottom: 1px solid var(--border);
+    }
+    .tab {
+      padding: 8px 16px;
+      cursor: pointer;
+      border: none;
+      background: transparent;
+      color: var(--muted);
+      font-size: 14px;
+      font-weight: 500;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -1px;
+    }
+    .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+    .mode { display: none; }
+    .mode.active { display: block; }
+    button.primary {
+      background: var(--accent);
+      color: white;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+    }
+    button.primary:hover:not(:disabled) { background: var(--accent-hover); }
+    button.primary:disabled { opacity: 0.5; cursor: not-allowed; }
+    button.danger {
+      background: var(--err);
+      color: white;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+    }
+    input[type="file"] { font-size: 14px; }
+    label.option {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 13px;
+      color: var(--muted);
+      margin-left: 12px;
+    }
+    .row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+    .timer {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 14px;
+      color: var(--muted);
+    }
+    .badges { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+    .badge {
+      display: inline-block;
+      padding: 2px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 500;
+      background: #eee;
+      color: #333;
+    }
+    .badge.ok      { background: #dcfce7; color: var(--ok); }
+    .badge.skipped { background: #f3f4f6; color: var(--muted); }
+    .badge.failed  { background: #fee2e2; color: var(--err); }
+    .text-cols {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+    @media (max-width: 640px) { .text-cols { grid-template-columns: 1fr; } }
+    .text-col h3 {
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--muted);
+      margin: 0 0 6px;
+      font-weight: 600;
+    }
+    .text-box {
+      background: #f9fafb;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 12px;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+      font-size: 14px;
+      min-height: 60px;
+    }
+    .text-box.empty { color: var(--muted); font-style: italic; }
+    details { margin-top: 16px; }
+    summary { cursor: pointer; font-size: 13px; color: var(--muted); user-select: none; }
+    .segments {
+      margin-top: 8px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 12px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      overflow: hidden;
+    }
+    .seg {
+      padding: 6px 10px;
+      border-bottom: 1px solid var(--border);
+      display: grid;
+      grid-template-columns: 100px 1fr;
+      gap: 8px;
+    }
+    .seg:last-child { border-bottom: none; }
+    .seg .t { color: var(--muted); }
+    .error {
+      background: #fef2f2;
+      border: 1px solid #fecaca;
+      color: var(--err);
+      padding: 10px 14px;
+      border-radius: 6px;
+      font-size: 14px;
+      margin-bottom: 12px;
+    }
+    .spinner {
+      display: inline-block;
+      width: 14px;
+      height: 14px;
+      border: 2px solid #cbd5e1;
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      vertical-align: -2px;
+      margin-right: 6px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .lang-picker {
+      display: flex;
+      gap: 16px;
+      align-items: center;
+      padding: 10px 12px;
+      background: #f9fafb;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      margin-bottom: 14px;
+      font-size: 14px;
+    }
+    .lang-picker .legend {
+      color: var(--muted);
+      font-weight: 500;
+      font-size: 13px;
+      margin-right: 4px;
+    }
+    .lang-picker label {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+    }
+    .level-meter {
+      width: 100%;
+      max-width: 240px;
+      height: 6px;
+      background: var(--border);
+      border-radius: 3px;
+      overflow: hidden;
+      margin-top: 10px;
+    }
+    .level-bar {
+      height: 100%;
+      width: 0%;
+      background: var(--ok);
+      transition: width 60ms linear;
+    }
+    .health {
+      font-size: 12px;
+      color: var(--muted);
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Voice -> Text</h1>
+    <p class="subtitle">Whisper transcription + optional LLM correction. POC, no auth.</p>
+
+    <div class="panel">
+      <div class="lang-picker" role="radiogroup" aria-label="Audio language">
+        <span class="legend">Language:</span>
+        <label><input type="radio" name="lang" value="zh" checked /> Chinese (incl. Chinese + English mixed)</label>
+        <label><input type="radio" name="lang" value="en" /> English</label>
+      </div>
+
+      <div class="tabs" role="tablist">
+        <button class="tab active" data-mode="upload" role="tab">Upload file</button>
+        <button class="tab" data-mode="record" role="tab">Record (mic)</button>
+      </div>
+
+      <div class="mode active" id="mode-upload">
+        <div class="row">
+          <input type="file" id="file-input" accept="audio/*,.m4a,.mp3,.wav,.flac,.ogg,.webm" />
+          <button class="primary" id="upload-submit">Transcribe</button>
+          <label class="option">
+            <input type="checkbox" id="upload-correct" checked />
+            Apply LLM correction
+          </label>
+        </div>
+      </div>
+
+      <div class="mode" id="mode-record">
+        <div class="row">
+          <button class="primary" id="record-start">Start recording</button>
+          <button class="danger" id="record-stop" disabled>Stop and transcribe</button>
+          <span class="timer" id="record-timer">00:00</span>
+          <label class="option">
+            <input type="checkbox" id="record-correct" checked />
+            Apply LLM correction
+          </label>
+        </div>
+        <div class="level-meter" id="level-meter" hidden>
+          <div class="level-bar" id="level-bar"></div>
+        </div>
+        <p class="subtitle" style="margin-top:10px">
+          First click requests microphone permission. Recording happens in the browser; the resulting clip is uploaded only when you press stop. The green bar shows live mic level.
+        </p>
+      </div>
+    </div>
+
+    <div id="error-panel" class="error" hidden></div>
+
+    <div id="result-panel" class="panel" hidden>
+      <div class="badges" id="badges"></div>
+      <div class="text-cols">
+        <div class="text-col">
+          <h3>raw_text (Whisper)</h3>
+          <div class="text-box" id="raw"></div>
+        </div>
+        <div class="text-col">
+          <h3>corrected_text (LLM)</h3>
+          <div class="text-box" id="corrected"></div>
+        </div>
+      </div>
+      <details>
+        <summary id="segments-summary">Segments</summary>
+        <div class="segments" id="segments"></div>
+      </details>
+    </div>
+
+    <div class="health" id="health"></div>
+  </div>
+
+  <script>
+    // ---------- State + helpers ----------
+    const $ = (id) => document.getElementById(id);
+    const state = {
+      mode: "upload",
+      mediaRecorder: null,
+      chunks: [],
+      timerStart: 0,
+      timerHandle: null,
+      recordedMime: "",
+    };
+
+    function setMode(m) {
+      state.mode = m;
+      document.querySelectorAll(".tab").forEach((t) =>
+        t.classList.toggle("active", t.dataset.mode === m)
+      );
+      document.querySelectorAll(".mode").forEach((el) =>
+        el.classList.toggle("active", el.id === "mode-" + m)
+      );
+    }
+
+    function showError(msg) {
+      const p = $("error-panel");
+      p.textContent = "Error: " + msg;
+      p.hidden = false;
+    }
+    function clearError() { $("error-panel").hidden = true; }
+
+    function renderResult(data) {
+      clearError();
+      $("result-panel").hidden = false;
+      const badges = $("badges");
+      badges.innerHTML = "";
+      const add = (text, cls = "") => {
+        const b = document.createElement("span");
+        b.className = "badge " + cls;
+        b.textContent = text;
+        badges.appendChild(b);
+      };
+      add("lang: " + (data.language || "?"));
+      add("correction: " + data.correction_status, data.correction_status);
+
+      const raw = $("raw");
+      raw.textContent = data.raw_text || "(empty)";
+      raw.classList.toggle("empty", !data.raw_text);
+
+      const cor = $("corrected");
+      if (data.corrected_text == null) {
+        cor.textContent = data.correction_status === "skipped"
+          ? "(skipped - LLM not called)"
+          : "(failed - see server logs)";
+        cor.classList.add("empty");
+      } else {
+        cor.textContent = data.corrected_text;
+        cor.classList.remove("empty");
+      }
+
+      const segs = data.segments || [];
+      $("segments-summary").textContent = "Segments (" + segs.length + ")";
+      const segBox = $("segments");
+      segBox.innerHTML = "";
+      segs.forEach((s) => {
+        const row = document.createElement("div");
+        row.className = "seg";
+        row.innerHTML =
+          '<span class="t">' +
+          s.start.toFixed(2).padStart(6, "0") + " - " +
+          s.end.toFixed(2).padStart(6, "0") +
+          "</span><span>" + escapeHtml(s.text) + "</span>";
+        segBox.appendChild(row);
+      });
+    }
+
+    function escapeHtml(s) {
+      return s.replace(/[&<>"']/g, (c) => ({
+        "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+      }[c]));
+    }
+
+    function selectedLang() {
+      const r = document.querySelector('input[name="lang"]:checked');
+      return r ? r.value : "zh";
+    }
+
+    async function transcribe(blob, filename, correct) {
+      const fd = new FormData();
+      fd.append("file", blob, filename);
+      const url =
+        "/transcribe?correct=" + (correct ? "true" : "false") +
+        "&lang=" + selectedLang();
+      const btns = document.querySelectorAll(".primary, .danger");
+      btns.forEach((b) => (b.disabled = true));
+      $("result-panel").hidden = true;
+      clearError();
+      const status = document.createElement("div");
+      status.className = "health";
+      status.innerHTML = '<span class="spinner"></span>Transcribing...';
+      $("error-panel").after(status);
+      try {
+        const resp = await fetch(url, { method: "POST", body: fd });
+        if (!resp.ok) {
+          let msg;
+          try { const j = await resp.json(); msg = j.detail || ("HTTP " + resp.status); }
+          catch (_) { msg = "HTTP " + resp.status; }
+          throw new Error(msg);
+        }
+        const data = await resp.json();
+        renderResult(data);
+      } catch (e) {
+        showError(e.message || String(e));
+      } finally {
+        status.remove();
+        btns.forEach((b) => (b.disabled = false));
+        // re-disable record-stop if not actively recording
+        if (state.mode === "record" && !state.mediaRecorder) {
+          $("record-stop").disabled = true;
+        }
+      }
+    }
+
+    // ---------- Upload mode ----------
+    $("upload-submit").addEventListener("click", () => {
+      const f = $("file-input").files[0];
+      if (!f) { showError("Pick a file first."); return; }
+      transcribe(f, f.name, $("upload-correct").checked);
+    });
+
+    // ---------- Record mode ----------
+    function pickMime() {
+      const candidates = [
+        "audio/webm;codecs=opus",
+        "audio/webm",
+        "audio/mp4",
+        "audio/ogg;codecs=opus",
+      ];
+      for (const m of candidates) {
+        if (window.MediaRecorder && MediaRecorder.isTypeSupported(m)) return m;
+      }
+      return "";
+    }
+    function extFor(mime) {
+      if (mime.startsWith("audio/webm")) return "webm";
+      if (mime.startsWith("audio/mp4")) return "m4a";
+      if (mime.startsWith("audio/ogg")) return "ogg";
+      return "bin";
+    }
+    function fmtTimer(ms) {
+      const s = Math.floor(ms / 1000);
+      return String(Math.floor(s / 60)).padStart(2, "0") + ":" + String(s % 60).padStart(2, "0");
+    }
+
+    // Web Audio level meter: shows RMS of the mic stream as a horizontal bar.
+    let _audioCtx = null;
+    let _analyser = null;
+    let _levelRAF = null;
+    function startLevelMeter(stream) {
+      try {
+        const Ctx = window.AudioContext || window.webkitAudioContext;
+        _audioCtx = new Ctx();
+        const src = _audioCtx.createMediaStreamSource(stream);
+        _analyser = _audioCtx.createAnalyser();
+        _analyser.fftSize = 256;
+        src.connect(_analyser);
+        const buf = new Uint8Array(_analyser.fftSize);
+        const bar = $("level-bar");
+        $("level-meter").hidden = false;
+        const tick = () => {
+          if (!_analyser) return;
+          _analyser.getByteTimeDomainData(buf);
+          let sum = 0;
+          for (let i = 0; i < buf.length; i++) {
+            const d = (buf[i] - 128) / 128;
+            sum += d * d;
+          }
+          const rms = Math.sqrt(sum / buf.length);
+          // Scale: typical speech RMS ~0.05-0.2; *400 maps that into a visible bar.
+          bar.style.width = Math.min(100, rms * 400) + "%";
+          _levelRAF = requestAnimationFrame(tick);
+        };
+        tick();
+      } catch (e) {
+        // Level meter is best-effort; recording still works without it.
+        console.warn("Level meter init failed:", e);
+      }
+    }
+    function stopLevelMeter() {
+      if (_levelRAF) { cancelAnimationFrame(_levelRAF); _levelRAF = null; }
+      if (_audioCtx) { try { _audioCtx.close(); } catch (_) {} _audioCtx = null; }
+      _analyser = null;
+      const meter = $("level-meter");
+      const bar = $("level-bar");
+      if (bar) bar.style.width = "0%";
+      if (meter) meter.hidden = true;
+    }
+
+    $("record-start").addEventListener("click", async () => {
+      clearError();
+      const startBtn = $("record-start");
+      // Immediate feedback: getUserMedia + OS mic warm-up can take 1-4s on
+      // macOS, during which a silent button looks broken.
+      startBtn.disabled = true;
+      startBtn.textContent = "Initializing mic...";
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const mime = pickMime();
+        state.recordedMime = mime;
+        state.mediaRecorder = new MediaRecorder(stream, mime ? { mimeType: mime } : {});
+        state.chunks = [];
+        state.mediaRecorder.ondataavailable = (e) => {
+          if (e.data && e.data.size > 0) state.chunks.push(e.data);
+        };
+        state.mediaRecorder.onstop = () => {
+          stream.getTracks().forEach((t) => t.stop());
+          stopLevelMeter();
+          const mimeUsed = state.recordedMime || (state.chunks[0] && state.chunks[0].type) || "audio/webm";
+          const blob = new Blob(state.chunks, { type: mimeUsed });
+          const durationMs = Date.now() - state.timerStart;
+          const name = "recording." + extFor(mimeUsed);
+          state.mediaRecorder = null;
+          if (durationMs < 500 || blob.size < 1024) {
+            showError(
+              "Recording too short (" + (durationMs / 1000).toFixed(1) + "s, " +
+              blob.size + " bytes). Record for at least 1 second."
+            );
+            return;
+          }
+          transcribe(blob, name, $("record-correct").checked);
+        };
+        state.mediaRecorder.start();
+        startLevelMeter(stream);
+        state.timerStart = Date.now();
+        $("record-timer").textContent = "00:00";
+        state.timerHandle = setInterval(() => {
+          $("record-timer").textContent = fmtTimer(Date.now() - state.timerStart);
+        }, 250);
+        startBtn.textContent = "Recording...";
+        $("record-stop").disabled = false;
+      } catch (e) {
+        startBtn.disabled = false;
+        startBtn.textContent = "Start recording";
+        showError("Microphone access failed: " + (e.message || e.name || e));
+      }
+    });
+
+    $("record-stop").addEventListener("click", () => {
+      if (state.mediaRecorder && state.mediaRecorder.state === "recording") {
+        state.mediaRecorder.stop();
+      }
+      if (state.timerHandle) {
+        clearInterval(state.timerHandle);
+        state.timerHandle = null;
+      }
+      $("record-start").disabled = false;
+      $("record-start").textContent = "Start recording";
+      $("record-stop").disabled = true;
+    });
+
+    // ---------- Tab wiring ----------
+    document.querySelectorAll(".tab").forEach((t) =>
+      t.addEventListener("click", () => setMode(t.dataset.mode))
+    );
+
+    // ---------- Health on load ----------
+    (async () => {
+      try {
+        const r = await fetch("/health");
+        const h = await r.json();
+        $("health").textContent =
+          "server: " + h.status +
+          " | whisper: " + h.whisper_model +
+          " | llm: " + (h.llm_model || "(not configured)");
+      } catch (e) {
+        $("health").textContent = "server: unreachable";
+      }
+    })();
+  </script>
+</body>
+</html>

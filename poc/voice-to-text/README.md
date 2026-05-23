@@ -21,6 +21,32 @@ uvicorn main:app --host 0.0.0.0 --port 8000
 
 First run downloads the Whisper model (~1.5 GB for `medium`).
 
+## Try it without recording anything
+
+`demo_data/` ships three short TTS clips (Chinese, Chinese + English
+mixed, English) so you can hit `/transcribe` immediately. See
+[`demo_data/README.md`](demo_data/README.md) for what each file
+exercises and copy-paste curl commands.
+
+## Web UI
+
+Once the server is running, open <http://localhost:8000/> in a browser.
+A single page is served from `static/index.html` with two modes:
+
+- **Upload file** -- pick any audio file from disk and transcribe it.
+- **Record (mic)** -- record straight from the browser microphone using
+  `MediaRecorder`, then transcribe the resulting clip. Requires
+  microphone permission on first click. Works on `localhost` without
+  HTTPS; for any other origin the browser will refuse mic access without
+  a secure context.
+
+Both modes show `raw_text`, `corrected_text`, the `correction_status`
+badge, and the Whisper segments. There's a checkbox to toggle the
+`correct` query param per request.
+
+The UI is plain HTML + vanilla JS (no build step, no CDN dependencies)
+so it works offline once the page is loaded.
+
 ## LLM configuration
 
 Post-correction is **optional**. Without an LLM key, `/transcribe`
@@ -90,6 +116,7 @@ LLM_MODEL=Qwen/Qwen2.5-7B-Instruct
 | Query param | Default | Notes |
 |-------------|---------|-------|
 | `correct`   | `true`  | if `false`, skip LLM correction even when `LLM_API_KEY` is set |
+| `lang`      | `zh`    | one of `zh` or `en`. Forces Whisper's language; auto-detect is disabled because on short / noisy clips it misfires (we observed Mandarin classified as Javanese). `zh` is the right choice for Chinese audio **and** for Chinese + English code-switching -- the multilingual model handles inline English. `en` is for pure English audio. Other values return 422. |
 
 Response:
 
