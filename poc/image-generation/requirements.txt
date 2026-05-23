@@ -1,0 +1,6 @@
+google-cloud-aiplatform>=1.60
+python-dotenv>=1.0
+Pillow>=10.0
+fastapi>=0.110
+uvicorn>=0.29
+rembg[cpu]>=2.0
