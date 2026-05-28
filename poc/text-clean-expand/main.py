@@ -4,9 +4,12 @@ Clean: fix typos/punctuation/grammar, preserve original meaning.
 Expand: give user ideas to continue writing, concise and inspiring.
 """
 
+from __future__ import annotations
+
 import os
 import asyncio
 from pathlib import Path
+from typing import Optional
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -85,7 +88,7 @@ Output ONLY the expanded text. No explanations, no meta-commentary."""
 
 class TextRequest(BaseModel):
     text: str = Field(..., min_length=1, description="User's raw text input")
-    context: str | None = Field(None, description="Optional surrounding context for better expansion")
+    context: Optional[str] = Field(None, description="Optional surrounding context for better expansion")
 
 
 class CleanResponse(BaseModel):
