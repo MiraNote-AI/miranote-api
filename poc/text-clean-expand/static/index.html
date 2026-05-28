@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MiraNote POC</title>
+  <style>
+    :root {
+      --bg: #f8f7f4;
+      --panel: #ffffff;
+      --border: #e5e2dc;
+      --text: #1a1a1a;
+      --muted: #8a8580;
+      --accent: #5b4f3f;
+      --accent-hover: #3d3429;
+      --ok: #5a8a5e;
+      --err: #c45c5c;
+      --warm: #c9a96e;
+      --warm-light: #f5f0e6;
+    }
+    * { box-sizing: border-box; margin: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+    }
+    .container { max-width: 920px; margin: 0 auto; padding: 40px 24px 80px; }
+    .logo { font-size: 28px; font-weight: 700; letter-spacing: -0.5px; }
+    .logo span { color: var(--warm); }
+    .subtitle { color: var(--muted); font-size: 13px; margin: 2px 0 28px; }
+
+    .nav { display: flex; gap: 0; margin-bottom: 24px; border-bottom: 2px solid var(--border); }
+    .nav-tab {
+      padding: 10px 24px; cursor: pointer; border: none; background: transparent;
+      color: var(--muted); font-size: 15px; font-weight: 600;
+      border-bottom: 2px solid transparent; margin-bottom: -2px; transition: all 0.15s;
+    }
+    .nav-tab:hover { color: var(--accent); }
+    .nav-tab.active { color: var(--accent); border-bottom-color: var(--warm); }
+    .nav-tab.coming-soon { opacity: 0.4; cursor: default; }
+    .nav-tab.coming-soon::after { content: " (soon)"; font-size: 11px; font-weight: 400; }
+
+    .page { display: none; }
+    .page.active { display: block; }
+
+    .panel {
+      background: var(--panel); border: 1px solid var(--border);
+      border-radius: 12px; padding: 24px; margin-bottom: 16px;
+    }
+    .panel-title {
+      font-size: 13px; font-weight: 600; text-transform: uppercase;
+      letter-spacing: 0.05em; color: var(--muted); margin-bottom: 12px;
+    }
+
+    .btn {
+      border: none; padding: 9px 20px; border-radius: 8px;
+      font-size: 14px; font-weight: 500; cursor: pointer; transition: all 0.15s;
+    }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-primary:hover:not(:disabled) { background: var(--accent-hover); }
+    .btn-warm { background: var(--warm); color: #fff; }
+    .btn-warm:hover:not(:disabled) { background: #b8953f; }
+    .btn-danger { background: var(--err); color: #fff; }
+
+    .row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+    textarea {
+      width: 100%; min-height: 140px; padding: 14px;
+      border: 1px solid var(--border); border-radius: 8px;
+      font-family: inherit; font-size: 15px; line-height: 1.6;
+      resize: vertical; background: #faf9f7; color: var(--text);
+    }
+    textarea:focus { outline: none; border-color: var(--warm); box-shadow: 0 0 0 3px rgba(201,169,110,0.15); }
+    textarea::placeholder { color: var(--muted); }
+
+    .result-box {
+      background: #faf9f7; border: 1px solid var(--border); border-radius: 8px;
+      padding: 16px; white-space: pre-wrap; word-wrap: break-word;
+      font-size: 15px; min-height: 60px; line-height: 1.7;
+    }
+    .result-box.empty { color: var(--muted); font-style: italic; }
+    .result-label {
+      font-size: 12px; font-weight: 600; text-transform: uppercase;
+      letter-spacing: 0.04em; color: var(--muted); margin-bottom: 6px;
+    }
+    .result-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    @media (max-width: 640px) { .result-cols { grid-template-columns: 1fr; } }
+
+    .badge {
+      display: inline-block; padding: 2px 10px; border-radius: 999px;
+      font-size: 11px; font-weight: 600; background: var(--warm-light); color: var(--accent);
+      margin-right: 6px;
+    }
+    .badge.ok { background: #e8f5e9; color: var(--ok); }
+
+    .spinner {
+      display: inline-block; width: 14px; height: 14px;
+      border: 2px solid var(--border); border-top-color: var(--warm);
+      border-radius: 50%; animation: spin 0.7s linear infinite;
+      vertical-align: -2px; margin-right: 6px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .loading-msg { color: var(--muted); font-size: 14px; padding: 12px 0; }
+    .error-msg {
+      background: #fef2f2; border: 1px solid #f5c6c6; color: var(--err);
+      padding: 10px 14px; border-radius: 8px; font-size: 14px; margin-bottom: 12px;
+    }
+
+    .lang-picker {
+      display: flex; gap: 16px; align-items: center;
+      padding: 10px 14px; background: #faf9f7; border: 1px solid var(--border);
+      border-radius: 8px; margin-bottom: 14px; font-size: 14px;
+    }
+    .lang-picker .legend { color: var(--muted); font-weight: 600; font-size: 13px; }
+    .lang-picker label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+    .voice-tabs { display: flex; gap: 4px; margin-bottom: 14px; border-bottom: 1px solid var(--border); }
+    .voice-tab {
+      padding: 7px 14px; cursor: pointer; border: none; background: transparent;
+      color: var(--muted); font-size: 13px; font-weight: 500;
+      border-bottom: 2px solid transparent; margin-bottom: -1px;
+    }
+    .voice-tab.active { color: var(--accent); border-bottom-color: var(--warm); }
+    .voice-mode { display: none; }
+    .voice-mode.active { display: block; }
+    .timer { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 14px; color: var(--muted); }
+    .level-meter {
+      width: 100%; max-width: 240px; height: 6px;
+      background: var(--border); border-radius: 3px; overflow: hidden; margin-top: 10px;
+    }
+    .level-bar { height: 100%; width: 0%; background: var(--ok); transition: width 60ms linear; }
+    label.option { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
+    input[type="file"] { font-size: 14px; }
+    .seg-table {
+      margin-top: 8px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 12px; border: 1px solid var(--border); border-radius: 8px; overflow: hidden;
+    }
+    .seg { padding: 6px 10px; border-bottom: 1px solid var(--border); display: grid; grid-template-columns: 100px 1fr; gap: 8px; }
+    .seg:last-child { border-bottom: none; }
+    .seg .t { color: var(--muted); }
+    details { margin-top: 14px; }
+    summary { cursor: pointer; font-size: 13px; color: var(--muted); }
+    .health { font-size: 11px; color: var(--muted); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; margin-top: 24px; }
+  </style>
+</head>
+<body>
+<div class="container">
+  <div class="logo">Mira<span>Note</span></div>
+  <p class="subtitle">POC Playground — Text, Voice, Image AI pipelines</p>
+
+  <div class="nav" role="tablist">
+    <button class="nav-tab active" data-page="text">Text</button>
+    <button class="nav-tab" data-page="voice">Voice</button>
+    <button class="nav-tab coming-soon" data-page="image">Image</button>
+  </div>
+
+  <!-- TEXT PAGE -->
+  <div class="page active" id="page-text">
+    <div class="panel">
+      <div class="panel-title">Input</div>
+      <textarea id="txt-input" placeholder="随便写点什么… Type anything messy, mixed languages OK"></textarea>
+      <div style="margin-top: 14px;">
+        <div class="panel-title">Context <span style="font-weight:400;text-transform:none">(optional — helps Expand understand your topic)</span></div>
+        <textarea id="txt-context" placeholder="e.g. 这是一篇关于旅行的日记 / This is about our product roadmap" style="min-height:60px;"></textarea>
+      </div>
+      <div class="row" style="margin-top: 16px;">
+        <button class="btn btn-primary" id="txt-clean">Clean</button>
+        <button class="btn btn-warm" id="txt-expand">Expand</button>
+      </div>
+    </div>
+    <div id="txt-error" class="error-msg" hidden></div>
+    <div id="txt-loading" class="loading-msg" hidden></div>
+    <div id="txt-result" class="panel" hidden>
+      <div id="txt-result-title" class="panel-title"></div>
+      <div class="result-box" id="txt-output"></div>
+    </div>
+  </div>
+
+  <!-- VOICE PAGE -->
+  <div class="page" id="page-voice">
+    <div class="panel">
+      <div class="lang-picker" role="radiogroup">
+        <span class="legend">Language:</span>
+        <label><input type="radio" name="v-lang" value="zh" checked /> Chinese (incl. mixed)</label>
+        <label><input type="radio" name="v-lang" value="en" /> English</label>
+      </div>
+      <div class="voice-tabs" role="tablist">
+        <button class="voice-tab active" data-vmode="upload">Upload file</button>
+        <button class="voice-tab" data-vmode="record">Record (mic)</button>
+      </div>
+      <div class="voice-mode active" id="vmode-upload">
+        <div class="row">
+          <input type="file" id="v-file" accept="audio/*,.m4a,.mp3,.wav,.flac,.ogg,.webm" />
+          <button class="btn btn-primary" id="v-upload-btn">Transcribe</button>
+          <label class="option"><input type="checkbox" id="v-upload-correct" checked /> LLM correction</label>
+        </div>
+      </div>
+      <div class="voice-mode" id="vmode-record">
+        <div class="row">
+          <button class="btn btn-primary" id="v-rec-start">Start recording</button>
+          <button class="btn btn-danger" id="v-rec-stop" disabled>Stop & transcribe</button>
+          <span class="timer" id="v-timer">00:00</span>
+          <label class="option"><input type="checkbox" id="v-rec-correct" checked /> LLM correction</label>
+        </div>
+        <div class="level-meter" id="v-meter" hidden><div class="level-bar" id="v-bar"></div></div>
+        <p style="color:var(--muted);font-size:13px;margin-top:10px;">Mic audio stays in browser until you press stop.</p>
+      </div>
+    </div>
+    <div id="v-error" class="error-msg" hidden></div>
+    <div id="v-loading" class="loading-msg" hidden></div>
+    <div id="v-result" class="panel" hidden>
+      <div class="row" style="margin-bottom:12px;" id="v-badges"></div>
+      <div class="result-cols">
+        <div><div class="result-label">Raw (Whisper)</div><div class="result-box" id="v-raw"></div></div>
+        <div><div class="result-label">Corrected (LLM)</div><div class="result-box" id="v-corrected"></div></div>
+      </div>
+      <details>
+        <summary id="v-seg-summary">Segments</summary>
+        <div class="seg-table" id="v-segs"></div>
+      </details>
+    </div>
+  </div>
+
+  <!-- IMAGE PAGE -->
+  <div class="page" id="page-image">
+    <div class="panel" style="text-align:center;padding:60px 24px;color:var(--muted);">
+      <div style="font-size:40px;margin-bottom:12px;">&#127912;</div>
+      <div style="font-size:16px;font-weight:600;">Image Generation</div>
+      <div style="font-size:14px;margin-top:6px;">Coming soon</div>
+    </div>
+  </div>
+
+  <div class="health" id="health-bar"></div>
+</div>
+
+<script>
+// ── Config ──
+const TEXT_API  = '';                        // same origin (port 8001)
+const VOICE_API = 'http://localhost:8000';   // voice-to-text server
+
+const $ = id => document.getElementById(id);
+
+function clearChildren(el) { while (el.firstChild) el.removeChild(el.firstChild); }
+
+function makeBadge(text, cls) {
+  const b = document.createElement('span');
+  b.className = 'badge ' + (cls || '');
+  b.textContent = text;
+  return b;
+}
+
+function makeSpinner() {
+  const s = document.createElement('span');
+  s.className = 'spinner';
+  return s;
+}
+
+function showLoading(el, msg) {
+  clearChildren(el);
+  el.appendChild(makeSpinner());
+  el.appendChild(document.createTextNode(msg));
+  el.hidden = false;
+}
+
+// ── Page navigation ──
+document.querySelectorAll('.nav-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    if (tab.classList.contains('coming-soon')) return;
+    document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    tab.classList.add('active');
+    $('page-' + tab.dataset.page).classList.add('active');
+  });
+});
+
+// ══════════════════════════════════════════
+//  TEXT — Clean & Expand
+// ══════════════════════════════════════════
+async function textCall(endpoint) {
+  const text = $('txt-input').value.trim();
+  if (!text) return;
+  const context = $('txt-context').value.trim() || null;
+  const body = { text };
+  if (context) body.context = context;
+
+  $('txt-error').hidden = true;
+  $('txt-result').hidden = true;
+  showLoading($('txt-loading'), endpoint === 'clean' ? 'Cleaning...' : 'Expanding...');
+  $('txt-clean').disabled = $('txt-expand').disabled = true;
+
+  try {
+    const r = await fetch(TEXT_API + '/' + endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!r.ok) {
+      const j = await r.json().catch(() => null);
+      throw new Error((j && j.detail) || 'HTTP ' + r.status);
+    }
+    const data = await r.json();
+    $('txt-result-title').textContent = endpoint === 'clean' ? 'Cleaned' : 'Expanded';
+    $('txt-output').textContent = data.cleaned || data.expanded;
+    $('txt-output').classList.remove('empty');
+    $('txt-result').hidden = false;
+  } catch (e) {
+    $('txt-error').textContent = 'Error: ' + e.message;
+    $('txt-error').hidden = false;
+  } finally {
+    $('txt-loading').hidden = true;
+    $('txt-clean').disabled = $('txt-expand').disabled = false;
+  }
+}
+
+$('txt-clean').addEventListener('click', () => textCall('clean'));
+$('txt-expand').addEventListener('click', () => textCall('expand'));
+
+// ══════════════════════════════════════════
+//  VOICE — Upload & Record
+// ══════════════════════════════════════════
+const vState = { rec: null, chunks: [], mime: '', timerStart: 0, timerH: null };
+
+document.querySelectorAll('.voice-tab').forEach(t => {
+  t.addEventListener('click', () => {
+    document.querySelectorAll('.voice-tab').forEach(x => x.classList.remove('active'));
+    document.querySelectorAll('.voice-mode').forEach(x => x.classList.remove('active'));
+    t.classList.add('active');
+    $('vmode-' + t.dataset.vmode).classList.add('active');
+  });
+});
+
+function vLang() { return (document.querySelector('input[name="v-lang"]:checked') || {}).value || 'zh'; }
+
+function renderVoiceResult(data) {
+  // Badges
+  const badges = $('v-badges');
+  clearChildren(badges);
+  badges.appendChild(makeBadge('lang: ' + (data.language || '?')));
+  badges.appendChild(makeBadge('correction: ' + (data.corrected_text ? 'ok' : 'skipped'), data.corrected_text ? 'ok' : ''));
+
+  // Raw text
+  $('v-raw').textContent = data.raw_text || '(empty)';
+  $('v-raw').classList.toggle('empty', !data.raw_text);
+
+  // Corrected text
+  if (data.corrected_text) {
+    $('v-corrected').textContent = data.corrected_text;
+    $('v-corrected').classList.remove('empty');
+  } else {
+    $('v-corrected').textContent = '(skipped)';
+    $('v-corrected').classList.add('empty');
+  }
+
+  // Segments
+  const segs = data.segments || [];
+  $('v-seg-summary').textContent = 'Segments (' + segs.length + ')';
+  const segsEl = $('v-segs');
+  clearChildren(segsEl);
+  segs.forEach(function(s) {
+    var row = document.createElement('div');
+    row.className = 'seg';
+    var timeSpan = document.createElement('span');
+    timeSpan.className = 't';
+    timeSpan.textContent = s.start.toFixed(2).padStart(6, '0') + ' - ' + s.end.toFixed(2).padStart(6, '0');
+    var textSpan = document.createElement('span');
+    textSpan.textContent = s.text;
+    row.appendChild(timeSpan);
+    row.appendChild(textSpan);
+    segsEl.appendChild(row);
+  });
+
+  $('v-result').hidden = false;
+}
+
+async function voiceTranscribe(blob, filename, correct) {
+  var fd = new FormData();
+  fd.append('file', blob, filename);
+  var url = VOICE_API + '/transcribe?correct=' + correct + '&lang=' + vLang();
+
+  $('v-error').hidden = true;
+  $('v-result').hidden = true;
+  showLoading($('v-loading'), 'Transcribing... (Whisper model may need a moment)');
+
+  try {
+    var r = await fetch(url, { method: 'POST', body: fd });
+    if (!r.ok) {
+      var j = await r.json().catch(function() { return null; });
+      throw new Error((j && j.detail) || 'HTTP ' + r.status);
+    }
+    var data = await r.json();
+    renderVoiceResult(data);
+  } catch (e) {
+    var msg = 'Error: ' + e.message;
+    if (e.message && e.message.indexOf('Failed to fetch') >= 0) {
+      msg += ' — Is the voice server running on ' + VOICE_API + '?';
+    }
+    $('v-error').textContent = msg;
+    $('v-error').hidden = false;
+  } finally {
+    $('v-loading').hidden = true;
+  }
+}
+
+// Upload
+$('v-upload-btn').addEventListener('click', function() {
+  var f = $('v-file').files[0];
+  if (!f) { $('v-error').textContent = 'Pick a file first.'; $('v-error').hidden = false; return; }
+  voiceTranscribe(f, f.name, $('v-upload-correct').checked);
+});
+
+// Record helpers
+function pickMime() {
+  var candidates = ['audio/webm;codecs=opus','audio/webm','audio/mp4','audio/ogg;codecs=opus'];
+  for (var i = 0; i < candidates.length; i++) {
+    if (window.MediaRecorder && MediaRecorder.isTypeSupported(candidates[i])) return candidates[i];
+  }
+  return '';
+}
+function extFor(m) {
+  if (m.indexOf('webm') >= 0) return 'webm';
+  if (m.indexOf('mp4') >= 0) return 'm4a';
+  if (m.indexOf('ogg') >= 0) return 'ogg';
+  return 'bin';
+}
+function fmtT(ms) {
+  var s = Math.floor(ms / 1000);
+  return String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0');
+}
+
+var _actx, _ana, _raf;
+function startMeter(stream) {
+  try {
+    _actx = new (window.AudioContext || window.webkitAudioContext)();
+    _ana = _actx.createAnalyser(); _ana.fftSize = 256;
+    _actx.createMediaStreamSource(stream).connect(_ana);
+    var buf = new Uint8Array(_ana.fftSize);
+    $('v-meter').hidden = false;
+    (function tick() {
+      if (!_ana) return;
+      _ana.getByteTimeDomainData(buf);
+      var sum = 0;
+      for (var i = 0; i < buf.length; i++) { var d = (buf[i] - 128) / 128; sum += d * d; }
+      $('v-bar').style.width = Math.min(100, Math.sqrt(sum / buf.length) * 400) + '%';
+      _raf = requestAnimationFrame(tick);
+    })();
+  } catch(e) { console.warn('meter fail', e); }
+}
+function stopMeter() {
+  if (_raf) cancelAnimationFrame(_raf);
+  if (_actx) try { _actx.close(); } catch(e) {}
+  _actx = _ana = _raf = null;
+  $('v-bar').style.width = '0%';
+  $('v-meter').hidden = true;
+}
+
+$('v-rec-start').addEventListener('click', async function() {
+  $('v-error').hidden = true;
+  var btn = $('v-rec-start');
+  btn.disabled = true; btn.textContent = 'Initializing mic...';
+  try {
+    var stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    var mime = pickMime();
+    vState.mime = mime;
+    vState.rec = new MediaRecorder(stream, mime ? { mimeType: mime } : {});
+    vState.chunks = [];
+    vState.rec.ondataavailable = function(e) { if (e.data && e.data.size > 0) vState.chunks.push(e.data); };
+    vState.rec.onstop = function() {
+      stream.getTracks().forEach(function(t) { t.stop(); });
+      stopMeter();
+      var m = vState.mime || 'audio/webm';
+      var blob = new Blob(vState.chunks, { type: m });
+      vState.rec = null;
+      if (blob.size < 1024) { $('v-error').textContent = 'Recording too short.'; $('v-error').hidden = false; return; }
+      voiceTranscribe(blob, 'recording.' + extFor(m), $('v-rec-correct').checked);
+    };
+    vState.rec.start();
+    startMeter(stream);
+    vState.timerStart = Date.now();
+    $('v-timer').textContent = '00:00';
+    vState.timerH = setInterval(function() { $('v-timer').textContent = fmtT(Date.now() - vState.timerStart); }, 250);
+    btn.textContent = 'Recording...';
+    $('v-rec-stop').disabled = false;
+  } catch(e) {
+    btn.disabled = false; btn.textContent = 'Start recording';
+    $('v-error').textContent = 'Mic access failed: ' + e.message; $('v-error').hidden = false;
+  }
+});
+
+$('v-rec-stop').addEventListener('click', function() {
+  if (vState.rec && vState.rec.state === 'recording') vState.rec.stop();
+  if (vState.timerH) { clearInterval(vState.timerH); vState.timerH = null; }
+  $('v-rec-start').disabled = false;
+  $('v-rec-start').textContent = 'Start recording';
+  $('v-rec-stop').disabled = true;
+});
+
+// ── Health checks ──
+(async function() {
+  var parts = [];
+  try {
+    var r = await fetch(TEXT_API + '/health');
+    var h = await r.json();
+    parts.push('text: ' + h.status + ' (' + h.model + ')');
+  } catch(e) { parts.push('text: offline'); }
+  try {
+    var r2 = await fetch(VOICE_API + '/health');
+    var h2 = await r2.json();
+    parts.push('voice: ' + h2.status + ' (whisper-' + h2.whisper_model + ')');
+  } catch(e) { parts.push('voice: offline'); }
+  $('health-bar').textContent = parts.join(' | ');
+})();
+</script>
+</body>
+</html>
