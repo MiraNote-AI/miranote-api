@@ -42,3 +42,28 @@ def test_list_docs_subdir(tmp_docs):
 def test_list_docs_rejects_escape(tmp_docs):
     with pytest.raises(ValueError, match="outside"):
         tools_fs.list_docs(tmp_docs, "../")
+
+
+def test_read_doc_returns_content(tmp_docs):
+    out = tools_fs.read_doc(tmp_docs, "alpha.md")
+    assert out["path"] == "alpha.md"
+    assert "First doc body." in out["content"]
+    assert out["truncated"] is False
+
+
+def test_read_doc_truncates_large_file(tmp_docs):
+    big = tmp_docs / "big.md"
+    big.write_text("x" * (40 * 1024), encoding="utf-8")  # 40 KB
+    out = tools_fs.read_doc(tmp_docs, "big.md")
+    assert len(out["content"].encode("utf-8")) <= 32 * 1024
+    assert out["truncated"] is True
+
+
+def test_read_doc_rejects_escape(tmp_docs):
+    with pytest.raises(ValueError, match="outside"):
+        tools_fs.read_doc(tmp_docs, "../escape.md")
+
+
+def test_read_doc_missing_file(tmp_docs):
+    with pytest.raises(FileNotFoundError):
+        tools_fs.read_doc(tmp_docs, "nope.md")

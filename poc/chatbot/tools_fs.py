@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Dict, List
 
 _MAX_FILES = 200
+_MAX_BYTES = 32 * 1024
 
 
 def _resolve_path(docs_root: Path, rel_or_abs: str) -> Path:
@@ -49,3 +50,20 @@ def list_docs(docs_root: Path, subdir: str = ".") -> List[Dict[str, object]]:
         if len(out) >= _MAX_FILES:
             break
     return out
+
+
+def read_doc(docs_root: Path, path: str) -> Dict[str, object]:
+    """Read a UTF-8 text file under docs_root. Truncates to 32 KB."""
+    target = _resolve_path(docs_root, path)
+    if not target.exists() or not target.is_file():
+        raise FileNotFoundError(f"file '{path}' not found under DOCS_ROOT")
+    raw = target.read_bytes()
+    truncated = len(raw) > _MAX_BYTES
+    head = raw[:_MAX_BYTES]
+    # Decode safely; replace any partial multibyte at the boundary.
+    content = head.decode("utf-8", errors="replace")
+    return {
+        "path": target.relative_to(docs_root.resolve()).as_posix(),
+        "content": content,
+        "truncated": truncated,
+    }
