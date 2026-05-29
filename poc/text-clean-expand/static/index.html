@@ -143,53 +143,6 @@
     details { margin-top: 14px; }
     summary { cursor: pointer; font-size: 13px; color: var(--muted); }
     .health { font-size: 11px; color: var(--muted); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; margin-top: 24px; }
-
-    /* CHAT */
-    .docs-root-row {
-      display: flex; gap: 8px; align-items: center; margin-bottom: 14px;
-      padding: 10px 14px; background: var(--warm-light);
-      border: 1px solid var(--border); border-radius: 8px; font-size: 13px;
-    }
-    .docs-root-row label { color: var(--muted); font-weight: 600; white-space: nowrap; }
-    .docs-root-row input[type=text] {
-      flex: 1; padding: 6px 10px; border: 1px solid var(--border);
-      border-radius: 6px; font: inherit; background: #fff; min-width: 0;
-    }
-    .docs-root-row .status { font-size: 12px; color: var(--muted); min-width: 120px; }
-    .docs-root-row .status.ok { color: var(--ok); }
-    .docs-root-row .status.err { color: var(--err); }
-    .chat-list {
-      display: flex; flex-direction: column; gap: 12px;
-      min-height: 320px; margin-bottom: 16px;
-    }
-    .chat-turn { display: flex; }
-    .chat-turn.user { justify-content: flex-end; }
-    .chat-bubble {
-      max-width: 78%; padding: 12px 16px; border-radius: 14px;
-      border: 1px solid var(--border); background: var(--panel);
-      white-space: pre-wrap; word-wrap: break-word;
-    }
-    .chat-turn.user .chat-bubble { background: var(--warm-light); }
-    .chat-tools { margin-top: 8px; display: flex; flex-direction: column; gap: 4px; }
-    .chat-tool-chip {
-      font-size: 12px; color: var(--muted);
-      background: #f0ede6; border: 1px solid var(--border);
-      border-radius: 8px; padding: 6px 10px; cursor: pointer; user-select: none;
-    }
-    .chat-tool-chip pre {
-      display: none; margin-top: 6px; font-size: 11px;
-      white-space: pre-wrap; word-wrap: break-word; color: var(--text);
-    }
-    .chat-tool-chip.open pre { display: block; }
-    .chat-composer {
-      display: flex; gap: 8px; align-items: stretch;
-    }
-    .chat-composer textarea {
-      flex: 1; min-height: 56px; max-height: 200px;
-      padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px;
-      font: inherit; resize: vertical; background: #faf9f7;
-    }
-    .chat-composer button { white-space: nowrap; }
   </style>
 </head>
 <body>
@@ -200,7 +153,6 @@
   <div class="nav" role="tablist">
     <button class="nav-tab active" data-page="text">Text</button>
     <button class="nav-tab" data-page="voice">Voice</button>
-    <button class="nav-tab" data-page="chat">Chat</button>
     <button class="nav-tab coming-soon" data-page="image">Image</button>
   </div>
 
@@ -271,25 +223,6 @@
     </div>
   </div>
 
-  <!-- CHAT PAGE -->
-  <div class="page" id="page-chat">
-    <div class="panel" style="padding: 16px;">
-      <div class="docs-root-row">
-        <label for="c-docs-root">Docs root:</label>
-        <input type="text" id="c-docs-root" placeholder="/absolute/path/to/docs" />
-        <button class="btn btn-primary" id="c-docs-apply" style="padding:6px 14px;font-size:13px;">Apply</button>
-        <span class="status" id="c-docs-status"></span>
-      </div>
-      <div id="c-list" class="chat-list"></div>
-      <div id="c-error" class="error-msg" hidden></div>
-      <div class="chat-composer">
-        <textarea id="c-input" placeholder="Ask about the docs... (Cmd/Ctrl+Enter to send)"></textarea>
-        <button class="btn btn-primary" id="c-send">Send</button>
-        <button class="btn" id="c-reset" style="background:transparent;color:var(--accent);border:1px solid var(--border);">Reset</button>
-      </div>
-    </div>
-  </div>
-
   <!-- IMAGE PAGE -->
   <div class="page" id="page-image">
     <div class="panel" style="text-align:center;padding:60px 24px;color:var(--muted);">
@@ -306,7 +239,6 @@
 // ── Config ──
 const TEXT_API  = '';                        // same origin (port 8001)
 const VOICE_API = 'http://localhost:8000';   // voice-to-text server
-const CHAT_API  = 'http://localhost:8003';   // chatbot server
 
 const $ = id => document.getElementById(id);
 
@@ -564,131 +496,6 @@ $('v-rec-stop').addEventListener('click', function() {
   $('v-rec-stop').disabled = true;
 });
 
-// ══════════════════════════════════════════
-//  CHAT — multi-turn with function calling
-// ══════════════════════════════════════════
-var chatSessionId = null;
-
-async function chatLoadHealth() {
-  try {
-    var r = await fetch(CHAT_API + '/health');
-    if (!r.ok) throw new Error('HTTP ' + r.status);
-    var h = await r.json();
-    if (!$('c-docs-root').value) $('c-docs-root').value = h.docs_root;
-    $('c-docs-status').textContent = 'model: ' + h.model;
-    $('c-docs-status').className = 'status';
-  } catch (e) {
-    $('c-docs-status').textContent = 'chat server offline';
-    $('c-docs-status').className = 'status err';
-  }
-}
-
-function chatRenderTurn(role, content, toolTrace) {
-  var turn = document.createElement('div');
-  turn.className = 'chat-turn ' + role;
-  var bubble = document.createElement('div');
-  bubble.className = 'chat-bubble';
-  bubble.textContent = content;
-  turn.appendChild(bubble);
-  if (toolTrace && toolTrace.length) {
-    var toolsEl = document.createElement('div');
-    toolsEl.className = 'chat-tools';
-    toolTrace.forEach(function(t) {
-      var chip = document.createElement('div');
-      chip.className = 'chat-tool-chip';
-      var label = document.createElement('div');
-      label.textContent = 'tool: ' + t.name + '(' + JSON.stringify(t.args) + ')';
-      var pre = document.createElement('pre');
-      pre.textContent = t.result_preview;
-      chip.appendChild(label);
-      chip.appendChild(pre);
-      chip.onclick = function() { chip.classList.toggle('open'); };
-      toolsEl.appendChild(chip);
-    });
-    bubble.appendChild(toolsEl);
-  }
-  $('c-list').appendChild(turn);
-  turn.scrollIntoView({ behavior: 'smooth', block: 'end' });
-}
-
-async function chatSend() {
-  var text = $('c-input').value.trim();
-  if (!text) return;
-  $('c-error').hidden = true;
-  $('c-send').disabled = true;
-  chatRenderTurn('user', text);
-  $('c-input').value = '';
-  try {
-    var r = await fetch(CHAT_API + '/chat', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ session_id: chatSessionId, message: text }),
-    });
-    if (!r.ok) {
-      var j = await r.json().catch(function() { return null; });
-      throw new Error((j && j.detail) || 'HTTP ' + r.status);
-    }
-    var data = await r.json();
-    chatSessionId = data.session_id;
-    chatRenderTurn('assistant', data.reply, data.tool_trace);
-    // Refresh docs root in case the agent called set_docs_root.
-    chatLoadHealth();
-  } catch (e) {
-    var msg = 'Error: ' + e.message;
-    if (e.message && e.message.indexOf('Failed to fetch') >= 0) {
-      msg += ' — Is the chat server running on ' + CHAT_API + '?';
-    }
-    $('c-error').textContent = msg;
-    $('c-error').hidden = false;
-  } finally {
-    $('c-send').disabled = false;
-    $('c-input').focus();
-  }
-}
-
-async function chatReset() {
-  if (chatSessionId) {
-    try { await fetch(CHAT_API + '/sessions/' + chatSessionId, { method: 'DELETE' }); } catch(e) {}
-  }
-  chatSessionId = null;
-  clearChildren($('c-list'));
-  $('c-error').hidden = true;
-  $('c-input').focus();
-}
-
-async function chatApplyDocsRoot() {
-  var path = $('c-docs-root').value.trim();
-  if (!path) return;
-  $('c-docs-status').textContent = 'updating...';
-  $('c-docs-status').className = 'status';
-  try {
-    var r = await fetch(CHAT_API + '/config', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ docs_root: path }),
-    });
-    var j = await r.json();
-    if (!r.ok) throw new Error(j.detail || 'HTTP ' + r.status);
-    $('c-docs-root').value = j.docs_root;
-    $('c-docs-status').textContent = 'updated';
-    $('c-docs-status').className = 'status ok';
-  } catch (e) {
-    $('c-docs-status').textContent = e.message;
-    $('c-docs-status').className = 'status err';
-  }
-}
-
-$('c-send').addEventListener('click', chatSend);
-$('c-reset').addEventListener('click', chatReset);
-$('c-docs-apply').addEventListener('click', chatApplyDocsRoot);
-$('c-input').addEventListener('keydown', function(e) {
-  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-    e.preventDefault();
-    chatSend();
-  }
-});
-chatLoadHealth();
-
 // ── Health checks ──
 (async function() {
   var parts = [];
@@ -702,11 +509,6 @@ chatLoadHealth();
     var h2 = await r2.json();
     parts.push('voice: ' + h2.status + ' (whisper-' + h2.whisper_model + ')');
   } catch(e) { parts.push('voice: offline'); }
-  try {
-    var r3 = await fetch(CHAT_API + '/health');
-    var h3 = await r3.json();
-    parts.push('chat: ' + h3.status + ' (' + h3.model + ')');
-  } catch(e) { parts.push('chat: offline'); }
   $('health-bar').textContent = parts.join(' | ');
 })();
 </script>
