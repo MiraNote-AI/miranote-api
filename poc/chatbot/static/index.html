@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MiraNote Chatbot POC</title>
+  <style>
+    :root {
+      --bg: #f8f7f4;
+      --panel: #ffffff;
+      --border: #e5e2dc;
+      --text: #1a1a1a;
+      --muted: #8a8580;
+      --accent: #5b4f3f;
+      --accent-hover: #3d3429;
+      --user-bg: #f5f0e6;
+      --tool-bg: #f0ede6;
+      --warm: #c9a96e;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.55;
+    }
+    .container { max-width: 920px; margin: 0 auto; padding: 32px 24px 120px; }
+    .logo { font-size: 24px; font-weight: 700; letter-spacing: -0.5px; }
+    .logo span { color: var(--warm); }
+    .subtitle { color: var(--muted); font-size: 13px; margin: 2px 0 24px; }
+
+    .chat { display: flex; flex-direction: column; gap: 12px; min-height: 50vh; }
+    .turn { display: flex; }
+    .turn.user { justify-content: flex-end; }
+    .bubble {
+      max-width: 78%;
+      padding: 12px 16px;
+      border-radius: 14px;
+      border: 1px solid var(--border);
+      background: var(--panel);
+      white-space: pre-wrap;
+      word-wrap: break-word;
+    }
+    .turn.user .bubble { background: var(--user-bg); }
+    .turn.assistant .bubble { background: var(--panel); }
+
+    .tools { margin-top: 8px; display: flex; flex-direction: column; gap: 4px; }
+    .tool-chip {
+      font-size: 12px;
+      color: var(--muted);
+      background: var(--tool-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 6px 10px;
+      cursor: pointer;
+      user-select: none;
+    }
+    .tool-chip pre {
+      display: none;
+      margin-top: 6px;
+      font-size: 11px;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+      color: var(--text);
+    }
+    .tool-chip.open pre { display: block; }
+
+    .composer {
+      position: fixed; bottom: 0; left: 0; right: 0;
+      background: var(--bg);
+      border-top: 1px solid var(--border);
+      padding: 14px 24px;
+    }
+    .composer-inner { max-width: 920px; margin: 0 auto; display: flex; gap: 8px; }
+    textarea {
+      flex: 1; min-height: 56px; max-height: 200px;
+      padding: 10px 12px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--panel);
+      font: inherit;
+      resize: vertical;
+    }
+    button {
+      border: none; padding: 0 18px; border-radius: 10px;
+      background: var(--accent); color: white;
+      font: inherit; cursor: pointer;
+    }
+    button:hover { background: var(--accent-hover); }
+    button.secondary { background: transparent; color: var(--accent); border: 1px solid var(--border); }
+    button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    .status { font-size: 11px; color: var(--muted); margin-top: 8px; text-align: center; }
+    .err { color: #c45c5c; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="logo">Mira<span>Note</span> Chatbot</div>
+    <div class="subtitle">Ask questions about the docs in <code id="docs-root">DOCS_ROOT</code>.</div>
+
+    <div id="chat" class="chat"></div>
+  </div>
+
+  <div class="composer">
+    <div class="composer-inner">
+      <textarea id="input" placeholder="Ask about the docs... (Cmd/Ctrl+Enter to send)"></textarea>
+      <button id="send">Send</button>
+      <button id="reset" class="secondary">Reset</button>
+    </div>
+    <div class="status" id="status">model: ... | docs: ...</div>
+  </div>
+
+  <script>
+    const chatEl = document.getElementById('chat');
+    const inputEl = document.getElementById('input');
+    const sendBtn = document.getElementById('send');
+    const resetBtn = document.getElementById('reset');
+    const statusEl = document.getElementById('status');
+    const docsRootEl = document.getElementById('docs-root');
+
+    let sessionId = null;
+
+    async function loadHealth() {
+      try {
+        const r = await fetch('/health').then(r => r.json());
+        statusEl.textContent = `model: ${r.model}  |  docs: ${r.docs_root}  |  tools: ${r.tools.join(', ')}`;
+        docsRootEl.textContent = r.docs_root;
+      } catch (e) {
+        statusEl.textContent = 'health check failed';
+        statusEl.classList.add('err');
+      }
+    }
+
+    function renderTurn(role, content, toolTrace) {
+      const turn = document.createElement('div');
+      turn.className = `turn ${role}`;
+      const bubble = document.createElement('div');
+      bubble.className = 'bubble';
+      bubble.textContent = content;
+      turn.appendChild(bubble);
+      if (toolTrace && toolTrace.length) {
+        const tools = document.createElement('div');
+        tools.className = 'tools';
+        toolTrace.forEach(t => {
+          const chip = document.createElement('div');
+          chip.className = 'tool-chip';
+          const label = document.createElement('div');
+          label.textContent = `tool: ${t.name}(${JSON.stringify(t.args)})`;
+          const pre = document.createElement('pre');
+          pre.textContent = t.result_preview;
+          chip.appendChild(label);
+          chip.appendChild(pre);
+          chip.onclick = () => chip.classList.toggle('open');
+          tools.appendChild(chip);
+        });
+        bubble.appendChild(tools);
+      }
+      chatEl.appendChild(turn);
+      window.scrollTo(0, document.body.scrollHeight);
+    }
+
+    async function send() {
+      const text = inputEl.value.trim();
+      if (!text) return;
+      sendBtn.disabled = true;
+      renderTurn('user', text);
+      inputEl.value = '';
+      try {
+        const r = await fetch('/chat', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ session_id: sessionId, message: text }),
+        });
+        if (!r.ok) {
+          const err = await r.json().catch(() => ({ detail: r.statusText }));
+          renderTurn('assistant', `error ${r.status}: ${err.detail}`);
+          return;
+        }
+        const data = await r.json();
+        sessionId = data.session_id;
+        renderTurn('assistant', data.reply, data.tool_trace);
+      } catch (e) {
+        renderTurn('assistant', `network error: ${e.message}`);
+      } finally {
+        sendBtn.disabled = false;
+        inputEl.focus();
+      }
+    }
+
+    async function reset() {
+      if (sessionId) {
+        try { await fetch(`/sessions/${sessionId}`, { method: 'DELETE' }); } catch {}
+      }
+      sessionId = null;
+      chatEl.innerHTML = '';
+      inputEl.focus();
+    }
+
+    sendBtn.onclick = send;
+    resetBtn.onclick = reset;
+    inputEl.addEventListener('keydown', e => {
+      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        send();
+      }
+    });
+
+    loadHealth();
+    inputEl.focus();
+  </script>
+</body>
+</html>
