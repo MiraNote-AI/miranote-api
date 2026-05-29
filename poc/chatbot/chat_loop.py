@@ -46,8 +46,41 @@ def run_turn(
             reply = msg.content or ""
             history.append({"role": "assistant", "content": reply})
             break
-        # tool-call branch -- implemented in Task 8
-        raise NotImplementedError("tool-call path lands in Task 8")
+        assistant_entry: Dict[str, Any] = {
+            "role": "assistant",
+            "content": msg.content,
+            "tool_calls": [
+                {
+                    "id": tc.id,
+                    "type": "function",
+                    "function": {"name": tc.function.name, "arguments": tc.function.arguments},
+                }
+                for tc in msg.tool_calls
+            ],
+        }
+        history.append(assistant_entry)
+
+        for tc in msg.tool_calls:
+            try:
+                args = json.loads(tc.function.arguments or "{}")
+            except json.JSONDecodeError:
+                args = {}
+            try:
+                result = tool_dispatcher(tc.function.name, args)
+            except Exception as e:  # noqa: BLE001
+                result = {"error": str(e)}
+            result_str = json.dumps(result, ensure_ascii=False)
+            history.append({
+                "role": "tool",
+                "tool_call_id": tc.id,
+                "name": tc.function.name,
+                "content": result_str,
+            })
+            trace.append({
+                "name": tc.function.name,
+                "args": args,
+                "result_preview": result_str[:300],
+            })
 
     if reply is None:
         reply = "(stopped: hit MAX_TOOL_ITERATIONS -- partial tool use, no final answer)"
