@@ -7,6 +7,9 @@ time.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Dict, List
+
+_MAX_FILES = 200
 
 
 def _resolve_path(docs_root: Path, rel_or_abs: str) -> Path:
@@ -21,3 +24,28 @@ def _resolve_path(docs_root: Path, rel_or_abs: str) -> Path:
     except ValueError as e:
         raise ValueError(f"path '{rel_or_abs}' resolves outside DOCS_ROOT") from e
     return candidate
+
+
+def list_docs(docs_root: Path, subdir: str = ".") -> List[Dict[str, object]]:
+    """Recursively list files under docs_root/subdir.
+
+    Returns at most _MAX_FILES entries, each {"path": str (relative to docs_root), "size_bytes": int}.
+    Hidden files and directories (leading dot) are skipped.
+    """
+    root = docs_root.resolve()
+    start = _resolve_path(docs_root, subdir)
+    if not start.exists() or not start.is_dir():
+        raise ValueError(f"subdir '{subdir}' is not a directory under DOCS_ROOT")
+    out: List[Dict[str, object]] = []
+    for p in sorted(start.rglob("*")):
+        if any(part.startswith(".") for part in p.relative_to(root).parts):
+            continue
+        if not p.is_file():
+            continue
+        out.append({
+            "path": p.relative_to(root).as_posix(),
+            "size_bytes": p.stat().st_size,
+        })
+        if len(out) >= _MAX_FILES:
+            break
+    return out
