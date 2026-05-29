@@ -11,6 +11,7 @@ from typing import Dict, List
 
 _MAX_FILES = 200
 _MAX_BYTES = 32 * 1024
+_SNIPPET_LEN = 160
 
 
 def _resolve_path(docs_root: Path, rel_or_abs: str) -> Path:
@@ -67,3 +68,44 @@ def read_doc(docs_root: Path, path: str) -> Dict[str, object]:
         "content": content,
         "truncated": truncated,
     }
+
+
+def search_docs(docs_root: Path, query: str, max_hits: int = 20) -> List[Dict[str, object]]:
+    """Case-insensitive substring search across files under docs_root.
+
+    Returns at most max_hits entries of {"path", "line", "snippet"}.
+    Skipped: hidden files/dirs, binaries (non-UTF-8), files larger than 1 MB.
+    """
+    if not query:
+        raise ValueError("query must be non-empty")
+    needle = query.lower()
+    root = docs_root.resolve()
+    hits: List[Dict[str, object]] = []
+    files_scanned = 0
+    for p in sorted(root.rglob("*")):
+        if any(part.startswith(".") for part in p.relative_to(root).parts):
+            continue
+        if not p.is_file():
+            continue
+        if p.stat().st_size > 1 * 1024 * 1024:
+            continue
+        files_scanned += 1
+        if files_scanned > _MAX_FILES:
+            break
+        try:
+            text = p.read_text(encoding="utf-8")
+        except (UnicodeDecodeError, OSError):
+            continue
+        for line_no, line in enumerate(text.splitlines(), start=1):
+            if needle in line.lower():
+                col = line.lower().index(needle)
+                start = max(0, col - 40)
+                snippet = line[start:start + _SNIPPET_LEN]
+                hits.append({
+                    "path": p.relative_to(root).as_posix(),
+                    "line": line_no,
+                    "snippet": snippet,
+                })
+                if len(hits) >= max_hits:
+                    return hits
+    return hits

@@ -67,3 +67,37 @@ def test_read_doc_rejects_escape(tmp_docs):
 def test_read_doc_missing_file(tmp_docs):
     with pytest.raises(FileNotFoundError):
         tools_fs.read_doc(tmp_docs, "nope.md")
+
+
+def test_search_docs_finds_substring(tmp_docs):
+    hits = tools_fs.search_docs(tmp_docs, "apples")
+    paths = sorted(h["path"] for h in hits)
+    assert paths == ["alpha.md", "nested/gamma.md"]
+    for h in hits:
+        assert "apples" in h["snippet"].lower()
+        assert h["line"] >= 1
+
+
+def test_search_docs_case_insensitive(tmp_docs):
+    assert tools_fs.search_docs(tmp_docs, "BANANAS")[0]["path"] == "beta.md"
+
+
+def test_search_docs_max_hits(tmp_docs):
+    busy = tmp_docs / "busy.md"
+    busy.write_text("\n".join(["needle"] * 50), encoding="utf-8")
+    hits = tools_fs.search_docs(tmp_docs, "needle", max_hits=5)
+    assert len(hits) == 5
+
+
+def test_search_docs_snippet_truncated(tmp_docs):
+    long = tmp_docs / "long.md"
+    long.write_text("x" * 500 + "needle" + "y" * 500, encoding="utf-8")
+    hits = tools_fs.search_docs(tmp_docs, "needle")
+    assert len(hits) == 1
+    assert len(hits[0]["snippet"]) <= 160
+    assert "needle" in hits[0]["snippet"]
+
+
+def test_search_docs_empty_query_rejected(tmp_docs):
+    with pytest.raises(ValueError, match="query"):
+        tools_fs.search_docs(tmp_docs, "")
