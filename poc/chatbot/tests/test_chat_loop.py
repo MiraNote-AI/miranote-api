@@ -139,3 +139,23 @@ def test_dispatcher_errors_are_wrapped_for_model():
     tool_msgs = [m for m in history if m.get("role") == "tool"]
     assert "error" in tool_msgs[0]["content"]
     assert "outside" in tool_msgs[0]["content"]
+
+
+def test_iteration_cap_returns_synthetic_reply():
+    # 8 scripted responses, but cap = 3 -> loop should give up at 3.
+    scripted = [_resp(_msg(tool_calls=[_tool_call(f"c{i}", "list_docs", {"subdir": "."})])) for i in range(8)]
+    client = FakeClient(scripted)
+    store = SessionStore(ttl_seconds=60)
+
+    result = run_turn(
+        client=client, session_store=store, session_id=None,
+        user_message="loop forever", model="fake",
+        tools=[{"type": "function", "function": {"name": "list_docs"}}],
+        tool_dispatcher=lambda n, a: [],
+        max_iterations=3, max_history=100, system_prompt="sys",
+    )
+    assert "stopped" in result.reply.lower()
+    assert "max_tool_iterations" in result.reply.lower()
+    # The fake should have been called exactly 3 times.
+    assert len(client.chat.completions.calls) == 3
+    assert len(result.tool_trace) == 3
