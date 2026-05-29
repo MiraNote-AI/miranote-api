@@ -101,3 +101,95 @@ def test_search_docs_snippet_truncated(tmp_docs):
 def test_search_docs_empty_query_rejected(tmp_docs):
     with pytest.raises(ValueError, match="query"):
         tools_fs.search_docs(tmp_docs, "")
+
+
+# -- Multi-format read_doc --
+
+def test_read_doc_text_reports_content_type(tmp_docs):
+    out = tools_fs.read_doc(tmp_docs, "alpha.md")
+    assert out["content_type"] == "text"
+
+
+def test_read_doc_unsupported_extension(tmp_docs):
+    (tmp_docs / "binary.exe").write_bytes(b"\x00\x01\x02")
+    with pytest.raises(ValueError, match="unsupported file extension"):
+        tools_fs.read_doc(tmp_docs, "binary.exe")
+
+
+def test_read_doc_pdf(tmp_docs):
+    pytest.importorskip("reportlab")
+    from reportlab.pdfgen import canvas
+    from reportlab.lib.pagesizes import letter
+    pdf_path = tmp_docs / "sample.pdf"
+    c = canvas.Canvas(str(pdf_path), pagesize=letter)
+    c.drawString(72, 720, "MiraNote Architecture Snapshot")
+    c.drawString(72, 700, "Section 1: Overview")
+    c.drawString(72, 680, "The system uses a tool-calling chat loop.")
+    c.save()
+
+    out = tools_fs.read_doc(tmp_docs, "sample.pdf")
+    assert out["content_type"] == "pdf"
+    assert out["path"] == "sample.pdf"
+    assert "Architecture Snapshot" in out["content"]
+    assert "tool-calling" in out["content"]
+    assert out["truncated"] is False
+
+
+def test_read_doc_docx(tmp_docs):
+    pytest.importorskip("docx")
+    import docx
+    docx_path = tmp_docs / "notes.docx"
+    document = docx.Document()
+    document.add_heading("Q2 Retro", level=1)
+    document.add_paragraph("What went well: shipped two POCs.")
+    document.add_paragraph("What to improve: spec discipline.")
+    document.save(str(docx_path))
+
+    out = tools_fs.read_doc(tmp_docs, "notes.docx")
+    assert out["content_type"] == "docx"
+    assert "Q2 Retro" in out["content"]
+    assert "shipped two POCs" in out["content"]
+    assert out["truncated"] is False
+
+
+def _tesseract_available():
+    try:
+        import pytesseract
+        pytesseract.get_tesseract_version()
+        return True
+    except Exception:
+        return False
+
+
+@pytest.mark.skipif(not _tesseract_available(), reason="tesseract binary not installed")
+def test_read_doc_image_ocr(tmp_docs):
+    from PIL import Image, ImageDraw, ImageFont
+    img_path = tmp_docs / "note.png"
+    img = Image.new("RGB", (600, 200), color="white")
+    draw = ImageDraw.Draw(img)
+    try:
+        font = ImageFont.truetype("/System/Library/Fonts/Supplemental/Arial.ttf", 32)
+    except OSError:
+        font = ImageFont.load_default()
+    draw.text((20, 80), "HELLO MIRANOTE", fill="black", font=font)
+    img.save(str(img_path))
+
+    out = tools_fs.read_doc(tmp_docs, "note.png")
+    assert out["content_type"].startswith("image-ocr")
+    assert "MIRANOTE" in out["content"].upper()
+
+
+def test_read_doc_image_without_tesseract_raises_friendly_error(tmp_docs, monkeypatch):
+    # Simulate the binary being unavailable even if the library is installed.
+    from PIL import Image
+    img_path = tmp_docs / "stub.png"
+    Image.new("RGB", (10, 10), color="white").save(str(img_path))
+
+    import pytesseract
+
+    def fake_image_to_string(*args, **kwargs):
+        raise pytesseract.TesseractNotFoundError()
+
+    monkeypatch.setattr(pytesseract, "image_to_string", fake_image_to_string)
+    with pytest.raises(RuntimeError, match="brew install tesseract"):
+        tools_fs.read_doc(tmp_docs, "stub.png")

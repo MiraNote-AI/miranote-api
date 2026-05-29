@@ -1,9 +1,11 @@
 # Chatbot POC
 
 A FastAPI demo of multi-turn chat with native OpenAI-style function
-calling. The agent answers questions about the markdown documents in
-`DOCS_ROOT` using three read-only tools: `list_docs`, `read_doc`,
-`search_docs`.
+calling. The agent answers questions about the documents in `DOCS_ROOT`
+using three read-only tools: `list_docs`, `read_doc`, `search_docs`.
+
+`read_doc` is polymorphic by file extension: plain text / markdown, PDF
+(.pdf), Word (.docx), and images (OCR via tesseract).
 
 Design spec: `docs/specs/2026-05-28-chatbot-with-tools-design.md`.
 
@@ -20,6 +22,18 @@ cp .env.example .env
 
 DeepSeek is the default. Any OpenAI-compatible provider that supports
 tool calling works (Gemini's OpenAI shim, OpenAI proper, Moonshot).
+
+### Optional: image OCR
+
+To let `read_doc` extract text from images you also need the tesseract
+binary on the system:
+
+```bash
+brew install tesseract tesseract-lang   # macOS
+```
+
+Without it, `read_doc` on a `.png/.jpg/...` returns a friendly error
+pointing back here. All other formats work out of the box.
 
 ## Run
 
@@ -44,13 +58,20 @@ curl -s -X POST http://localhost:8002/chat \
   -d '{"session_id":"<paste-here>","message":"summarize the Q3 plans"}' | python3 -m json.tool
 ```
 
-## Three demo questions
+## Demo questions
 
-Try these in the web UI against the bundled `demo_data/docs/`:
+Try these in the web UI against the bundled `demo_data/docs/` (the
+folder ships with markdown ADRs, a PDF, a DOCX, and a PNG):
 
-1. **English / `list_docs`:** _"What docs do we have?"_
-2. **English / `read_doc`:** _"What ships in Q3 2026?"_
-3. **中文 / `search_docs`:** _"团队里谁负责 iOS?"_
+1. **English / markdown / `list_docs`:** _"What docs do we have?"_
+2. **English / markdown / `read_doc`:** _"What ships in Q3 2026?"_
+3. **中文 / markdown / `search_docs`:** _"团队里谁负责 iOS?"_
+4. **English / PDF / `read_doc`:** _"What are the four open questions
+   in the architecture snapshot PDF?"_
+5. **中文 / DOCX / `read_doc`:** _"在 Q2 回顾会上 mengjia 接的 action
+   item 有哪些？"_
+6. **English / image / `read_doc`:** _"What's still un-checked on the
+   whiteboard TODO?"_  (requires tesseract -- see Setup)
 
 You should see tool chips under each assistant reply showing exactly
 which tools were called and what came back.
@@ -67,8 +88,8 @@ PYTHONPATH=. python3 -m pytest poc/chatbot/tests -v
 | Name | Purpose | Caps |
 |---|---|---|
 | `list_docs(subdir)` | List files under a subdir of `DOCS_ROOT`. | 200 files |
-| `read_doc(path)` | Read a UTF-8 file. | 32 KB truncated |
-| `search_docs(query, max_hits)` | Case-insensitive substring search. | 200 files, 160-char snippet |
+| `read_doc(path)` | Read a file. Dispatches on extension: text/markdown, PDF, DOCX, image (OCR). | 32 KB truncated |
+| `search_docs(query, max_hits)` | Case-insensitive substring search across **UTF-8 text files only** -- PDFs/DOCX/images are invisible to it; use `read_doc` for those. | 200 files, 160-char snippet |
 
 All tools resolve paths under `DOCS_ROOT`; anything escaping is rejected
 with `{"error": "...outside DOCS_ROOT"}`.

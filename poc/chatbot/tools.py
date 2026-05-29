@@ -29,7 +29,13 @@ TOOLS: List[Dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "read_doc",
-            "description": "Read the UTF-8 contents of a file under the docs root. Truncates at 32 KB.",
+            "description": (
+                "Read the contents of a file under the docs root. Supports plain "
+                "text / markdown, PDF (.pdf), Word (.docx), and images "
+                "(.png/.jpg/.jpeg/.gif/.webp/.bmp/.tiff) via OCR. The response "
+                "includes a content_type field telling you which extractor was "
+                "used. Output is truncated at 32 KB."
+            ),
             "parameters": {
                 "type": "object",
                 "properties": {
