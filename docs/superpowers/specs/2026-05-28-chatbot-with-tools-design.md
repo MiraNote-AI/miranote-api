@@ -92,7 +92,9 @@ This indirection means adding a non-fs tool later is a one-file change.
 
 `chat_loop.run_turn(session_id, user_message) -> ChatTurnResult`:
 
-1. Load session history (or create new uuid4 session).
+1. Load session history. If the `session_id` is missing or unknown, mint a
+   new uuid4 and seed the history with a single
+   `{"role": "system", "content": <prompts/system.txt>}` message.
 2. Append `{"role": "user", "content": user_message}`.
 3. Loop, up to `MAX_TOOL_ITERATIONS` (default 6):
    1. `resp = client.chat.completions.create(model=MODEL, messages=history, tools=TOOLS, tool_choice="auto")`
@@ -104,9 +106,11 @@ This indirection means adding a non-fs tool later is a one-file change.
         Append `{"role": "tool", "tool_call_id": call.id, "name": ..., "content": json.dumps(result)}` to history.
       - Continue loop.
    4. Else: append the assistant text, break.
-4. If the loop exits because the cap was hit, append a synthetic assistant
-   message: `"(stopped: hit MAX_TOOL_ITERATIONS, returning best effort)"`,
-   then return whatever final text we have (may be empty).
+4. If the loop runs to completion without the model returning a
+   text-only message (i.e. the cap was hit while still mid-tool-loop),
+   append and return a synthetic assistant message:
+   `"(stopped: hit MAX_TOOL_ITERATIONS — partial tool use, no final answer)"`.
+   The cap-hit branch is the `reply` value; it is never empty.
 5. Trim session history if it now exceeds `MAX_HISTORY_MESSAGES` (default 40,
    excluding the system prompt) by dropping oldest non-system messages in
    pairs.
