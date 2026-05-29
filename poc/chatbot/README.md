@@ -43,20 +43,20 @@ pointing back here. All other formats work out of the box.
 
 ## Run
 
+Easiest: from the repo root, `./start-all.sh` brings up all three POC
+servers (text on 8001, voice on 8000, chat on 8003) at once with
+prefixed log streams. Ctrl-C stops them all.
+
+To run just the chatbot backend on its own:
+
 ```bash
 # from the repo root
 PYTHONPATH=. ./poc/chatbot/.venv/bin/python3 -m uvicorn poc.chatbot.main:app \
     --port 8003 --reload
 ```
 
-Then start the unified UI (separate terminal):
-
-```bash
-cd poc/text-clean-expand
-PYTHONPATH=../.. uvicorn main:app --reload --port 8001
-```
-
-Open <http://localhost:8001/> and click the **Chat** tab.
+The UI lives at <http://localhost:8001/> (served by text-clean-expand) --
+click the **Chat** tab. CORS is allow-all so the cross-origin call works.
 
 ## Try it (curl)
 
