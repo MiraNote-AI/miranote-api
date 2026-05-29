@@ -58,6 +58,11 @@ def run_turn(
                 for tc in msg.tool_calls
             ],
         }
+        # Thinking-mode models (DeepSeek v4-flash, Reasoning) require the
+        # reasoning_content field to be round-tripped with the tool result.
+        reasoning = getattr(msg, "reasoning_content", None)
+        if reasoning is not None:
+            assistant_entry["reasoning_content"] = reasoning
         history.append(assistant_entry)
 
         for tc in msg.tool_calls:

@@ -159,3 +159,28 @@ def test_iteration_cap_returns_synthetic_reply():
     # The fake should have been called exactly 3 times.
     assert len(client.chat.completions.calls) == 3
     assert len(result.tool_trace) == 3
+
+
+def test_thinking_mode_reasoning_content_preserved():
+    # DeepSeek v4-flash returns reasoning_content alongside tool_calls and
+    # 400s the follow-up turn if we drop it. The assistant entry written to
+    # history must round-trip it.
+    msg_with_reasoning = SimpleNamespace(
+        content=None,
+        tool_calls=[_tool_call("c1", "list_docs", {"subdir": "."})],
+        reasoning_content="I should list the docs first.",
+    )
+    scripted = [_resp(msg_with_reasoning), _resp(_msg(content="all done"))]
+    client = FakeClient(scripted)
+    store = SessionStore(ttl_seconds=60)
+
+    result = run_turn(
+        client=client, session_store=store, session_id=None,
+        user_message="x", model="fake",
+        tools=[{"type": "function", "function": {"name": "list_docs"}}],
+        tool_dispatcher=lambda n, a: [],
+        max_iterations=6, max_history=40, system_prompt="sys",
+    )
+    history = store.get(result.session_id)
+    assistant_with_tools = [m for m in history if m.get("role") == "assistant" and m.get("tool_calls")][0]
+    assert assistant_with_tools["reasoning_content"] == "I should list the docs first."
