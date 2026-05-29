@@ -1,10 +1,10 @@
 """Tool registry + dispatcher for the chatbot POC."""
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any, Dict, List
 
 from poc.chatbot import tools_fs
+from poc.chatbot.config import ChatbotConfig
 
 
 TOOLS: List[Dict[str, Any]] = [
@@ -63,22 +63,50 @@ TOOLS: List[Dict[str, Any]] = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "set_docs_root",
+            "description": (
+                "Switch the docs root directory the agent reads from. ONLY call "
+                "this when the user explicitly asks to switch to a different "
+                "folder. Do not call it speculatively. The new path must be an "
+                "existing local directory. On success, confirm the new path back "
+                "to the user."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "Absolute local path, or '~'-prefixed home-relative path.",
+                    },
+                },
+                "required": ["path"],
+            },
+        },
+    },
 ]
 
 
-def dispatch(docs_root: Path, name: str, args: Dict[str, Any]) -> Any:
+def dispatch(config: ChatbotConfig, name: str, args: Dict[str, Any]) -> Any:
     """Route a model-issued tool call to the underlying implementation.
 
-    Always returns a JSON-serialisable value. Exceptions become {"error": "..."}
-    so the model can recover on the next turn.
+    `config.docs_root` is read fresh on each call so set_docs_root takes
+    effect immediately for subsequent fs-tool calls in the same turn.
+
+    Always returns a JSON-serialisable value. Exceptions become
+    {"error": "..."} so the model can recover on the next turn.
     """
     try:
         if name == "list_docs":
-            return tools_fs.list_docs(docs_root, args.get("subdir", "."))
+            return tools_fs.list_docs(config.docs_root, args.get("subdir", "."))
         if name == "read_doc":
-            return tools_fs.read_doc(docs_root, args["path"])
+            return tools_fs.read_doc(config.docs_root, args["path"])
         if name == "search_docs":
-            return tools_fs.search_docs(docs_root, args["query"], int(args.get("max_hits", 20)))
+            return tools_fs.search_docs(config.docs_root, args["query"], int(args.get("max_hits", 20)))
+        if name == "set_docs_root":
+            return config.set_docs_root(args["path"])
         return {"error": f"unknown tool: {name}"}
     except KeyError as e:
         return {"error": f"missing required argument: {e.args[0]}"}

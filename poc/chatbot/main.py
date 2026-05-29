@@ -1,4 +1,9 @@
-"""MiraNote POC -- Chatbot with native function calling."""
+"""MiraNote POC -- Chatbot with native function calling.
+
+Backend-only. The shared web UI lives in poc/text-clean-expand/static/
+and is served by that POC; it talks to this server cross-origin (CORS
+allow-all). See README for run instructions.
+"""
 from __future__ import annotations
 
 import asyncio
@@ -8,14 +13,13 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 from dotenv import load_dotenv
 from openai import OpenAI
 
 from poc.chatbot import tools
 from poc.chatbot.chat_loop import ChatTurnResult, run_turn
+from poc.chatbot.config import ChatbotConfig
 from poc.chatbot.session import SessionStore
 
 
@@ -23,16 +27,21 @@ load_dotenv()
 
 LLM_API_KEY = os.getenv("LLM_API_KEY")
 LLM_BASE_URL = os.getenv("LLM_BASE_URL")
-MODEL = os.getenv("LLM_MODEL", "deepseek-chat")
-DOCS_ROOT = Path(os.getenv("DOCS_ROOT", "./demo_data/docs")).resolve()
-MAX_TOOL_ITERATIONS = int(os.getenv("MAX_TOOL_ITERATIONS", "6"))
-MAX_HISTORY_MESSAGES = int(os.getenv("MAX_HISTORY_MESSAGES", "40"))
-SESSION_TTL_SECONDS = int(os.getenv("SESSION_TTL_SECONDS", "3600"))
+
+_initial_docs_root = Path(os.getenv("DOCS_ROOT", "./demo_data/docs")).resolve()
 
 if not LLM_API_KEY:
     raise RuntimeError("LLM_API_KEY is required. Set it in .env")
-if not DOCS_ROOT.exists() or not DOCS_ROOT.is_dir():
-    raise RuntimeError(f"DOCS_ROOT does not exist or is not a directory: {DOCS_ROOT}")
+if not _initial_docs_root.exists() or not _initial_docs_root.is_dir():
+    raise RuntimeError(f"DOCS_ROOT does not exist or is not a directory: {_initial_docs_root}")
+
+config = ChatbotConfig(
+    docs_root=_initial_docs_root,
+    model=os.getenv("LLM_MODEL", "deepseek-chat"),
+    max_tool_iterations=int(os.getenv("MAX_TOOL_ITERATIONS", "6")),
+    max_history_messages=int(os.getenv("MAX_HISTORY_MESSAGES", "40")),
+    session_ttl_seconds=int(os.getenv("SESSION_TTL_SECONDS", "3600")),
+)
 
 client_kwargs: Dict[str, Any] = {"api_key": LLM_API_KEY}
 if LLM_BASE_URL:
@@ -41,14 +50,14 @@ client = OpenAI(**client_kwargs)
 
 SYSTEM_PROMPT = (Path(__file__).parent / "prompts" / "system.txt").read_text(encoding="utf-8")
 
-sessions = SessionStore(ttl_seconds=SESSION_TTL_SECONDS)
+sessions = SessionStore(ttl_seconds=config.session_ttl_seconds)
 
 
 def _dispatcher(name: str, args: Dict[str, Any]) -> Any:
-    return tools.dispatch(DOCS_ROOT, name, args)
+    return tools.dispatch(config, name, args)
 
 
-app = FastAPI(title="MiraNote Chatbot", version="0.1.0")
+app = FastAPI(title="MiraNote Chatbot", version="0.2.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -68,6 +77,10 @@ class ChatResponse(BaseModel):
     tool_trace: List[Dict[str, Any]]
 
 
+class ConfigRequest(BaseModel):
+    docs_root: str = Field(..., min_length=1)
+
+
 @app.post("/chat", response_model=ChatResponse)
 async def chat(req: ChatRequest):
     try:
@@ -77,11 +90,11 @@ async def chat(req: ChatRequest):
             session_store=sessions,
             session_id=req.session_id,
             user_message=req.message,
-            model=MODEL,
+            model=config.model,
             tools=tools.TOOLS,
             tool_dispatcher=_dispatcher,
-            max_iterations=MAX_TOOL_ITERATIONS,
-            max_history=MAX_HISTORY_MESSAGES,
+            max_iterations=config.max_tool_iterations,
+            max_history=config.max_history_messages,
             system_prompt=SYSTEM_PROMPT,
         )
     except KeyError:
@@ -113,18 +126,16 @@ async def delete_session(sid: str):
 async def health():
     return {
         "status": "ok",
-        "model": MODEL,
+        "model": config.model,
         "tools": [t["function"]["name"] for t in tools.TOOLS],
-        "docs_root": str(DOCS_ROOT),
+        "docs_root": str(config.docs_root),
     }
 
 
-STATIC_DIR = Path(__file__).parent / "static"
-
-
-@app.get("/")
-async def index():
-    return FileResponse(STATIC_DIR / "index.html")
-
-
-app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+@app.post("/config")
+async def update_config(req: ConfigRequest):
+    """Mutate runtime config. Currently only docs_root is mutable."""
+    try:
+        return config.set_docs_root(req.docs_root)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
