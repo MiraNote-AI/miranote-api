@@ -47,3 +47,41 @@ def test_shorten_rejects_invalid_target(client):
     test_client, _ = client
     r = test_client.post("/shorten", json={"text": "hi", "target": "bogus"})
     assert r.status_code == 422
+
+
+def test_keywords_returns_parsed_array(client):
+    test_client, fake_llm = client
+    fake_llm.reply_with('[{"term": "coffee", "score": 9}, {"term": "morning", "score": 7}]')
+
+    r = test_client.post("/keywords", json={"text": "morning coffee", "max": 5})
+
+    assert r.status_code == 200
+    body = r.json()
+    assert body["original"] == "morning coffee"
+    assert body["keywords"] == [
+        {"term": "coffee", "score": 9},
+        {"term": "morning", "score": 7},
+    ]
+
+
+def test_keywords_truncates_to_max(client):
+    test_client, fake_llm = client
+    fake_llm.reply_with('[{"term":"a","score":9},{"term":"b","score":8},{"term":"c","score":7}]')
+    r = test_client.post("/keywords", json={"text": "x", "max": 2})
+    assert r.status_code == 200
+    assert len(r.json()["keywords"]) == 2
+
+
+def test_keywords_invalid_json_returns_502(client):
+    test_client, fake_llm = client
+    fake_llm.reply_with("not even close to JSON")
+    r = test_client.post("/keywords", json={"text": "x"})
+    assert r.status_code == 502
+    assert "invalid JSON" in r.json()["detail"]
+
+
+def test_keywords_unexpected_schema_returns_502(client):
+    test_client, fake_llm = client
+    fake_llm.reply_with('[{"wrong_key": "oops"}]')
+    r = test_client.post("/keywords", json={"text": "x"})
+    assert r.status_code == 502
