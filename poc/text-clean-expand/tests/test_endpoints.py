@@ -85,3 +85,32 @@ def test_keywords_unexpected_schema_returns_502(client):
     fake_llm.reply_with('[{"wrong_key": "oops"}]')
     r = test_client.post("/keywords", json={"text": "x"})
     assert r.status_code == 502
+
+
+def test_caption_returns_caption_with_style(client):
+    test_client, fake_llm = client
+    fake_llm.reply_with("Morning ritual: strong coffee, warmer light. Today is mine.")
+
+    r = test_client.post(
+        "/caption",
+        json={"text": "Had a really nice morning with great coffee.", "style": "instagram"},
+    )
+
+    assert r.status_code == 200
+    body = r.json()
+    assert body["original"].startswith("Had a really")
+    assert "coffee" in body["caption"].lower()
+    assert body["style"] == "instagram"
+
+
+def test_caption_default_style_is_instagram(client):
+    test_client, fake_llm = client
+    fake_llm.reply_with("punchy caption.")
+    r = test_client.post("/caption", json={"text": "any text"})
+    assert r.json()["style"] == "instagram"
+
+
+def test_caption_rejects_invalid_style(client):
+    test_client, _ = client
+    r = test_client.post("/caption", json={"text": "x", "style": "haiku"})
+    assert r.status_code == 422
