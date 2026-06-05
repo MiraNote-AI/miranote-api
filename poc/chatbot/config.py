@@ -21,6 +21,7 @@ class ChatbotConfig:
         max_history_messages: int,
         session_ttl_seconds: int,
         text_client: Optional[Any] = None,
+        retrieval_client: Optional[Any] = None,
     ):
         self._lock = Lock()
         self.docs_root = docs_root.resolve()
@@ -29,6 +30,7 @@ class ChatbotConfig:
         self.max_history_messages = max_history_messages
         self.session_ttl_seconds = session_ttl_seconds
         self.text_client = text_client
+        self.retrieval_client = retrieval_client
 
     def set_docs_root(self, new_path: str) -> Dict[str, object]:
         """Validate and update docs_root.
