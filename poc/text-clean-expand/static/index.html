@@ -65,6 +65,10 @@
     .btn-danger { background: var(--err); color: #fff; }
 
     .row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    /* [hidden] would default to display:none from the UA stylesheet, but a class selector
+       like .row above wins on specificity, so the JS-set hidden attribute was being ignored
+       on the conditional Text-tab sub-control rows. Bump it via !important. */
+    [hidden] { display: none !important; }
 
     textarea {
       width: 100%; min-height: 140px; padding: 14px;
