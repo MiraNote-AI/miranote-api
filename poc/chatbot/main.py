@@ -24,7 +24,7 @@ from poc.chatbot.session import SessionStore
 from poc.chatbot.text_client import TextClient
 
 
-load_dotenv()
+load_dotenv(Path(__file__).parent / ".env")
 
 LLM_API_KEY = os.getenv("LLM_API_KEY")
 LLM_BASE_URL = os.getenv("LLM_BASE_URL")
