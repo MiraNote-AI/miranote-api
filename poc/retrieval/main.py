@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -38,6 +38,25 @@ class SearchHit(BaseModel):
 
 class SearchResponse(BaseModel):
     hits: List[SearchHit]
+
+
+class QuotesRequest(BaseModel):
+    text: str = Field(..., min_length=1)
+    max: int = Field(3, ge=1, le=5)
+    lang: Literal["auto", "en", "zh", "both"] = Field("auto")
+
+
+class QuoteMatch(BaseModel):
+    text: str
+    author: Optional[str] = None
+    source: Optional[str] = None
+    lang: Optional[str] = None
+    score: float
+    why: str
+
+
+class QuotesResponse(BaseModel):
+    matches: List[QuoteMatch]
 
 
 if not config.LLM_API_KEY:
@@ -97,3 +116,35 @@ async def search(req: SearchRequest):
             for h in hits
         ]
     )
+
+
+@app.post("/quotes", response_model=QuotesResponse)
+async def quotes(req: QuotesRequest):
+    """Pick the best quotes from the corpus for the user's text."""
+    lang_filter = None if req.lang in ("auto", "both") else req.lang
+    candidates = retriever.search(req.text, k=config.RETRIEVE_K, lang=lang_filter)
+    if not candidates:
+        return QuotesResponse(matches=[])
+
+    # Sort candidates by ID for deterministic ordering in reranker prompt
+    candidates = sorted(candidates, key=lambda c: c["id"])
+
+    try:
+        picks = reranker.rerank(
+            llm, config.LLM_MODEL, req.text, candidates, max_picks=req.max,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+    matches: List[QuoteMatch] = []
+    for p in picks:
+        c = candidates[p["index"] - 1]  # 1-indexed from reranker
+        matches.append(QuoteMatch(
+            text=c["text"],
+            author=c.get("author"),
+            source=c.get("source"),
+            lang=c.get("lang"),
+            score=c["score"],
+            why=p["why"],
+        ))
+    return QuotesResponse(matches=matches)
