@@ -47,6 +47,7 @@ app.add_middleware(
 _PROMPT_DIR = Path(__file__).parent / "prompts"
 CLEAN_SYSTEM = (_PROMPT_DIR / "clean.txt").read_text(encoding="utf-8")
 EXPAND_SYSTEM = (_PROMPT_DIR / "expand.txt").read_text(encoding="utf-8")
+POLISH_SYSTEM = (_PROMPT_DIR / "polish.txt").read_text(encoding="utf-8")
 
 
 class TextRequest(BaseModel):
@@ -62,6 +63,11 @@ class CleanResponse(BaseModel):
 class ExpandResponse(BaseModel):
     original: str
     expanded: str
+
+
+class PolishResponse(BaseModel):
+    original: str
+    polished: str
 
 
 async def call_llm(system: str, user_text: str, max_tokens: int = 2048) -> str:
@@ -102,6 +108,13 @@ async def expand_text(req: TextRequest):
         user_msg = f"Context:\n{req.context}\n\nCurrent input:\n{req.text}"
     expanded = await call_llm(EXPAND_SYSTEM, user_msg, max_tokens=2048)
     return ExpandResponse(original=req.text, expanded=expanded)
+
+
+@app.post("/polish", response_model=PolishResponse)
+async def polish_text(req: TextRequest):
+    """Polish: final editing pass. Improve word choice and flow, preserve structure and meaning."""
+    polished = await call_llm(POLISH_SYSTEM, req.text, max_tokens=2048)
+    return PolishResponse(original=req.text, polished=polished)
 
 
 @app.get("/health")
