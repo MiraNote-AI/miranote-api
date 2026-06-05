@@ -9,7 +9,7 @@ from __future__ import annotations
 import os
 import asyncio
 from pathlib import Path
-from typing import Optional
+from typing import Literal, Optional
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -48,6 +48,7 @@ _PROMPT_DIR = Path(__file__).parent / "prompts"
 CLEAN_SYSTEM = (_PROMPT_DIR / "clean.txt").read_text(encoding="utf-8")
 EXPAND_SYSTEM = (_PROMPT_DIR / "expand.txt").read_text(encoding="utf-8")
 POLISH_SYSTEM = (_PROMPT_DIR / "polish.txt").read_text(encoding="utf-8")
+SHORTEN_SYSTEM = (_PROMPT_DIR / "shorten.txt").read_text(encoding="utf-8")
 
 
 class TextRequest(BaseModel):
@@ -68,6 +69,19 @@ class ExpandResponse(BaseModel):
 class PolishResponse(BaseModel):
     original: str
     polished: str
+
+
+class ShortenRequest(BaseModel):
+    text: str = Field(..., min_length=1, description="Text to shorten")
+    target: Literal["30%", "50%", "tweet"] = Field(
+        "50%", description="How aggressively to shorten"
+    )
+
+
+class ShortenResponse(BaseModel):
+    original: str
+    shortened: str
+    target: str
 
 
 async def call_llm(system: str, user_text: str, max_tokens: int = 2048) -> str:
@@ -115,6 +129,14 @@ async def polish_text(req: TextRequest):
     """Polish: final editing pass. Improve word choice and flow, preserve structure and meaning."""
     polished = await call_llm(POLISH_SYSTEM, req.text, max_tokens=2048)
     return PolishResponse(original=req.text, polished=polished)
+
+
+@app.post("/shorten", response_model=ShortenResponse)
+async def shorten_text(req: ShortenRequest):
+    """Shorten: produce a shorter version preserving meaning. Target controls aggressiveness."""
+    user_msg = f"Target: {req.target}\n\n{req.text}"
+    shortened = await call_llm(SHORTEN_SYSTEM, user_msg, max_tokens=2048)
+    return ShortenResponse(original=req.text, shortened=shortened, target=req.target)
 
 
 @app.get("/health")
