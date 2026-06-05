@@ -10,6 +10,7 @@ from typing import Any, Dict, Literal, Optional, Tuple
 
 import whisper
 from fastapi import FastAPI, UploadFile, File, Query, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -40,6 +41,12 @@ llm = OpenAI(api_key=LLM_API_KEY, base_url=LLM_BASE_URL) if LLM_API_KEY else Non
 
 app = FastAPI(title="MiraNote Voice-to-Text", version="0.1.0")
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # The correction prompt is loaded from a separate file to keep source code
 # ASCII-only (org Rule 3).  The file ships as a runtime data asset.
