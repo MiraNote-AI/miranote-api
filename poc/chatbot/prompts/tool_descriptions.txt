@@ -1,0 +1,9 @@
+# One description per line, format: <tool_name>|<description>
+# Lines starting with # and blank lines are ignored.
+# Chinese trigger phrases stay here (allowlisted under **/prompts/*.txt).
+clean_text|Restructure messy, fragmented, or stream-of-consciousness text into a clean readable note. Call when the user asks to 'clean up', 'tidy', or '整理' a piece of text.
+expand_text|Expand brief notes into a fuller version in the user's voice. Call when the user asks to 'expand', 'develop', '展开', or '扩写' their text.
+polish_text|Final editing pass: improve word choice and flow without restructuring or changing meaning. Call when the user asks to 'polish', 'refine', 'edit', or '润色' their text.
+shorten_text|Produce a shorter version of the text preserving meaning. Call when the user asks to 'shorten', 'trim', 'cut', or '缩短' their text. Target controls aggressiveness: 30%, 50%, or 'tweet' (280 char cap).
+extract_keywords|Extract 5-10 salient keywords or short phrases. Call when the user asks for tags, keywords, key terms, or '关键词'. Result is [{term, score}] where score is 1-10 salience.
+generate_caption|Generate a punchy 1-2 sentence caption. Call when the user asks for a caption, '配文', summary line, or one-liner. Style controls register: instagram, diary, or tweet.
