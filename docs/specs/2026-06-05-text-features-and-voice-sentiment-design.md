@@ -253,24 +253,29 @@ Add one paragraph to `poc/chatbot/prompts/system.txt`:
 
 ### 6.1 PR plan
 
-Three PRs:
+All three PRs are in scope; none is cut. Sequencing:
 
 - **PR A: text endpoints + UI rework** (`poc/text-clean-expand/`).
-  Ships independently. Mergeable as soon as Jason approves.
+  Ships independently. Goes up first because PR C consumes its
+  endpoints in smoke testing.
 - **PR B: voice acoustic sentiment + CORS** (`poc/voice-to-text/`).
-  Independent of A. Parallel review.
-- **PR C: chatbot text tools** (`poc/chatbot/`). Depends on A being
-  merged (or at least running locally) for end-to-end smoke. Tests can
-  ship before A merges because they stub the HTTP client.
+  Independent of A. Goes up in parallel with A.
+- **PR C: chatbot text tools** (`poc/chatbot/`). Branched from A's
+  tip so the tools can be smoke-tested against the new text endpoints
+  on the same branch. Goes up after A is open for review (no need to
+  wait for A's merge -- the v2 branch carries A's code locally).
 
-If we run short on time, **PR C is the cut**. The demo-critical pieces
-are the text endpoints (A) and the voice emotion badge (B). Chatbot
-tool integration is quality-of-life and can land tomorrow.
+The next-day meeting is a checkpoint for whatever has shipped by then,
+not a hard deadline that drives scope cuts. If A and B are merged but
+C is mid-review, that's fine -- C lands the day after.
 
 ### 6.2 Testing strategy
 
-Each POC currently has no tests except chatbot. Add a minimal `tests/`
-per touched POC following the chatbot pattern:
+Each POC currently has no tests except chatbot. Add a `tests/`
+directory per touched POC following the chatbot pattern. Coverage
+target: every new endpoint and every new tool has at least one
+happy-path test plus one explicit edge case (empty input, invalid
+payload, or upstream failure).
 
 - `poc/text-clean-expand/tests/`:
   - `conftest.py`: pytest fixture providing a FastAPI `TestClient` with
@@ -325,6 +330,6 @@ exercise the new buttons.
 | 1.3 GB model download on first call surprises new teammates | UX friction | README "first emotion request downloads ~1.3 GB to `~/.cache/huggingface/`" |
 | Cross-lingual emotion accuracy on Chinese is empirical, not benchmarked | Wrong labels in Chinese audio demos | Show `confidence` so users see uncertainty; document fallback path in Open Follow-ups |
 | `httpx` adds inter-POC operational coupling for chatbot | Chatbot tool calls fail if text-clean-expand is down | Graceful error wrapping, `start-all.sh` already brings both up, error message points at the right server |
-| PR A + B + C in one day is tight | We slip the demo | Pre-declared cut order: PR C drops first |
+| Three PRs interleaved across three POCs is coordination-heavy | Wrong file ends up on wrong branch, partial work leaks | Each PR is on its own branch off main; PR C branches off A's tip only locally, rebases onto main after A merges |
 | Sentiment model emits a label that doesn't match user expectation (e.g. `disgust` on a neutral journal entry) | Demo lands awkwardly | Show top-3 instead of just top-1 on click/hover, so users see "happy 30%, neutral 28%, sad 18%" -- model is hedging, label feels honest |
 
