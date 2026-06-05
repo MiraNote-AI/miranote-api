@@ -178,6 +178,29 @@ async def transcribe(
         os.unlink(tmp_path)
 
 
+@app.post("/emotion")
+async def emotion_endpoint(
+    file: UploadFile = File(..., description="Audio file"),
+):
+    """Run only the acoustic emotion classifier on an uploaded audio file."""
+    raw_bytes = await file.read()
+    if len(raw_bytes) < 1024:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Audio too small ({len(raw_bytes)} bytes). Record at least 1 second.",
+        )
+    suffix = os.path.splitext(file.filename or "audio.wav")[1]
+    with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+        tmp.write(raw_bytes)
+        tmp_path = tmp.name
+    try:
+        return await asyncio.to_thread(analyze_emotion, tmp_path)
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=f"Emotion analysis failed: {e}")
+    finally:
+        os.unlink(tmp_path)
+
+
 @app.get("/health")
 async def health():
     return {
