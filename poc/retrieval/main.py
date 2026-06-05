@@ -23,6 +23,23 @@ from poc.retrieval.retriever import Retriever
 from poc.retrieval.store import Store
 
 
+class SearchRequest(BaseModel):
+    query: str = Field(..., min_length=1)
+    k: int = Field(10, ge=1, le=50)
+    namespace: str = Field("quotes")
+
+
+class SearchHit(BaseModel):
+    id: str
+    text: str
+    score: float
+    metadata: Dict[str, Any]
+
+
+class SearchResponse(BaseModel):
+    hits: List[SearchHit]
+
+
 if not config.LLM_API_KEY:
     raise RuntimeError("LLM_API_KEY is required. Set it in .env")
 
@@ -61,3 +78,22 @@ async def health():
         "corpus_size": store.count(),
         "namespaces": ["quotes"],
     }
+
+
+@app.post("/search", response_model=SearchResponse)
+async def search(req: SearchRequest):
+    """Generic top-K semantic search over the corpus."""
+    if req.namespace != "quotes":
+        raise HTTPException(status_code=422, detail=f"unknown namespace: {req.namespace}")
+    hits = retriever.search(req.query, k=req.k)
+    return SearchResponse(
+        hits=[
+            SearchHit(
+                id=h["id"],
+                text=h["text"],
+                score=h["score"],
+                metadata={k: v for k, v in h.items() if k not in ("id", "text", "score")},
+            )
+            for h in hits
+        ]
+    )
