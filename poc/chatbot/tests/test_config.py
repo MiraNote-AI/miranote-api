@@ -51,3 +51,31 @@ def test_set_docs_root_expands_tilde(tmp_path: Path, monkeypatch):
     cfg = _make(tmp_path)
     cfg.set_docs_root("~")
     assert cfg.docs_root == tmp_path.resolve()
+
+
+def test_config_accepts_text_client(tmp_path):
+    """Config carries a text_client object the tools dispatcher can use."""
+    class FakeClient:
+        pass
+
+    cfg = ChatbotConfig(
+        docs_root=tmp_path,
+        model="fake",
+        max_tool_iterations=6,
+        max_history_messages=40,
+        session_ttl_seconds=3600,
+        text_client=FakeClient(),
+    )
+    assert cfg.text_client is not None
+    assert isinstance(cfg.text_client, FakeClient)
+
+
+def test_config_text_client_defaults_to_none(tmp_path):
+    cfg = ChatbotConfig(
+        docs_root=tmp_path,
+        model="fake",
+        max_tool_iterations=6,
+        max_history_messages=40,
+        session_ttl_seconds=3600,
+    )
+    assert cfg.text_client is None
