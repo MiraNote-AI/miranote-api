@@ -22,10 +22,18 @@ LLM_API_KEY = os.getenv("LLM_API_KEY")
 LLM_BASE_URL = os.getenv("LLM_BASE_URL")
 LLM_MODEL = os.getenv("LLM_MODEL", "gemini-2.5-flash")
 
-# ---------- Load models ----------
-print(f"Loading Whisper model: {WHISPER_MODEL} ...")
-model = whisper.load_model(WHISPER_MODEL)
-print("Whisper model loaded.")
+# ---------- Lazy model loading ----------
+_whisper_model = None
+
+
+def get_whisper_model():
+    """Lazy-load Whisper on first call so import is cheap (tests, /health)."""
+    global _whisper_model
+    if _whisper_model is None:
+        print(f"Loading Whisper model: {WHISPER_MODEL} ...")
+        _whisper_model = whisper.load_model(WHISPER_MODEL)
+        print("Whisper model loaded.")
+    return _whisper_model
 
 llm = OpenAI(api_key=LLM_API_KEY, base_url=LLM_BASE_URL) if LLM_API_KEY else None
 
@@ -115,7 +123,7 @@ async def transcribe(
     try:
         try:
             result = await asyncio.to_thread(
-                model.transcribe, tmp_path, language=lang, verbose=False
+                get_whisper_model().transcribe, tmp_path, language=lang, verbose=False
             )
         except Exception as e:
             print(f"Whisper/ffmpeg failed on {file.filename!r}: {e}")
