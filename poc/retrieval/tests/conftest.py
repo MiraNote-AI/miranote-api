@@ -91,6 +91,8 @@ def fake_llm():
 def api_client(stub_embedder_model, fake_llm, monkeypatch):
     """FastAPI TestClient with all externals stubbed."""
     os.environ.setdefault("LLM_API_KEY", "fake-key-for-tests")
+    from poc.retrieval import config as config_module
+    monkeypatch.setattr(config_module, "LLM_API_KEY", "fake-key-for-tests")
     monkeypatch.setattr("openai.OpenAI", lambda **kwargs: fake_llm)
 
     main_path = Path(__file__).parent.parent / "main.py"
