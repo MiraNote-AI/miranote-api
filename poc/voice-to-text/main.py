@@ -6,13 +6,14 @@ Whisper transcription + optional LLM correction (any OpenAI-compatible provider)
 import os
 import tempfile
 import asyncio
-from typing import Literal, Optional, Tuple
+from typing import Any, Dict, Literal, Optional, Tuple
 
 import whisper
 from fastapi import FastAPI, UploadFile, File, Query, HTTPException
 from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
 from openai import OpenAI
+from emotion import analyze_emotion
 
 load_dotenv()
 
@@ -95,6 +96,10 @@ async def transcribe(
             "on short or noisy clips it misfires (e.g. classifies Mandarin as Javanese)."
         ),
     ),
+    with_emotion: bool = Query(
+        True,
+        description="Run acoustic emotion classifier on the audio (adds ~1 sec).",
+    ),
 ):
     """
     Voice-to-text endpoint.
@@ -150,12 +155,24 @@ async def transcribe(
         if correct and raw_text.strip():
             corrected_text, correction_status = await correct_with_ai(raw_text)
 
+        emotion_result: Optional[Dict[str, Any]] = None
+        emotion_status = "skipped"
+        if with_emotion:
+            try:
+                emotion_result = await asyncio.to_thread(analyze_emotion, tmp_path)
+                emotion_status = "ok"
+            except Exception as e:  # noqa: BLE001 -- surface to caller as status
+                print(f"Emotion analysis failed: {e}")
+                emotion_status = "failed"
+
         return {
             "language": language,
             "raw_text": raw_text,
             "corrected_text": corrected_text,
             "correction_status": correction_status,
             "segments": segments,
+            "emotion": emotion_result,
+            "emotion_status": emotion_status,
         }
     finally:
         os.unlink(tmp_path)
