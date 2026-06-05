@@ -57,3 +57,14 @@ curl -s -X POST http://localhost:8001/caption \
 cd /Users/mengjia/MiraNote/miranote-api/poc/text-clean-expand
 PYTHONPATH=. .venv/bin/python3 -m pytest tests/ -v
 ```
+
+## Quote action (NEW, depends on retrieval server)
+
+The 7th Text-tab action -- `Quote` -- does NOT call this server.
+Instead it calls the retrieval POC at `http://localhost:8004/quotes`
+(see `poc/retrieval/`). Make sure that server is running, or use
+`./start-all.sh` from the repo root.
+
+Sub-controls: `Lang` (auto / en / zh / both) and `Max` (1-5).
+Result is rendered as quote cards with author, source, match %, and a
+one-sentence "why" line. Zero matches is a valid response.

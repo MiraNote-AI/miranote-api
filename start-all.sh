@@ -54,10 +54,11 @@ cleanup() {
 }
 trap cleanup INT TERM EXIT
 
-#     tag    colour  venv-dir                                start-cwd                                 uvicorn-extra-args                    module                  port
-start text   36      "$REPO_ROOT/poc/text-clean-expand"      "$REPO_ROOT/poc/text-clean-expand"        "--reload"                            main:app                8001
-start voice  33      "$REPO_ROOT/poc/voice-to-text"          "$REPO_ROOT/poc/voice-to-text"            "--reload"                            main:app                8000
-start chat   35      "$REPO_ROOT/poc/chatbot"                "$REPO_ROOT"                              "--reload --reload-dir poc/chatbot"   poc.chatbot.main:app    8003
+#     tag        colour  venv-dir                                start-cwd                                 uvicorn-extra-args                       module                  port
+start text       36      "$REPO_ROOT/poc/text-clean-expand"      "$REPO_ROOT/poc/text-clean-expand"        "--reload"                               main:app                8001
+start voice      33      "$REPO_ROOT/poc/voice-to-text"          "$REPO_ROOT/poc/voice-to-text"            "--reload"                               main:app                8000
+start chat       35      "$REPO_ROOT/poc/chatbot"                "$REPO_ROOT"                              "--reload --reload-dir poc/chatbot"      poc.chatbot.main:app    8003
+start retrieval  32      "$REPO_ROOT/poc/retrieval"              "$REPO_ROOT"                              "--reload --reload-dir poc/retrieval"    poc.retrieval.main:app  8004
 
 cat <<EOF
 
