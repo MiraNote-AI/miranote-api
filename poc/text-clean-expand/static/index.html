@@ -213,9 +213,32 @@
         <div class="panel-title">Context <span style="font-weight:400;text-transform:none">(optional — helps Expand understand your topic)</span></div>
         <textarea id="txt-context" placeholder="e.g. 这是一篇关于旅行的日记 / This is about our product roadmap" style="min-height:60px;"></textarea>
       </div>
-      <div class="row" style="margin-top: 16px;">
-        <button class="btn btn-primary" id="txt-clean">Clean</button>
-        <button class="btn btn-warm" id="txt-expand">Expand</button>
+      <div class="row" style="margin-top: 16px; gap: 12px; align-items: stretch;">
+        <select id="txt-action" style="padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; font: inherit; background: var(--panel);">
+          <option value="clean">Clean</option>
+          <option value="expand">Expand</option>
+          <option value="polish">Polish</option>
+          <option value="shorten">Shorten</option>
+          <option value="keywords">Keywords</option>
+          <option value="caption">Caption</option>
+        </select>
+        <button class="btn btn-primary" id="txt-run">Run</button>
+      </div>
+      <div class="row" id="txt-sub-shorten" hidden style="margin-top: 10px; gap: 12px;">
+        <span style="font-size: 13px; color: var(--muted);">Target:</span>
+        <label class="option"><input type="radio" name="txt-target" value="30%" /> 30%</label>
+        <label class="option"><input type="radio" name="txt-target" value="50%" checked /> 50%</label>
+        <label class="option"><input type="radio" name="txt-target" value="tweet" /> tweet</label>
+      </div>
+      <div class="row" id="txt-sub-caption" hidden style="margin-top: 10px; gap: 12px;">
+        <span style="font-size: 13px; color: var(--muted);">Style:</span>
+        <label class="option"><input type="radio" name="txt-style" value="instagram" checked /> instagram</label>
+        <label class="option"><input type="radio" name="txt-style" value="diary" /> diary</label>
+        <label class="option"><input type="radio" name="txt-style" value="tweet" /> tweet</label>
+      </div>
+      <div class="row" id="txt-sub-keywords" hidden style="margin-top: 10px; gap: 12px;">
+        <span style="font-size: 13px; color: var(--muted);">Max:</span>
+        <input id="txt-keywords-max" type="number" min="1" max="20" value="10" style="width: 80px; padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px; font: inherit;" />
       </div>
     </div>
     <div id="txt-error" class="error-msg" hidden></div>
@@ -346,44 +369,106 @@ document.querySelectorAll('.nav-tab').forEach(tab => {
 // ══════════════════════════════════════════
 //  TEXT — Clean & Expand
 // ══════════════════════════════════════════
-async function textCall(endpoint) {
+function textBuildPayload(action) {
   const text = $('txt-input').value.trim();
-  if (!text) return;
   const context = $('txt-context').value.trim() || null;
-  const body = { text };
-  if (context) body.context = context;
+  if (!text) return null;
+  const base = { text };
+  if (context) base.context = context;
+  if (action === 'shorten') {
+    const t = document.querySelector('input[name="txt-target"]:checked');
+    base.target = t ? t.value : '50%';
+  }
+  if (action === 'caption') {
+    const s = document.querySelector('input[name="txt-style"]:checked');
+    base.style = s ? s.value : 'instagram';
+  }
+  if (action === 'keywords') {
+    base.max = parseInt($('txt-keywords-max').value, 10) || 10;
+  }
+  return base;
+}
+
+function textRenderResult(action, data) {
+  const out = $('txt-output');
+  out.classList.remove('empty');
+  if (action === 'keywords') {
+    out.textContent = '';
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'display: flex; flex-wrap: wrap; gap: 8px;';
+    (data.keywords || []).forEach(function (kw) {
+      const chip = document.createElement('span');
+      chip.style.cssText = 'display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; background: var(--warm-light); border: 1px solid var(--border); border-radius: 999px; font-size: 13px;';
+      chip.textContent = kw.term;
+      const score = document.createElement('span');
+      score.style.cssText = 'font-size: 11px; color: var(--muted);';
+      score.textContent = kw.score;
+      chip.appendChild(score);
+      wrap.appendChild(chip);
+    });
+    out.appendChild(wrap);
+    return;
+  }
+  const fieldByAction = {
+    clean: 'cleaned',
+    expand: 'expanded',
+    polish: 'polished',
+    shorten: 'shortened',
+    caption: 'caption',
+  };
+  out.textContent = data[fieldByAction[action]];
+}
+
+function textTitleFor(action) {
+  return {
+    clean: 'Cleaned', expand: 'Expanded', polish: 'Polished',
+    shorten: 'Shortened', keywords: 'Keywords', caption: 'Caption',
+  }[action] || action;
+}
+
+async function textRun() {
+  const action = $('txt-action').value;
+  const payload = textBuildPayload(action);
+  if (!payload) return;
 
   $('txt-error').hidden = true;
   $('txt-result').hidden = true;
-  showLoading($('txt-loading'), endpoint === 'clean' ? 'Cleaning...' : 'Expanding...');
-  $('txt-clean').disabled = $('txt-expand').disabled = true;
+  showLoading($('txt-loading'), 'Running ' + action + '...');
+  $('txt-run').disabled = true;
 
   try {
-    const r = await fetch(TEXT_API + '/' + endpoint, {
+    const r = await fetch(TEXT_API + '/' + action, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
+      body: JSON.stringify(payload),
     });
     if (!r.ok) {
       const j = await r.json().catch(() => null);
       throw new Error((j && j.detail) || 'HTTP ' + r.status);
     }
     const data = await r.json();
-    $('txt-result-title').textContent = endpoint === 'clean' ? 'Cleaned' : 'Expanded';
-    $('txt-output').textContent = data.cleaned || data.expanded;
-    $('txt-output').classList.remove('empty');
+    $('txt-result-title').textContent = textTitleFor(action);
+    textRenderResult(action, data);
     $('txt-result').hidden = false;
   } catch (e) {
     $('txt-error').textContent = 'Error: ' + e.message;
     $('txt-error').hidden = false;
   } finally {
     $('txt-loading').hidden = true;
-    $('txt-clean').disabled = $('txt-expand').disabled = false;
+    $('txt-run').disabled = false;
   }
 }
 
-$('txt-clean').addEventListener('click', () => textCall('clean'));
-$('txt-expand').addEventListener('click', () => textCall('expand'));
+function textUpdateSubControls() {
+  const action = $('txt-action').value;
+  $('txt-sub-shorten').hidden = action !== 'shorten';
+  $('txt-sub-caption').hidden = action !== 'caption';
+  $('txt-sub-keywords').hidden = action !== 'keywords';
+}
+
+$('txt-run').addEventListener('click', textRun);
+$('txt-action').addEventListener('change', textUpdateSubControls);
+textUpdateSubControls();
 
 // ══════════════════════════════════════════
 //  VOICE — Upload & Record
