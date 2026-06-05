@@ -196,6 +196,25 @@ TOOLS: List[Dict[str, Any]] = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "find_quote",
+            "description": _TOOL_DESCRIPTIONS["find_quote"],
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "text": {"type": "string"},
+                    "max": {"type": "integer", "default": 3},
+                    "lang": {
+                        "type": "string",
+                        "enum": ["en", "zh"],
+                    },
+                },
+                "required": ["text"],
+            },
+        },
+    },
 ]
 
 # Tools that delegate to the text-clean-expand service via config.text_client.
@@ -240,6 +259,13 @@ def dispatch(config: ChatbotConfig, name: str, args: Dict[str, Any]) -> Any:
             return config.text_client.keywords(args["text"], int(args.get("max", 10)))
         if name == "generate_caption":
             return config.text_client.caption(args["text"], args.get("style", "instagram"))
+        if name == "find_quote":
+            lang = args.get("lang")
+            return config.retrieval_client.quotes(
+                args["text"],
+                max_picks=int(args.get("max", 3)),
+                lang=lang,
+            )
         return {"error": f"unknown tool: {name}"}
     except KeyError as e:
         return {"error": f"missing required argument: {e.args[0]}"}

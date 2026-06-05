@@ -128,12 +128,12 @@ def _cfg_with_text(tmp_docs):
     return cfg
 
 
-def test_tools_schema_now_lists_ten_functions():
+def test_tools_schema_exact_eleven_set():
     names = [t["function"]["name"] for t in tools.TOOLS]
     assert sorted(names) == sorted([
         "list_docs", "read_doc", "search_docs", "set_docs_root",
         "clean_text", "expand_text", "polish_text", "shorten_text",
-        "extract_keywords", "generate_caption",
+        "extract_keywords", "generate_caption", "find_quote",
     ])
 
 
@@ -186,3 +186,52 @@ def test_dispatch_text_tool_without_client_returns_clear_error(tmp_docs, name):
     assert cfg.text_client is None
     out = tools.dispatch(cfg, name, {"text": "hi"})
     assert out == {"error": "text tools unavailable: TEXT_API_URL not configured"}
+
+
+class _FakeRetrievalClient:
+    def __init__(self):
+        self.calls = []
+        self.scripted = {"matches": [{"text": "stub", "score": 0.9, "why": "ok"}]}
+
+    def quotes(self, text, max_picks=3, lang=None):
+        self.calls.append({"text": text, "max_picks": max_picks, "lang": lang})
+        return self.scripted
+
+
+def _cfg_with_retrieval(tmp_docs):
+    cfg = _cfg(tmp_docs)
+    cfg.retrieval_client = _FakeRetrievalClient()
+    return cfg
+
+
+def test_tools_schema_now_lists_eleven_functions():
+    names = [t["function"]["name"] for t in tools.TOOLS]
+    assert "find_quote" in names
+    assert len(names) == 11  # 10 from prior PRs + find_quote
+
+
+def test_dispatch_routes_to_find_quote(tmp_docs):
+    cfg = _cfg_with_retrieval(tmp_docs)
+    out = tools.dispatch(cfg, "find_quote", {"text": "I am tired"})
+    assert cfg.retrieval_client.calls == [
+        {"text": "I am tired", "max_picks": 3, "lang": None}
+    ]
+    assert "matches" in out
+
+
+def test_dispatch_find_quote_passes_max_and_lang(tmp_docs):
+    cfg = _cfg_with_retrieval(tmp_docs)
+    tools.dispatch(cfg, "find_quote", {"text": "x", "max": 2, "lang": "zh"})
+    assert cfg.retrieval_client.calls == [
+        {"text": "x", "max_picks": 2, "lang": "zh"}
+    ]
+
+
+def test_dispatch_find_quote_wraps_runtime_error(tmp_docs):
+    cfg = _cfg_with_retrieval(tmp_docs)
+    def boom(text, max_picks=3, lang=None):
+        raise RuntimeError("retrieval service down")
+    cfg.retrieval_client.quotes = boom
+    out = tools.dispatch(cfg, "find_quote", {"text": "x"})
+    assert "error" in out
+    assert "retrieval service down" in out["error"]
