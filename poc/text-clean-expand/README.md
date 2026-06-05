@@ -29,7 +29,7 @@ cp .env.example .env  # fill in LLM_API_KEY
 PYTHONPATH=../.. .venv/bin/python3 -m uvicorn main:app --port 8001 --reload
 ```
 
-UI at <http://localhost:8001/>. Or use `./start-all.sh` at the repo root to bring up all three POCs.
+UI at <http://localhost:8001/>. Or use `./start-all.sh` at the repo root to bring up all four POCs.
 
 ## Curl examples
 

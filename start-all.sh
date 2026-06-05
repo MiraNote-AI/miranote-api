@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# start-all.sh -- spin up the three MiraNote POC servers concurrently for
+# start-all.sh -- spin up the four MiraNote POC servers concurrently for
 # local dev. Ctrl-C stops them all.
 #
 # Skips any POC whose .venv or .env is missing (with a setup hint) so a

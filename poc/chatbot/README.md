@@ -43,8 +43,8 @@ pointing back here. All other formats work out of the box.
 
 ## Run
 
-Easiest: from the repo root, `./start-all.sh` brings up all three POC
-servers (text on 8001, voice on 8000, chat on 8003) at once with
+Easiest: from the repo root, `./start-all.sh` brings up all four POC
+servers (text on 8001, voice on 8000, chat on 8003, retrieval on 8004) at once with
 prefixed log streams. Ctrl-C stops them all.
 
 To run just the chatbot backend on its own:
