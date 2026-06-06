@@ -101,7 +101,7 @@ what came back.
 ## Tests
 
 ```bash
-cd /Users/mengjia/MiraNote/miranote-api
+# from the repo root
 PYTHONPATH=. python3 -m pytest poc/chatbot/tests -v
 ```
 

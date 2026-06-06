@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from threading import Lock
-from typing import Dict
+from typing import Any, Dict, Optional
 
 
 class ChatbotConfig:
@@ -20,7 +20,7 @@ class ChatbotConfig:
         max_tool_iterations: int,
         max_history_messages: int,
         session_ttl_seconds: int,
-        text_client: object = None,
+        text_client: Optional[Any] = None,
     ):
         self._lock = Lock()
         self.docs_root = docs_root.resolve()

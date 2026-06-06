@@ -41,19 +41,19 @@ class TextClient:
 
     def clean(self, text: str, context: Optional[str] = None) -> Dict[str, Any]:
         payload: Dict[str, Any] = {"text": text}
-        if context:
+        if context is not None:
             payload["context"] = context
         return self._post("/clean", payload)
 
     def expand(self, text: str, context: Optional[str] = None) -> Dict[str, Any]:
         payload: Dict[str, Any] = {"text": text}
-        if context:
+        if context is not None:
             payload["context"] = context
         return self._post("/expand", payload)
 
     def polish(self, text: str, context: Optional[str] = None) -> Dict[str, Any]:
         payload: Dict[str, Any] = {"text": text}
-        if context:
+        if context is not None:
             payload["context"] = context
         return self._post("/polish", payload)
 

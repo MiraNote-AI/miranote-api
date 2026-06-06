@@ -176,3 +176,13 @@ def test_dispatch_text_tool_wraps_runtime_error(tmp_docs):
     out = tools.dispatch(cfg, "polish_text", {"text": "hi"})
     assert "error" in out
     assert "text service down" in out["error"]
+
+
+@pytest.mark.parametrize("name", sorted(tools._TEXT_TOOL_NAMES))
+def test_dispatch_text_tool_without_client_returns_clear_error(tmp_docs, name):
+    # text_client defaults to None when TEXT_API_URL is not configured; the
+    # guard should yield a clear message rather than an AttributeError on None.
+    cfg = _cfg(tmp_docs)
+    assert cfg.text_client is None
+    out = tools.dispatch(cfg, name, {"text": "hi"})
+    assert out == {"error": "text tools unavailable: TEXT_API_URL not configured"}

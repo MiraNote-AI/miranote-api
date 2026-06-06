@@ -198,6 +198,12 @@ TOOLS: List[Dict[str, Any]] = [
     },
 ]
 
+# Tools that delegate to the text-clean-expand service via config.text_client.
+_TEXT_TOOL_NAMES = frozenset({
+    "clean_text", "expand_text", "polish_text",
+    "shorten_text", "extract_keywords", "generate_caption",
+})
+
 
 def dispatch(config: ChatbotConfig, name: str, args: Dict[str, Any]) -> Any:
     """Route a model-issued tool call to the underlying implementation.
@@ -217,6 +223,11 @@ def dispatch(config: ChatbotConfig, name: str, args: Dict[str, Any]) -> Any:
             return tools_fs.search_docs(config.docs_root, args["query"], int(args.get("max_hits", 20)))
         if name == "set_docs_root":
             return config.set_docs_root(args["path"])
+        # Text tools delegate to text-clean-expand; if TEXT_API_URL was not
+        # configured, text_client is None. Guard here so the model gets a
+        # clear message instead of a cryptic AttributeError on None.
+        if name in _TEXT_TOOL_NAMES and config.text_client is None:
+            return {"error": "text tools unavailable: TEXT_API_URL not configured"}
         if name == "clean_text":
             return config.text_client.clean(args["text"], args.get("context"))
         if name == "expand_text":
