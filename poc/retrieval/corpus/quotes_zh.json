@@ -6,7 +6,8 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "ambition"
+      "ambition",
+      "home"
     ],
     "id": "zh_0001"
   },
@@ -28,7 +29,8 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "ambition"
+      "ambition",
+      "nature"
     ],
     "id": "zh_0003"
   },
@@ -74,8 +76,8 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "work",
-      "perseverance"
+      "perseverance",
+      "work"
     ],
     "id": "zh_0007"
   },
@@ -86,8 +88,8 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "work",
-      "perseverance"
+      "perseverance",
+      "work"
     ],
     "id": "zh_0008"
   },
@@ -99,7 +101,7 @@
     "era": "Tang",
     "themes": [
       "joy",
-      "rest"
+      "change"
     ],
     "id": "zh_0009"
   },
@@ -110,6 +112,7 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
+      "joy",
       "ambition"
     ],
     "id": "zh_0010"
@@ -133,7 +136,7 @@
     "era": "Tang",
     "themes": [
       "joy",
-      "rest"
+      "gratitude"
     ],
     "id": "zh_0012"
   },
@@ -155,7 +158,8 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "joy"
+      "joy",
+      "nature"
     ],
     "id": "zh_0014"
   },
@@ -167,7 +171,7 @@
     "era": "Tang",
     "themes": [
       "joy",
-      "nature"
+      "hope"
     ],
     "id": "zh_0015"
   },
@@ -178,7 +182,8 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "joy"
+      "joy",
+      "change"
     ],
     "id": "zh_0016"
   },
@@ -201,7 +206,8 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "nature"
+      "nature",
+      "ambition"
     ],
     "id": "zh_0018"
   },
@@ -212,7 +218,8 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "nature"
+      "nature",
+      "joy"
     ],
     "id": "zh_0019"
   },
@@ -224,7 +231,6 @@
     "era": "Tang",
     "themes": [
       "travel",
-      "ambition",
       "joy"
     ],
     "id": "zh_0020"
@@ -237,6 +243,7 @@
     "era": "Tang",
     "themes": [
       "travel",
+      "joy",
       "nature"
     ],
     "id": "zh_0021"
@@ -248,7 +255,8 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "nature"
+      "nature",
+      "joy"
     ],
     "id": "zh_0022"
   },
@@ -272,7 +280,7 @@
     "era": "Tang",
     "themes": [
       "joy",
-      "rest"
+      "travel"
     ],
     "id": "zh_0024"
   },
@@ -284,7 +292,7 @@
     "era": "Tang",
     "themes": [
       "time",
-      "nostalgia"
+      "farewell"
     ],
     "id": "zh_0025"
   },
@@ -295,7 +303,8 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "nature"
+      "nature",
+      "change"
     ],
     "id": "zh_0026"
   },
@@ -307,7 +316,8 @@
     "era": "Tang",
     "themes": [
       "rest",
-      "solitude"
+      "joy",
+      "nature"
     ],
     "id": "zh_0027"
   },
@@ -318,7 +328,9 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "nature"
+      "nature",
+      "time",
+      "solitude"
     ],
     "id": "zh_0028"
   },
@@ -329,8 +341,9 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "nostalgia",
-      "regret"
+      "regret",
+      "loss",
+      "time"
     ],
     "id": "zh_0029"
   },
@@ -341,7 +354,9 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "joy"
+      "joy",
+      "gratitude",
+      "friendship"
     ],
     "id": "zh_0030"
   },
@@ -352,7 +367,9 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "joy"
+      "joy",
+      "ambition",
+      "work"
     ],
     "id": "zh_0031"
   },
@@ -364,7 +381,8 @@
     "era": "Tang",
     "themes": [
       "ambition",
-      "time"
+      "time",
+      "perseverance"
     ],
     "id": "zh_0032"
   },
@@ -375,7 +393,9 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "joy"
+      "joy",
+      "gratitude",
+      "nostalgia"
     ],
     "id": "zh_0033"
   },
@@ -386,7 +406,9 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "joy"
+      "joy",
+      "gratitude",
+      "nostalgia"
     ],
     "id": "zh_0034"
   },
@@ -398,7 +420,8 @@
     "era": "Tang",
     "themes": [
       "nature",
-      "joy"
+      "time",
+      "solitude"
     ],
     "id": "zh_0035"
   },
@@ -410,6 +433,7 @@
     "era": "Tang",
     "themes": [
       "joy",
+      "gratitude",
       "rest"
     ],
     "id": "zh_0036"
@@ -422,7 +446,8 @@
     "era": "Tang",
     "themes": [
       "solitude",
-      "nostalgia"
+      "nostalgia",
+      "rest"
     ],
     "id": "zh_0037"
   },
@@ -434,7 +459,8 @@
     "era": "Tang",
     "themes": [
       "nostalgia",
-      "regret"
+      "regret",
+      "turning-point"
     ],
     "id": "zh_0038"
   },
@@ -446,7 +472,8 @@
     "era": "Tang",
     "themes": [
       "change",
-      "nostalgia"
+      "nostalgia",
+      "time"
     ],
     "id": "zh_0039"
   },
@@ -457,8 +484,9 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "ambition",
-      "perseverance"
+      "work",
+      "perseverance",
+      "ambition"
     ],
     "id": "zh_0040"
   },
@@ -470,7 +498,8 @@
     "era": "Tang",
     "themes": [
       "work",
-      "perseverance"
+      "ambition",
+      "gratitude"
     ],
     "id": "zh_0041"
   },
@@ -481,7 +510,9 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "work"
+      "work",
+      "perseverance",
+      "ambition"
     ],
     "id": "zh_0042"
   },
@@ -493,7 +524,8 @@
     "era": "Tang",
     "themes": [
       "perseverance",
-      "ambition"
+      "work",
+      "regret"
     ],
     "id": "zh_0043"
   },
@@ -505,7 +537,8 @@
     "era": "Tang",
     "themes": [
       "hope",
-      "ambition"
+      "perseverance",
+      "work"
     ],
     "id": "zh_0044"
   },
@@ -517,8 +550,8 @@
     "era": "Tang",
     "themes": [
       "grief",
-      "nature",
-      "loss"
+      "loss",
+      "nature"
     ],
     "id": "zh_0045"
   },
@@ -530,7 +563,8 @@
     "era": "Tang",
     "themes": [
       "nature",
-      "perseverance"
+      "solitude",
+      "change"
     ],
     "id": "zh_0046"
   },
@@ -541,6 +575,7 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
+      "work",
       "perseverance",
       "ambition"
     ],
@@ -554,6 +589,7 @@
     "era": "Tang",
     "themes": [
       "travel",
+      "work",
       "perseverance"
     ],
     "id": "zh_0048"
@@ -565,9 +601,9 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "nature",
-      "solitude",
-      "grief"
+      "loneliness",
+      "loss",
+      "nature"
     ],
     "id": "zh_0049"
   },
@@ -578,8 +614,9 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "nature",
-      "nostalgia"
+      "change",
+      "joy",
+      "perseverance"
     ],
     "id": "zh_0050"
   },
@@ -590,8 +627,9 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "change",
-      "perseverance"
+      "work",
+      "ambition",
+      "change"
     ],
     "id": "zh_0051"
   },
@@ -602,8 +640,9 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "turning-point",
-      "perseverance"
+      "work",
+      "hope",
+      "ambition"
     ],
     "id": "zh_0052"
   },
@@ -615,7 +654,8 @@
     "era": "Tang",
     "themes": [
       "ambition",
-      "hope"
+      "work",
+      "perseverance"
     ],
     "id": "zh_0053"
   },
@@ -626,8 +666,9 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "joy",
-      "hope"
+      "work",
+      "hope",
+      "joy"
     ],
     "id": "zh_0054"
   },
@@ -638,8 +679,9 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
+      "work",
       "ambition",
-      "work"
+      "perseverance"
     ],
     "id": "zh_0055"
   },
@@ -650,8 +692,9 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
+      "nature",
       "joy",
-      "nature"
+      "hope"
     ],
     "id": "zh_0056"
   },
@@ -662,8 +705,9 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "nature",
-      "hope"
+      "hope",
+      "rest",
+      "change"
     ],
     "id": "zh_0057"
   },
@@ -675,6 +719,7 @@
     "era": "Tang",
     "themes": [
       "joy",
+      "hope",
       "nature"
     ],
     "id": "zh_0058"
@@ -686,8 +731,9 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "change",
-      "ambition"
+      "work",
+      "ambition",
+      "perseverance"
     ],
     "id": "zh_0059"
   },
@@ -699,6 +745,7 @@
     "era": "Tang",
     "themes": [
       "change",
+      "hope",
       "nature"
     ],
     "id": "zh_0060"
@@ -711,6 +758,7 @@
     "era": "Tang",
     "themes": [
       "change",
+      "work",
       "perseverance"
     ],
     "id": "zh_0061"
@@ -722,8 +770,9 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "change",
-      "nature"
+      "work",
+      "nature",
+      "change"
     ],
     "id": "zh_0062"
   },
@@ -735,7 +784,8 @@
     "era": "Tang",
     "themes": [
       "nature",
-      "change"
+      "change",
+      "seasons"
     ],
     "id": "zh_0063"
   },
@@ -747,8 +797,8 @@
     "era": "Tang",
     "themes": [
       "seasons",
-      "time",
-      "regret"
+      "change",
+      "perseverance"
     ],
     "id": "zh_0064"
   },
@@ -760,7 +810,8 @@
     "era": "Tang",
     "themes": [
       "change",
-      "farewell"
+      "hope",
+      "perseverance"
     ],
     "id": "zh_0065"
   },
@@ -771,8 +822,9 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
+      "work",
       "perseverance",
-      "work"
+      "ambition"
     ],
     "id": "zh_0066"
   },
@@ -783,8 +835,9 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
+      "work",
       "change",
-      "turning-point"
+      "perseverance"
     ],
     "id": "zh_0067"
   },
@@ -808,7 +861,8 @@
     "era": "Tang",
     "themes": [
       "home",
-      "nostalgia"
+      "nature",
+      "travel"
     ],
     "id": "zh_0069"
   },
@@ -819,8 +873,9 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "work",
-      "gratitude"
+      "regret",
+      "perseverance",
+      "ambition"
     ],
     "id": "zh_0070"
   },
@@ -831,8 +886,9 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
+      "work",
       "ambition",
-      "work"
+      "perseverance"
     ],
     "id": "zh_0071"
   },
@@ -843,8 +899,9 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "ambition",
-      "friendship"
+      "work",
+      "friendship",
+      "ambition"
     ],
     "id": "zh_0072"
   },
@@ -856,7 +913,8 @@
     "era": "Tang",
     "themes": [
       "change",
-      "hope"
+      "hope",
+      "ambition"
     ],
     "id": "zh_0073"
   },
@@ -868,7 +926,8 @@
     "era": "Tang",
     "themes": [
       "joy",
-      "hope"
+      "hope",
+      "change"
     ],
     "id": "zh_0074"
   },
@@ -893,7 +952,7 @@
     "era": "Tang",
     "themes": [
       "ambition",
-      "perseverance"
+      "hope"
     ],
     "id": "zh_0076"
   },
@@ -917,7 +976,7 @@
     "era": "Tang",
     "themes": [
       "ambition",
-      "perseverance"
+      "change"
     ],
     "id": "zh_0078"
   },
@@ -928,6 +987,7 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
+      "ambition",
       "joy"
     ],
     "id": "zh_0079"
@@ -939,7 +999,8 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "ambition"
+      "ambition",
+      "joy"
     ],
     "id": "zh_0080"
   },
@@ -951,7 +1012,7 @@
     "era": "Tang",
     "themes": [
       "ambition",
-      "perseverance"
+      "joy"
     ],
     "id": "zh_0081"
   },
@@ -999,6 +1060,7 @@
     "era": "Tang",
     "themes": [
       "turning-point",
+      "ambition",
       "perseverance"
     ],
     "id": "zh_0085"
@@ -1023,7 +1085,7 @@
     "era": "Tang",
     "themes": [
       "ambition",
-      "change"
+      "hope"
     ],
     "id": "zh_0087"
   },
@@ -1035,7 +1097,7 @@
     "era": "Tang",
     "themes": [
       "ambition",
-      "change"
+      "perseverance"
     ],
     "id": "zh_0088"
   },
@@ -1046,8 +1108,8 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "rest",
-      "work"
+      "ambition",
+      "rest"
     ],
     "id": "zh_0089"
   },
@@ -1059,8 +1121,7 @@
     "era": "Tang",
     "themes": [
       "nature",
-      "seasons",
-      "time"
+      "seasons"
     ],
     "id": "zh_0090"
   },
@@ -1072,8 +1133,8 @@
     "era": "Tang",
     "themes": [
       "nature",
-      "joy",
-      "gratitude"
+      "gratitude",
+      "joy"
     ],
     "id": "zh_0091"
   },
@@ -1099,7 +1160,7 @@
     "themes": [
       "nostalgia",
       "grief",
-      "loss"
+      "loneliness"
     ],
     "id": "zh_0093"
   },
@@ -1110,8 +1171,8 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "gratitude",
-      "nostalgia"
+      "nostalgia",
+      "gratitude"
     ],
     "id": "zh_0094"
   },
@@ -1122,8 +1183,9 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
+      "gratitude",
       "joy",
-      "gratitude"
+      "ambition"
     ],
     "id": "zh_0095"
   },
@@ -1134,8 +1196,8 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "rest",
-      "ambition"
+      "ambition",
+      "rest"
     ],
     "id": "zh_0096"
   },
@@ -1147,6 +1209,7 @@
     "era": "Tang",
     "themes": [
       "nostalgia",
+      "time",
       "home"
     ],
     "id": "zh_0097"
@@ -1158,8 +1221,8 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "joy",
-      "friendship"
+      "friendship",
+      "joy"
     ],
     "id": "zh_0098"
   },
@@ -1170,7 +1233,8 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "work",
+      "rest",
+      "nature",
       "gratitude"
     ],
     "id": "zh_0099"
@@ -1183,7 +1247,8 @@
     "era": "Tang",
     "themes": [
       "hope",
-      "joy"
+      "joy",
+      "nature"
     ],
     "id": "zh_0100"
   },
@@ -1206,8 +1271,7 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "joy",
-      "nature"
+      "joy"
     ],
     "id": "zh_0102"
   },
@@ -1219,7 +1283,7 @@
     "era": "Tang",
     "themes": [
       "ambition",
-      "nostalgia"
+      "perseverance"
     ],
     "id": "zh_0103"
   },
@@ -1230,8 +1294,7 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "ambition",
-      "nature"
+      "ambition"
     ],
     "id": "zh_0104"
   },
@@ -1242,6 +1305,7 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
+      "ambition",
       "perseverance"
     ],
     "id": "zh_0105"
@@ -1253,8 +1317,8 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "perseverance",
-      "nature"
+      "ambition",
+      "perseverance"
     ],
     "id": "zh_0106"
   },
@@ -1266,7 +1330,7 @@
     "era": "Tang",
     "themes": [
       "ambition",
-      "perseverance"
+      "hope"
     ],
     "id": "zh_0107"
   },
@@ -1278,7 +1342,7 @@
     "era": "Tang",
     "themes": [
       "nostalgia",
-      "home"
+      "time"
     ],
     "id": "zh_0108"
   },
@@ -1289,9 +1353,8 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "loss",
       "nostalgia",
-      "time"
+      "change"
     ],
     "id": "zh_0109"
   },
@@ -1302,8 +1365,7 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "nature",
-      "joy"
+      "nature"
     ],
     "id": "zh_0110"
   },
@@ -1328,7 +1390,7 @@
     "era": "Tang",
     "themes": [
       "nostalgia",
-      "solitude"
+      "rest"
     ],
     "id": "zh_0112"
   },
@@ -1339,8 +1401,7 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "travel",
-      "nostalgia"
+      "travel"
     ],
     "id": "zh_0113"
   },
@@ -1351,9 +1412,9 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "nature",
       "loss",
-      "time"
+      "nostalgia",
+      "nature"
     ],
     "id": "zh_0114"
   },
@@ -1403,7 +1464,7 @@
     "themes": [
       "loss",
       "nature",
-      "time"
+      "change"
     ],
     "id": "zh_0118"
   },
@@ -1415,7 +1476,8 @@
     "era": "Tang",
     "themes": [
       "loss",
-      "nature"
+      "nature",
+      "change"
     ],
     "id": "zh_0119"
   },
@@ -1426,8 +1488,8 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "nature",
-      "loss"
+      "loss",
+      "nature"
     ],
     "id": "zh_0120"
   },
@@ -1439,7 +1501,6 @@
     "era": "Tang",
     "themes": [
       "change",
-      "home",
       "nostalgia"
     ],
     "id": "zh_0121"
@@ -1451,6 +1512,7 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
+      "rest",
       "change",
       "hope"
     ],
@@ -1463,8 +1525,8 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "hope",
-      "ambition"
+      "joy",
+      "gratitude"
     ],
     "id": "zh_0123"
   },
@@ -1487,8 +1549,8 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "nature",
-      "ambition"
+      "ambition",
+      "perseverance"
     ],
     "id": "zh_0125"
   },
@@ -1498,11 +1560,7 @@
     "source": "還陝述懷",
     "lang": "zh",
     "era": "Tang",
-    "themes": [
-      "work",
-      "ambition",
-      "perseverance"
-    ],
+    "themes": [],
     "id": "zh_0126"
   },
   {
@@ -1511,11 +1569,7 @@
     "source": "還陝述懷",
     "lang": "zh",
     "era": "Tang",
-    "themes": [
-      "work",
-      "ambition",
-      "perseverance"
-    ],
+    "themes": [],
     "id": "zh_0127"
   },
   {
@@ -1524,11 +1578,7 @@
     "source": "還陝述懷",
     "lang": "zh",
     "era": "Tang",
-    "themes": [
-      "change",
-      "turning-point",
-      "hope"
-    ],
+    "themes": [],
     "id": "zh_0128"
   },
   {
@@ -1537,10 +1587,7 @@
     "source": "入潼關",
     "lang": "zh",
     "era": "Tang",
-    "themes": [
-      "nature",
-      "travel"
-    ],
+    "themes": [],
     "id": "zh_0129"
   },
   {
@@ -1549,10 +1596,7 @@
     "source": "入潼關",
     "lang": "zh",
     "era": "Tang",
-    "themes": [
-      "nature",
-      "seasons"
-    ],
+    "themes": [],
     "id": "zh_0130"
   },
   {
@@ -1561,11 +1605,7 @@
     "source": "入潼關",
     "lang": "zh",
     "era": "Tang",
-    "themes": [
-      "nature",
-      "solitude",
-      "nostalgia"
-    ],
+    "themes": [],
     "id": "zh_0131"
   },
   {
@@ -1574,11 +1614,7 @@
     "source": "入潼關",
     "lang": "zh",
     "era": "Tang",
-    "themes": [
-      "work",
-      "travel",
-      "change"
-    ],
+    "themes": [],
     "id": "zh_0132"
   },
   {
@@ -1587,10 +1623,7 @@
     "source": "入潼關",
     "lang": "zh",
     "era": "Tang",
-    "themes": [
-      "ambition",
-      "work"
-    ],
+    "themes": [],
     "id": "zh_0133"
   },
   {
@@ -1599,10 +1632,7 @@
     "source": "入潼關",
     "lang": "zh",
     "era": "Tang",
-    "themes": [
-      "ambition",
-      "perseverance"
-    ],
+    "themes": [],
     "id": "zh_0134"
   },
   {
@@ -1611,10 +1641,7 @@
     "source": "入潼關",
     "lang": "zh",
     "era": "Tang",
-    "themes": [
-      "solitude",
-      "turning-point"
-    ],
+    "themes": [],
     "id": "zh_0135"
   },
   {
@@ -1623,11 +1650,7 @@
     "source": "於北平作",
     "lang": "zh",
     "era": "Tang",
-    "themes": [
-      "nature",
-      "work",
-      "travel"
-    ],
+    "themes": [],
     "id": "zh_0136"
   },
   {
@@ -1636,10 +1659,7 @@
     "source": "於北平作",
     "lang": "zh",
     "era": "Tang",
-    "themes": [
-      "nature",
-      "travel"
-    ],
+    "themes": [],
     "id": "zh_0137"
   },
   {
@@ -1648,10 +1668,7 @@
     "source": "於北平作",
     "lang": "zh",
     "era": "Tang",
-    "themes": [
-      "nature",
-      "solitude"
-    ],
+    "themes": [],
     "id": "zh_0138"
   },
   {
@@ -1660,10 +1677,7 @@
     "source": "遼城望月",
     "lang": "zh",
     "era": "Tang",
-    "themes": [
-      "nature",
-      "time"
-    ],
+    "themes": [],
     "id": "zh_0139"
   },
   {
@@ -1672,10 +1686,7 @@
     "source": "遼城望月",
     "lang": "zh",
     "era": "Tang",
-    "themes": [
-      "nature",
-      "joy"
-    ],
+    "themes": [],
     "id": "zh_0140"
   },
   {
@@ -1684,11 +1695,7 @@
     "source": "遼城望月",
     "lang": "zh",
     "era": "Tang",
-    "themes": [
-      "nature",
-      "change",
-      "time"
-    ],
+    "themes": [],
     "id": "zh_0141"
   },
   {
@@ -1697,10 +1704,7 @@
     "source": "遼城望月",
     "lang": "zh",
     "era": "Tang",
-    "themes": [
-      "work",
-      "perseverance"
-    ],
+    "themes": [],
     "id": "zh_0142"
   },
   {
@@ -1709,10 +1713,7 @@
     "source": "遼城望月",
     "lang": "zh",
     "era": "Tang",
-    "themes": [
-      "turning-point",
-      "hope"
-    ],
+    "themes": [],
     "id": "zh_0143"
   },
   {
@@ -1721,10 +1722,7 @@
     "source": "春日登陝州城樓俯眺原野迴丹碧綴煙霞密翠斑紅芳菲花柳即目川岫聊以命篇",
     "lang": "zh",
     "era": "Tang",
-    "themes": [
-      "nature",
-      "travel"
-    ],
+    "themes": [],
     "id": "zh_0144"
   },
   {
@@ -1733,10 +1731,7 @@
     "source": "春日登陝州城樓俯眺原野迴丹碧綴煙霞密翠斑紅芳菲花柳即目川岫聊以命篇",
     "lang": "zh",
     "era": "Tang",
-    "themes": [
-      "nature",
-      "joy"
-    ],
+    "themes": [],
     "id": "zh_0145"
   },
   {
@@ -1745,10 +1740,7 @@
     "source": "春日登陝州城樓俯眺原野迴丹碧綴煙霞密翠斑紅芳菲花柳即目川岫聊以命篇",
     "lang": "zh",
     "era": "Tang",
-    "themes": [
-      "nature",
-      "joy"
-    ],
+    "themes": [],
     "id": "zh_0146"
   },
   {
@@ -1757,10 +1749,7 @@
     "source": "春日登陝州城樓俯眺原野迴丹碧綴煙霞密翠斑紅芳菲花柳即目川岫聊以命篇",
     "lang": "zh",
     "era": "Tang",
-    "themes": [
-      "work",
-      "nostalgia"
-    ],
+    "themes": [],
     "id": "zh_0147"
   },
   {
@@ -1769,10 +1758,7 @@
     "source": "春日登陝州城樓俯眺原野迴丹碧綴煙霞密翠斑紅芳菲花柳即目川岫聊以命篇",
     "lang": "zh",
     "era": "Tang",
-    "themes": [
-      "ambition",
-      "hope"
-    ],
+    "themes": [],
     "id": "zh_0148"
   },
   {
@@ -1781,11 +1767,7 @@
     "source": "春日玄武門宴羣臣",
     "lang": "zh",
     "era": "Tang",
-    "themes": [
-      "seasons",
-      "joy",
-      "hope"
-    ],
+    "themes": [],
     "id": "zh_0149"
   },
   {
@@ -1794,10 +1776,7 @@
     "source": "春日玄武門宴羣臣",
     "lang": "zh",
     "era": "Tang",
-    "themes": [
-      "joy",
-      "friendship"
-    ],
+    "themes": [],
     "id": "zh_0150"
   },
   {
@@ -1807,7 +1786,6 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "work",
       "ambition"
     ],
     "id": "zh_0151"
@@ -1844,7 +1822,7 @@
     "era": "Tang",
     "themes": [
       "joy",
-      "rest"
+      "friendship"
     ],
     "id": "zh_0154"
   },
@@ -1855,8 +1833,7 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "ambition",
-      "regret"
+      "ambition"
     ],
     "id": "zh_0155"
   },
@@ -1867,9 +1844,8 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "perseverance",
       "ambition",
-      "work"
+      "perseverance"
     ],
     "id": "zh_0156"
   },
@@ -1880,7 +1856,6 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "nostalgia",
       "time",
       "regret"
     ],
@@ -1894,7 +1869,6 @@
     "era": "Tang",
     "themes": [
       "regret",
-      "work",
       "change"
     ],
     "id": "zh_0158"
@@ -1906,9 +1880,8 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "home",
-      "hope",
-      "ambition"
+      "ambition",
+      "home"
     ],
     "id": "zh_0159"
   },
@@ -1931,8 +1904,7 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "nature",
-      "time"
+      "nature"
     ],
     "id": "zh_0161"
   },
@@ -1943,9 +1915,7 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "nature",
-      "seasons",
-      "nostalgia"
+      "nature"
     ],
     "id": "zh_0162"
   },
@@ -1957,8 +1927,7 @@
     "era": "Tang",
     "themes": [
       "joy",
-      "nature",
-      "home"
+      "nature"
     ],
     "id": "zh_0163"
   },
@@ -1969,9 +1938,8 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "joy",
       "nature",
-      "home"
+      "seasons"
     ],
     "id": "zh_0164"
   },
@@ -1982,9 +1950,8 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "nostalgia",
       "time",
-      "regret"
+      "change"
     ],
     "id": "zh_0165"
   },
@@ -1995,9 +1962,8 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "work",
       "regret",
-      "perseverance"
+      "work"
     ],
     "id": "zh_0166"
   },
@@ -2008,8 +1974,7 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "work",
-      "hope",
+      "joy",
       "ambition"
     ],
     "id": "zh_0167"
@@ -2021,9 +1986,7 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "nature",
-      "travel",
-      "work"
+      "time"
     ],
     "id": "zh_0168"
   },
@@ -2034,9 +1997,7 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "work",
-      "perseverance",
-      "ambition"
+      "work"
     ],
     "id": "zh_0169"
   },
@@ -2047,7 +2008,6 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "work",
       "ambition"
     ],
     "id": "zh_0170"
@@ -2059,9 +2019,7 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "nature",
-      "seasons",
-      "change"
+      "nature"
     ],
     "id": "zh_0171"
   },
@@ -2072,8 +2030,7 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "work",
-      "ambition"
+      "work"
     ],
     "id": "zh_0172"
   },
@@ -2084,8 +2041,7 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "nature",
-      "change"
+      "nature"
     ],
     "id": "zh_0173"
   },
@@ -2096,9 +2052,7 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "nature",
-      "time",
-      "nostalgia"
+      "nature"
     ],
     "id": "zh_0174"
   },
@@ -2109,9 +2063,8 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "work",
-      "perseverance",
-      "ambition"
+      "ambition",
+      "work"
     ],
     "id": "zh_0175"
   },
@@ -2123,7 +2076,8 @@
     "era": "Tang",
     "themes": [
       "nature",
-      "grief"
+      "grief",
+      "solitude"
     ],
     "id": "zh_0176"
   },
@@ -2146,8 +2100,8 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "travel",
-      "ambition"
+      "ambition",
+      "joy"
     ],
     "id": "zh_0178"
   },
@@ -2171,7 +2125,8 @@
     "era": "Tang",
     "themes": [
       "loss",
-      "grief"
+      "grief",
+      "nostalgia"
     ],
     "id": "zh_0180"
   },
@@ -2183,7 +2138,7 @@
     "era": "Tang",
     "themes": [
       "nature",
-      "grief"
+      "change"
     ],
     "id": "zh_0181"
   },
@@ -2195,8 +2150,7 @@
     "era": "Tang",
     "themes": [
       "rest",
-      "nature",
-      "time"
+      "nature"
     ],
     "id": "zh_0182"
   },
@@ -2209,7 +2163,7 @@
     "themes": [
       "ambition",
       "travel",
-      "perseverance"
+      "joy"
     ],
     "id": "zh_0183"
   },
@@ -2222,7 +2176,7 @@
     "themes": [
       "regret",
       "grief",
-      "turning-point"
+      "despair"
     ],
     "id": "zh_0184"
   },
@@ -2233,8 +2187,9 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
+      "nature",
       "joy",
-      "nature"
+      "gratitude"
     ],
     "id": "zh_0185"
   },
@@ -2246,8 +2201,7 @@
     "era": "Tang",
     "themes": [
       "nature",
-      "time",
-      "ambition"
+      "time"
     ],
     "id": "zh_0186"
   },
@@ -2259,8 +2213,8 @@
     "era": "Tang",
     "themes": [
       "nature",
-      "joy",
-      "hope"
+      "hope",
+      "joy"
     ],
     "id": "zh_0187"
   },
@@ -2272,7 +2226,8 @@
     "era": "Tang",
     "themes": [
       "nature",
-      "joy"
+      "joy",
+      "gratitude"
     ],
     "id": "zh_0188"
   },
@@ -2285,7 +2240,7 @@
     "themes": [
       "nature",
       "loneliness",
-      "joy"
+      "nostalgia"
     ],
     "id": "zh_0189"
   },
@@ -2297,7 +2252,8 @@
     "era": "Tang",
     "themes": [
       "perseverance",
-      "ambition"
+      "ambition",
+      "gratitude"
     ],
     "id": "zh_0190"
   },
@@ -2308,8 +2264,9 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "regret",
-      "time"
+      "time",
+      "change",
+      "perseverance"
     ],
     "id": "zh_0191"
   },
@@ -2321,8 +2278,8 @@
     "era": "Tang",
     "themes": [
       "change",
-      "time",
-      "nature"
+      "loss",
+      "time"
     ],
     "id": "zh_0192"
   },
@@ -2334,8 +2291,8 @@
     "era": "Tang",
     "themes": [
       "nostalgia",
-      "loss",
-      "time"
+      "time",
+      "loss"
     ],
     "id": "zh_0193"
   },
@@ -2347,8 +2304,8 @@
     "era": "Tang",
     "themes": [
       "ambition",
-      "work",
-      "perseverance"
+      "perseverance",
+      "turning-point"
     ],
     "id": "zh_0194"
   },
@@ -2359,9 +2316,9 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "travel",
+      "nature",
       "ambition",
-      "nature"
+      "travel"
     ],
     "id": "zh_0195"
   },
@@ -2373,7 +2330,8 @@
     "era": "Tang",
     "themes": [
       "nature",
-      "joy"
+      "joy",
+      "gratitude"
     ],
     "id": "zh_0196"
   },
@@ -2385,7 +2343,8 @@
     "era": "Tang",
     "themes": [
       "nature",
-      "joy"
+      "joy",
+      "gratitude"
     ],
     "id": "zh_0197"
   },
@@ -2396,9 +2355,9 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "joy",
       "nature",
-      "seasons"
+      "seasons",
+      "joy"
     ],
     "id": "zh_0198"
   },
@@ -2410,7 +2369,7 @@
     "era": "Tang",
     "themes": [
       "nature",
-      "travel"
+      "time"
     ],
     "id": "zh_0199"
   },
@@ -2423,7 +2382,7 @@
     "themes": [
       "nature",
       "time",
-      "joy"
+      "change"
     ],
     "id": "zh_0200"
   },
@@ -2433,7 +2392,9 @@
     "source": "望終南山",
     "lang": "zh",
     "era": "Tang",
-    "themes": [],
+    "themes": [
+      "nature"
+    ],
     "id": "zh_0201"
   },
   {
@@ -2442,7 +2403,10 @@
     "source": "望終南山",
     "lang": "zh",
     "era": "Tang",
-    "themes": [],
+    "themes": [
+      "rest",
+      "nature"
+    ],
     "id": "zh_0202"
   },
   {
@@ -2451,7 +2415,10 @@
     "source": "元日",
     "lang": "zh",
     "era": "Tang",
-    "themes": [],
+    "themes": [
+      "nature",
+      "seasons"
+    ],
     "id": "zh_0203"
   },
   {
@@ -2460,7 +2427,9 @@
     "source": "元日",
     "lang": "zh",
     "era": "Tang",
-    "themes": [],
+    "themes": [
+      "nature"
+    ],
     "id": "zh_0204"
   },
   {
@@ -2469,7 +2438,10 @@
     "source": "元日",
     "lang": "zh",
     "era": "Tang",
-    "themes": [],
+    "themes": [
+      "ambition",
+      "work"
+    ],
     "id": "zh_0205"
   },
   {
@@ -2478,7 +2450,10 @@
     "source": "元日",
     "lang": "zh",
     "era": "Tang",
-    "themes": [],
+    "themes": [
+      "work",
+      "ambition"
+    ],
     "id": "zh_0206"
   },
   {
@@ -2487,7 +2462,10 @@
     "source": "元日",
     "lang": "zh",
     "era": "Tang",
-    "themes": [],
+    "themes": [
+      "ambition",
+      "joy"
+    ],
     "id": "zh_0207"
   },
   {
@@ -2496,7 +2474,10 @@
     "source": "元日",
     "lang": "zh",
     "era": "Tang",
-    "themes": [],
+    "themes": [
+      "work",
+      "ambition"
+    ],
     "id": "zh_0208"
   },
   {
@@ -2505,7 +2486,11 @@
     "source": "元日",
     "lang": "zh",
     "era": "Tang",
-    "themes": [],
+    "themes": [
+      "nature",
+      "nostalgia",
+      "seasons"
+    ],
     "id": "zh_0209"
   },
   {
@@ -2514,7 +2499,11 @@
     "source": "元日",
     "lang": "zh",
     "era": "Tang",
-    "themes": [],
+    "themes": [
+      "ambition",
+      "hope",
+      "perseverance"
+    ],
     "id": "zh_0210"
   },
   {
@@ -2523,7 +2512,10 @@
     "source": "初春登樓即目觀作述懷",
     "lang": "zh",
     "era": "Tang",
-    "themes": [],
+    "themes": [
+      "nature",
+      "rest"
+    ],
     "id": "zh_0211"
   },
   {
@@ -2532,7 +2524,9 @@
     "source": "初春登樓即目觀作述懷",
     "lang": "zh",
     "era": "Tang",
-    "themes": [],
+    "themes": [
+      "nature"
+    ],
     "id": "zh_0212"
   },
   {
@@ -2541,7 +2535,10 @@
     "source": "初春登樓即目觀作述懷",
     "lang": "zh",
     "era": "Tang",
-    "themes": [],
+    "themes": [
+      "nature",
+      "seasons"
+    ],
     "id": "zh_0213"
   },
   {
@@ -2550,7 +2547,10 @@
     "source": "初春登樓即目觀作述懷",
     "lang": "zh",
     "era": "Tang",
-    "themes": [],
+    "themes": [
+      "nature",
+      "joy"
+    ],
     "id": "zh_0214"
   },
   {
@@ -2559,7 +2559,10 @@
     "source": "初春登樓即目觀作述懷",
     "lang": "zh",
     "era": "Tang",
-    "themes": [],
+    "themes": [
+      "nature",
+      "work"
+    ],
     "id": "zh_0215"
   },
   {
@@ -2568,7 +2571,10 @@
     "source": "初春登樓即目觀作述懷",
     "lang": "zh",
     "era": "Tang",
-    "themes": [],
+    "themes": [
+      "work",
+      "perseverance"
+    ],
     "id": "zh_0216"
   },
   {
@@ -2577,7 +2583,10 @@
     "source": "初春登樓即目觀作述懷",
     "lang": "zh",
     "era": "Tang",
-    "themes": [],
+    "themes": [
+      "ambition",
+      "turning-point"
+    ],
     "id": "zh_0217"
   },
   {
@@ -2586,7 +2595,11 @@
     "source": "初春登樓即目觀作述懷",
     "lang": "zh",
     "era": "Tang",
-    "themes": [],
+    "themes": [
+      "work",
+      "ambition",
+      "regret"
+    ],
     "id": "zh_0218"
   },
   {
@@ -2595,7 +2608,11 @@
     "source": "首春",
     "lang": "zh",
     "era": "Tang",
-    "themes": [],
+    "themes": [
+      "seasons",
+      "nature",
+      "change"
+    ],
     "id": "zh_0219"
   },
   {
@@ -2604,7 +2621,10 @@
     "source": "首春",
     "lang": "zh",
     "era": "Tang",
-    "themes": [],
+    "themes": [
+      "nature",
+      "seasons"
+    ],
     "id": "zh_0220"
   },
   {
@@ -2613,7 +2633,10 @@
     "source": "首春",
     "lang": "zh",
     "era": "Tang",
-    "themes": [],
+    "themes": [
+      "nature",
+      "change"
+    ],
     "id": "zh_0221"
   },
   {
@@ -2622,7 +2645,10 @@
     "source": "首春",
     "lang": "zh",
     "era": "Tang",
-    "themes": [],
+    "themes": [
+      "nature",
+      "seasons"
+    ],
     "id": "zh_0222"
   },
   {
@@ -2631,7 +2657,11 @@
     "source": "初晴落景",
     "lang": "zh",
     "era": "Tang",
-    "themes": [],
+    "themes": [
+      "nature",
+      "joy",
+      "rest"
+    ],
     "id": "zh_0223"
   },
   {
@@ -2640,7 +2670,9 @@
     "source": "初晴落景",
     "lang": "zh",
     "era": "Tang",
-    "themes": [],
+    "themes": [
+      "nature"
+    ],
     "id": "zh_0224"
   },
   {
@@ -2649,7 +2681,9 @@
     "source": "初晴落景",
     "lang": "zh",
     "era": "Tang",
-    "themes": [],
+    "themes": [
+      "nature"
+    ],
     "id": "zh_0225"
   },
   {
@@ -2658,11 +2692,7 @@
     "source": "初晴落景",
     "lang": "zh",
     "era": "Tang",
-    "themes": [
-      "ambition",
-      "solitude",
-      "hope"
-    ],
+    "themes": [],
     "id": "zh_0226"
   },
   {
@@ -2671,11 +2701,7 @@
     "source": "初夏",
     "lang": "zh",
     "era": "Tang",
-    "themes": [
-      "change",
-      "nature",
-      "seasons"
-    ],
+    "themes": [],
     "id": "zh_0227"
   },
   {
@@ -2684,10 +2710,7 @@
     "source": "初夏",
     "lang": "zh",
     "era": "Tang",
-    "themes": [
-      "nature",
-      "time"
-    ],
+    "themes": [],
     "id": "zh_0228"
   },
   {
@@ -2696,9 +2719,7 @@
     "source": "初夏",
     "lang": "zh",
     "era": "Tang",
-    "themes": [
-      "nature"
-    ],
+    "themes": [],
     "id": "zh_0229"
   },
   {
@@ -2707,9 +2728,7 @@
     "source": "初夏",
     "lang": "zh",
     "era": "Tang",
-    "themes": [
-      "nature"
-    ],
+    "themes": [],
     "id": "zh_0230"
   },
   {
@@ -2718,9 +2737,7 @@
     "source": "初夏",
     "lang": "zh",
     "era": "Tang",
-    "themes": [
-      "nature"
-    ],
+    "themes": [],
     "id": "zh_0231"
   },
   {
@@ -2729,11 +2746,7 @@
     "source": "初夏",
     "lang": "zh",
     "era": "Tang",
-    "themes": [
-      "nature",
-      "gratitude",
-      "joy"
-    ],
+    "themes": [],
     "id": "zh_0232"
   },
   {
@@ -2742,11 +2755,7 @@
     "source": "度秋",
     "lang": "zh",
     "era": "Tang",
-    "themes": [
-      "change",
-      "seasons",
-      "time"
-    ],
+    "themes": [],
     "id": "zh_0233"
   },
   {
@@ -2755,9 +2764,7 @@
     "source": "度秋",
     "lang": "zh",
     "era": "Tang",
-    "themes": [
-      "nature"
-    ],
+    "themes": [],
     "id": "zh_0234"
   },
   {
@@ -2766,10 +2773,7 @@
     "source": "度秋",
     "lang": "zh",
     "era": "Tang",
-    "themes": [
-      "nature",
-      "seasons"
-    ],
+    "themes": [],
     "id": "zh_0235"
   },
   {
@@ -2778,11 +2782,7 @@
     "source": "度秋",
     "lang": "zh",
     "era": "Tang",
-    "themes": [
-      "change",
-      "perseverance",
-      "solitude"
-    ],
+    "themes": [],
     "id": "zh_0236"
   },
   {
@@ -2791,11 +2791,7 @@
     "source": "儀鸞殿早秋",
     "lang": "zh",
     "era": "Tang",
-    "themes": [
-      "change",
-      "nature",
-      "seasons"
-    ],
+    "themes": [],
     "id": "zh_0237"
   },
   {
@@ -2804,10 +2800,7 @@
     "source": "儀鸞殿早秋",
     "lang": "zh",
     "era": "Tang",
-    "themes": [
-      "change",
-      "nature"
-    ],
+    "themes": [],
     "id": "zh_0238"
   },
   {
@@ -2816,10 +2809,7 @@
     "source": "儀鸞殿早秋",
     "lang": "zh",
     "era": "Tang",
-    "themes": [
-      "joy",
-      "nature"
-    ],
+    "themes": [],
     "id": "zh_0239"
   },
   {
@@ -2828,11 +2818,7 @@
     "source": "儀鸞殿早秋",
     "lang": "zh",
     "era": "Tang",
-    "themes": [
-      "change",
-      "loneliness",
-      "seasons"
-    ],
+    "themes": [],
     "id": "zh_0240"
   },
   {
@@ -2841,10 +2827,7 @@
     "source": "秋日即目",
     "lang": "zh",
     "era": "Tang",
-    "themes": [
-      "nature",
-      "seasons"
-    ],
+    "themes": [],
     "id": "zh_0241"
   },
   {
@@ -2853,9 +2836,7 @@
     "source": "秋日即目",
     "lang": "zh",
     "era": "Tang",
-    "themes": [
-      "nature"
-    ],
+    "themes": [],
     "id": "zh_0242"
   },
   {
@@ -2864,9 +2845,7 @@
     "source": "秋日即目",
     "lang": "zh",
     "era": "Tang",
-    "themes": [
-      "nature"
-    ],
+    "themes": [],
     "id": "zh_0243"
   },
   {
@@ -2875,10 +2854,7 @@
     "source": "秋日即目",
     "lang": "zh",
     "era": "Tang",
-    "themes": [
-      "nature",
-      "solitude"
-    ],
+    "themes": [],
     "id": "zh_0244"
   },
   {
@@ -2887,11 +2863,7 @@
     "source": "秋日即目",
     "lang": "zh",
     "era": "Tang",
-    "themes": [
-      "grief",
-      "loss",
-      "seasons"
-    ],
+    "themes": [],
     "id": "zh_0245"
   },
   {
@@ -2900,11 +2872,7 @@
     "source": "秋日即目",
     "lang": "zh",
     "era": "Tang",
-    "themes": [
-      "farewell",
-      "loneliness",
-      "loss"
-    ],
+    "themes": [],
     "id": "zh_0246"
   },
   {
@@ -2913,10 +2881,7 @@
     "source": "秋日即目",
     "lang": "zh",
     "era": "Tang",
-    "themes": [
-      "change",
-      "loss"
-    ],
+    "themes": [],
     "id": "zh_0247"
   },
   {
@@ -2925,11 +2890,7 @@
     "source": "秋日即目",
     "lang": "zh",
     "era": "Tang",
-    "themes": [
-      "nature",
-      "nostalgia",
-      "solitude"
-    ],
+    "themes": [],
     "id": "zh_0248"
   },
   {
@@ -2938,11 +2899,7 @@
     "source": "山閣晚秋",
     "lang": "zh",
     "era": "Tang",
-    "themes": [
-      "nature",
-      "seasons",
-      "solitude"
-    ],
+    "themes": [],
     "id": "zh_0249"
   },
   {
@@ -2951,11 +2908,7 @@
     "source": "山閣晚秋",
     "lang": "zh",
     "era": "Tang",
-    "themes": [
-      "nature",
-      "perseverance",
-      "seasons"
-    ],
+    "themes": [],
     "id": "zh_0250"
   },
   {
@@ -2979,7 +2932,8 @@
     "era": "Tang",
     "themes": [
       "time",
-      "nostalgia"
+      "nostalgia",
+      "regret"
     ],
     "id": "zh_0252"
   },
@@ -3003,8 +2957,7 @@
     "era": "Tang",
     "themes": [
       "nature",
-      "seasons",
-      "change"
+      "seasons"
     ],
     "id": "zh_0254"
   },
@@ -3026,7 +2979,8 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "solitude"
+      "solitude",
+      "ambition"
     ],
     "id": "zh_0256"
   },
@@ -3061,7 +3015,8 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "nature"
+      "nature",
+      "seasons"
     ],
     "id": "zh_0259"
   },
@@ -3084,7 +3039,8 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "nature"
+      "nature",
+      "time"
     ],
     "id": "zh_0261"
   },
@@ -3106,7 +3062,8 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "nature"
+      "nature",
+      "seasons"
     ],
     "id": "zh_0263"
   },
@@ -3118,7 +3075,8 @@
     "era": "Tang",
     "themes": [
       "time",
-      "grief"
+      "nostalgia",
+      "loss"
     ],
     "id": "zh_0264"
   },
@@ -3141,8 +3099,7 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "nature",
-      "joy"
+      "nature"
     ],
     "id": "zh_0266"
   },
@@ -3190,7 +3147,7 @@
     "era": "Tang",
     "themes": [
       "nature",
-      "change"
+      "seasons"
     ],
     "id": "zh_0270"
   },
@@ -3224,7 +3181,8 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "work"
+      "work",
+      "rest"
     ],
     "id": "zh_0273"
   },
@@ -3236,7 +3194,7 @@
     "era": "Tang",
     "themes": [
       "work",
-      "perseverance"
+      "ambition"
     ],
     "id": "zh_0274"
   },
@@ -3247,8 +3205,8 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "grief",
-      "regret"
+      "regret",
+      "despair"
     ],
     "id": "zh_0275"
   },
@@ -3259,8 +3217,8 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "perseverance",
-      "work"
+      "regret",
+      "perseverance"
     ],
     "id": "zh_0276"
   },
@@ -3271,7 +3229,6 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "regret",
       "perseverance"
     ],
     "id": "zh_0277"
@@ -3284,6 +3241,7 @@
     "era": "Tang",
     "themes": [
       "time",
+      "change",
       "perseverance"
     ],
     "id": "zh_0278"
@@ -3308,7 +3266,7 @@
     "era": "Tang",
     "themes": [
       "work",
-      "perseverance"
+      "change"
     ],
     "id": "zh_0280"
   },
@@ -3320,8 +3278,7 @@
     "era": "Tang",
     "themes": [
       "time",
-      "perseverance",
-      "ambition"
+      "perseverance"
     ],
     "id": "zh_0281"
   },
@@ -3332,8 +3289,8 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "work",
-      "ambition"
+      "ambition",
+      "work"
     ],
     "id": "zh_0282"
   },
@@ -3345,7 +3302,6 @@
     "era": "Tang",
     "themes": [
       "hope",
-      "ambition",
       "turning-point"
     ],
     "id": "zh_0283"
@@ -3357,8 +3313,8 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "time",
-      "work"
+      "nostalgia",
+      "time"
     ],
     "id": "zh_0284"
   },
@@ -3394,7 +3350,7 @@
     "era": "Tang",
     "themes": [
       "nature",
-      "time"
+      "nostalgia"
     ],
     "id": "zh_0287"
   },
@@ -3405,8 +3361,8 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "change",
-      "time"
+      "time",
+      "change"
     ],
     "id": "zh_0288"
   },
@@ -3417,7 +3373,8 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "work"
+      "work",
+      "ambition"
     ],
     "id": "zh_0289"
   },
@@ -3429,7 +3386,7 @@
     "era": "Tang",
     "themes": [
       "perseverance",
-      "gratitude"
+      "hope"
     ],
     "id": "zh_0290"
   },
@@ -3453,7 +3410,7 @@
     "era": "Tang",
     "themes": [
       "work",
-      "time"
+      "joy"
     ],
     "id": "zh_0292"
   },
@@ -3489,7 +3446,7 @@
     "era": "Tang",
     "themes": [
       "work",
-      "nature"
+      "gratitude"
     ],
     "id": "zh_0295"
   },
@@ -3500,8 +3457,8 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "work",
-      "gratitude"
+      "hope",
+      "perseverance"
     ],
     "id": "zh_0296"
   },
@@ -3513,7 +3470,8 @@
     "era": "Tang",
     "themes": [
       "rest",
-      "solitude"
+      "joy",
+      "nature"
     ],
     "id": "zh_0297"
   },
@@ -3525,6 +3483,7 @@
     "era": "Tang",
     "themes": [
       "work",
+      "ambition",
       "perseverance"
     ],
     "id": "zh_0298"
@@ -3548,9 +3507,9 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "ambition",
       "gratitude",
-      "regret"
+      "regret",
+      "perseverance"
     ],
     "id": "zh_0300"
   },
@@ -3561,9 +3520,9 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "nature",
       "loneliness",
-      "change"
+      "travel",
+      "nature"
     ],
     "id": "zh_0301"
   },
@@ -3586,7 +3545,8 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "nature"
+      "nature",
+      "change"
     ],
     "id": "zh_0303"
   },
@@ -3597,6 +3557,7 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
+      "work",
       "ambition",
       "perseverance"
     ],
@@ -3609,8 +3570,7 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "nature",
-      "change"
+      "nature"
     ],
     "id": "zh_0305"
   },
@@ -3621,7 +3581,8 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "nature"
+      "nature",
+      "solitude"
     ],
     "id": "zh_0306"
   },
@@ -3632,7 +3593,8 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "nature"
+      "nature",
+      "joy"
     ],
     "id": "zh_0307"
   },
@@ -3643,7 +3605,8 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "nature"
+      "nature",
+      "change"
     ],
     "id": "zh_0308"
   },
@@ -3655,7 +3618,8 @@
     "era": "Tang",
     "themes": [
       "nature",
-      "time"
+      "time",
+      "seasons"
     ],
     "id": "zh_0309"
   },
@@ -3666,7 +3630,8 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "nature"
+      "nature",
+      "joy"
     ],
     "id": "zh_0310"
   },
@@ -3677,7 +3642,7 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "nature",
+      "nostalgia",
       "joy"
     ],
     "id": "zh_0311"
@@ -3689,8 +3654,8 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "nostalgia",
-      "loss"
+      "loneliness",
+      "regret"
     ],
     "id": "zh_0312"
   },
@@ -3714,9 +3679,9 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "seasons",
+      "nature",
       "change",
-      "loss"
+      "nostalgia"
     ],
     "id": "zh_0314"
   },
@@ -3741,7 +3706,7 @@
     "era": "Tang",
     "themes": [
       "nature",
-      "seasons"
+      "rest"
     ],
     "id": "zh_0316"
   },
@@ -3766,7 +3731,7 @@
     "themes": [
       "time",
       "change",
-      "regret"
+      "perseverance"
     ],
     "id": "zh_0318"
   },
@@ -3816,7 +3781,7 @@
     "era": "Tang",
     "themes": [
       "nature",
-      "home"
+      "travel"
     ],
     "id": "zh_0322"
   },
@@ -3828,8 +3793,8 @@
     "era": "Tang",
     "themes": [
       "nature",
-      "loss",
-      "change"
+      "nostalgia",
+      "loss"
     ],
     "id": "zh_0323"
   },
@@ -3841,8 +3806,7 @@
     "era": "Tang",
     "themes": [
       "nature",
-      "seasons",
-      "hope"
+      "joy"
     ],
     "id": "zh_0324"
   },
@@ -3855,7 +3819,7 @@
     "themes": [
       "friendship",
       "joy",
-      "farewell"
+      "perseverance"
     ],
     "id": "zh_0325"
   },
@@ -3867,8 +3831,7 @@
     "era": "Tang",
     "themes": [
       "friendship",
-      "joy",
-      "nature"
+      "joy"
     ],
     "id": "zh_0326"
   },
@@ -3879,8 +3842,7 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "nature",
-      "travel"
+      "nature"
     ],
     "id": "zh_0327"
   },
@@ -3927,7 +3889,6 @@
     "era": "Tang",
     "themes": [
       "nature",
-      "seasons",
       "joy"
     ],
     "id": "zh_0331"
@@ -3964,8 +3925,7 @@
     "era": "Tang",
     "themes": [
       "change",
-      "nostalgia",
-      "turning-point"
+      "regret"
     ],
     "id": "zh_0334"
   },
@@ -4011,8 +3971,7 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "nature",
-      "travel"
+      "nature"
     ],
     "id": "zh_0338"
   },
@@ -4023,8 +3982,7 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "nature",
-      "travel"
+      "nature"
     ],
     "id": "zh_0339"
   },
@@ -4035,8 +3993,8 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "nature",
-      "change"
+      "change",
+      "turning-point"
     ],
     "id": "zh_0340"
   },
@@ -4047,8 +4005,7 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "nature",
-      "joy"
+      "nature"
     ],
     "id": "zh_0341"
   },
@@ -4059,8 +4016,8 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "nature",
-      "travel"
+      "travel",
+      "work"
     ],
     "id": "zh_0342"
   },
@@ -4071,9 +4028,8 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "nature",
-      "travel",
-      "joy"
+      "joy",
+      "nature"
     ],
     "id": "zh_0343"
   },
@@ -4085,7 +4041,7 @@
     "era": "Tang",
     "themes": [
       "hope",
-      "time"
+      "change"
     ],
     "id": "zh_0344"
   },
@@ -4096,9 +4052,8 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "nature",
-      "seasons",
-      "hope"
+      "hope",
+      "nature"
     ],
     "id": "zh_0345"
   },
@@ -4110,7 +4065,6 @@
     "era": "Tang",
     "themes": [
       "nature",
-      "time",
       "change"
     ],
     "id": "zh_0346"
@@ -4134,9 +4088,9 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "rest",
+      "hope",
       "solitude",
-      "hope"
+      "change"
     ],
     "id": "zh_0348"
   },
@@ -4148,7 +4102,7 @@
     "era": "Tang",
     "themes": [
       "nature",
-      "hope"
+      "joy"
     ],
     "id": "zh_0349"
   },
@@ -4171,8 +4125,7 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "nature",
-      "change"
+      "nature"
     ],
     "id": "zh_0351"
   },
@@ -4184,8 +4137,7 @@
     "era": "Tang",
     "themes": [
       "loss",
-      "despair",
-      "loneliness"
+      "regret"
     ],
     "id": "zh_0352"
   },
@@ -4196,8 +4148,7 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "nostalgia",
-      "change"
+      "nostalgia"
     ],
     "id": "zh_0353"
   },
@@ -4208,9 +4159,9 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "loss",
       "grief",
-      "farewell"
+      "farewell",
+      "nostalgia"
     ],
     "id": "zh_0354"
   },
@@ -4221,8 +4172,8 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "despair",
-      "grief"
+      "grief",
+      "despair"
     ],
     "id": "zh_0355"
   },
@@ -4233,8 +4184,7 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "grief",
-      "loss"
+      "grief"
     ],
     "id": "zh_0356"
   },
@@ -4246,8 +4196,7 @@
     "era": "Tang",
     "themes": [
       "grief",
-      "despair",
-      "loneliness"
+      "despair"
     ],
     "id": "zh_0357"
   },
@@ -4258,9 +4207,9 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "loss",
       "loneliness",
-      "nostalgia"
+      "nostalgia",
+      "loss"
     ],
     "id": "zh_0358"
   },
@@ -4271,9 +4220,8 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "work",
       "ambition",
-      "perseverance"
+      "turning-point"
     ],
     "id": "zh_0359"
   },
@@ -4285,8 +4233,7 @@
     "era": "Tang",
     "themes": [
       "ambition",
-      "perseverance",
-      "nature"
+      "hope"
     ],
     "id": "zh_0360"
   },
@@ -4298,8 +4245,7 @@
     "era": "Tang",
     "themes": [
       "regret",
-      "loss",
-      "perseverance"
+      "loss"
     ],
     "id": "zh_0361"
   },
@@ -4310,7 +4256,6 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "work",
       "perseverance",
       "loss"
     ],
@@ -4324,8 +4269,7 @@
     "era": "Tang",
     "themes": [
       "nature",
-      "change",
-      "time"
+      "seasons"
     ],
     "id": "zh_0363"
   },
@@ -4336,8 +4280,7 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "nature",
-      "joy"
+      "nature"
     ],
     "id": "zh_0364"
   },
@@ -4348,8 +4291,8 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "nature",
-      "joy"
+      "joy",
+      "nature"
     ],
     "id": "zh_0365"
   },
@@ -4362,7 +4305,7 @@
     "themes": [
       "joy",
       "nature",
-      "rest"
+      "seasons"
     ],
     "id": "zh_0366"
   },
@@ -4373,9 +4316,8 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "nature",
       "seasons",
-      "solitude"
+      "nature"
     ],
     "id": "zh_0367"
   },
@@ -4386,9 +4328,9 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "loss",
-      "loneliness",
-      "nature"
+      "seasons",
+      "nature",
+      "loss"
     ],
     "id": "zh_0368"
   },
@@ -4412,8 +4354,7 @@
     "era": "Tang",
     "themes": [
       "solitude",
-      "nature",
-      "rest"
+      "nature"
     ],
     "id": "zh_0370"
   },
@@ -4436,9 +4377,8 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "nature",
       "seasons",
-      "change"
+      "nature"
     ],
     "id": "zh_0372"
   },
@@ -4450,8 +4390,7 @@
     "era": "Tang",
     "themes": [
       "nature",
-      "seasons",
-      "perseverance"
+      "seasons"
     ],
     "id": "zh_0373"
   },
@@ -4463,7 +4402,6 @@
     "era": "Tang",
     "themes": [
       "grief",
-      "despair",
       "loneliness"
     ],
     "id": "zh_0374"
@@ -4476,8 +4414,7 @@
     "era": "Tang",
     "themes": [
       "nature",
-      "seasons",
-      "change"
+      "seasons"
     ],
     "id": "zh_0375"
   },
@@ -4489,7 +4426,8 @@
     "era": "Tang",
     "themes": [
       "seasons",
-      "change"
+      "change",
+      "farewell"
     ],
     "id": "zh_0376"
   },
@@ -4500,8 +4438,8 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "grief",
-      "nature"
+      "nature",
+      "grief"
     ],
     "id": "zh_0377"
   },
@@ -4513,7 +4451,7 @@
     "era": "Tang",
     "themes": [
       "nostalgia",
-      "home"
+      "travel"
     ],
     "id": "zh_0378"
   },
@@ -4524,8 +4462,8 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "nature",
-      "seasons"
+      "seasons",
+      "nature"
     ],
     "id": "zh_0379"
   },
@@ -4536,8 +4474,8 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "nature",
-      "seasons"
+      "seasons",
+      "nature"
     ],
     "id": "zh_0380"
   },
@@ -4559,9 +4497,8 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "joy",
-      "rest",
-      "nature"
+      "nature",
+      "joy"
     ],
     "id": "zh_0382"
   },
@@ -4572,7 +4509,8 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "joy"
+      "joy",
+      "friendship"
     ],
     "id": "zh_0383"
   },
@@ -4583,8 +4521,8 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "joy",
-      "nature"
+      "nature",
+      "joy"
     ],
     "id": "zh_0384"
   },
@@ -4596,7 +4534,7 @@
     "era": "Tang",
     "themes": [
       "joy",
-      "nature"
+      "friendship"
     ],
     "id": "zh_0385"
   },
@@ -4607,8 +4545,8 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "grief",
       "time",
+      "loss",
       "change"
     ],
     "id": "zh_0386"
@@ -4645,9 +4583,8 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "joy",
       "time",
-      "change"
+      "joy"
     ],
     "id": "zh_0389"
   },
@@ -4670,6 +4607,7 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
+      "seasons",
       "nature"
     ],
     "id": "zh_0391"
@@ -4681,8 +4619,8 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "nature",
-      "seasons"
+      "seasons",
+      "nature"
     ],
     "id": "zh_0392"
   },
@@ -4693,9 +4631,8 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "nature",
-      "gratitude",
-      "change"
+      "seasons",
+      "nature"
     ],
     "id": "zh_0393"
   },
@@ -4706,8 +4643,7 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "time",
-      "nostalgia"
+      "time"
     ],
     "id": "zh_0394"
   },
@@ -4719,8 +4655,7 @@
     "era": "Tang",
     "themes": [
       "seasons",
-      "change",
-      "hope"
+      "change"
     ],
     "id": "zh_0395"
   },
@@ -4731,9 +4666,8 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "joy",
-      "nature",
-      "seasons"
+      "seasons",
+      "joy"
     ],
     "id": "zh_0396"
   },
@@ -4744,8 +4678,8 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
+      "turning-point",
       "joy",
-      "family",
       "time"
     ],
     "id": "zh_0397"
@@ -4757,9 +4691,9 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "seasons",
+      "time",
       "change",
-      "hope"
+      "turning-point"
     ],
     "id": "zh_0398"
   },
@@ -4771,8 +4705,8 @@
     "era": "Tang",
     "themes": [
       "seasons",
-      "change",
-      "hope"
+      "time",
+      "change"
     ],
     "id": "zh_0399"
   },
@@ -4785,7 +4719,7 @@
     "themes": [
       "seasons",
       "nature",
-      "hope"
+      "change"
     ],
     "id": "zh_0400"
   },
@@ -4798,7 +4732,7 @@
     "themes": [
       "joy",
       "hope",
-      "gratitude"
+      "turning-point"
     ],
     "id": "zh_0401"
   },
@@ -4822,8 +4756,7 @@
     "era": "Tang",
     "themes": [
       "nature",
-      "change",
-      "time"
+      "change"
     ],
     "id": "zh_0403"
   },
@@ -4835,8 +4768,7 @@
     "era": "Tang",
     "themes": [
       "nature",
-      "seasons",
-      "perseverance"
+      "joy"
     ],
     "id": "zh_0404"
   },
@@ -4848,7 +4780,8 @@
     "era": "Tang",
     "themes": [
       "joy",
-      "gratitude"
+      "gratitude",
+      "time"
     ],
     "id": "zh_0405"
   },
@@ -4860,7 +4793,7 @@
     "era": "Tang",
     "themes": [
       "nature",
-      "solitude"
+      "time"
     ],
     "id": "zh_0406"
   },
@@ -4871,8 +4804,7 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "nature",
-      "change"
+      "nature"
     ],
     "id": "zh_0407"
   },
@@ -4883,8 +4815,7 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "nature",
-      "perseverance"
+      "nature"
     ],
     "id": "zh_0408"
   },
@@ -4908,9 +4839,8 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "joy",
-      "rest",
-      "nostalgia"
+      "nature",
+      "time"
     ],
     "id": "zh_0410"
   },
@@ -4945,8 +4875,7 @@
     "era": "Tang",
     "themes": [
       "loss",
-      "regret",
-      "turning-point"
+      "regret"
     ],
     "id": "zh_0413"
   },
@@ -4958,8 +4887,7 @@
     "era": "Tang",
     "themes": [
       "nature",
-      "seasons",
-      "nostalgia"
+      "time"
     ],
     "id": "zh_0414"
   },
@@ -4982,7 +4910,6 @@
     "era": "Tang",
     "themes": [
       "nature",
-      "change",
       "time"
     ],
     "id": "zh_0416"
@@ -4994,9 +4921,8 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "travel",
-      "work",
-      "perseverance"
+      "friendship",
+      "ambition"
     ],
     "id": "zh_0417"
   },
@@ -5008,8 +4934,7 @@
     "era": "Tang",
     "themes": [
       "nature",
-      "joy",
-      "hope"
+      "joy"
     ],
     "id": "zh_0418"
   },
@@ -5020,8 +4945,7 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "nature",
-      "change"
+      "nature"
     ],
     "id": "zh_0419"
   },
@@ -5032,8 +4956,7 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "nature",
-      "seasons"
+      "nature"
     ],
     "id": "zh_0420"
   },
@@ -5044,9 +4967,7 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "nature",
-      "change",
-      "solitude"
+      "nature"
     ],
     "id": "zh_0421"
   },
@@ -5057,8 +4978,8 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "change",
       "time",
+      "change",
       "nostalgia"
     ],
     "id": "zh_0422"
@@ -5070,9 +4991,7 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "nature",
-      "change",
-      "travel"
+      "nature"
     ],
     "id": "zh_0423"
   },
@@ -5084,8 +5003,7 @@
     "era": "Tang",
     "themes": [
       "nature",
-      "joy",
-      "solitude"
+      "joy"
     ],
     "id": "zh_0424"
   },
@@ -5097,8 +5015,7 @@
     "era": "Tang",
     "themes": [
       "nature",
-      "seasons",
-      "change"
+      "seasons"
     ],
     "id": "zh_0425"
   },
@@ -5108,11 +5025,7 @@
     "source": "芳蘭",
     "lang": "zh",
     "era": "Tang",
-    "themes": [
-      "nature",
-      "seasons",
-      "joy"
-    ],
+    "themes": [],
     "id": "zh_0426"
   },
   {
@@ -5121,10 +5034,7 @@
     "source": "芳蘭",
     "lang": "zh",
     "era": "Tang",
-    "themes": [
-      "nature",
-      "joy"
-    ],
+    "themes": [],
     "id": "zh_0427"
   },
   {
@@ -5133,10 +5043,7 @@
     "source": "芳蘭",
     "lang": "zh",
     "era": "Tang",
-    "themes": [
-      "nature",
-      "joy"
-    ],
+    "themes": [],
     "id": "zh_0428"
   },
   {
@@ -5145,10 +5052,7 @@
     "source": "芳蘭",
     "lang": "zh",
     "era": "Tang",
-    "themes": [
-      "nature",
-      "friendship"
-    ],
+    "themes": [],
     "id": "zh_0429"
   },
   {
@@ -5157,11 +5061,7 @@
     "source": "詠桃",
     "lang": "zh",
     "era": "Tang",
-    "themes": [
-      "nature",
-      "seasons",
-      "joy"
-    ],
+    "themes": [],
     "id": "zh_0430"
   },
   {
@@ -5170,10 +5070,7 @@
     "source": "詠桃",
     "lang": "zh",
     "era": "Tang",
-    "themes": [
-      "nature",
-      "joy"
-    ],
+    "themes": [],
     "id": "zh_0431"
   },
   {
@@ -5182,10 +5079,7 @@
     "source": "詠桃",
     "lang": "zh",
     "era": "Tang",
-    "themes": [
-      "nature",
-      "joy"
-    ],
+    "themes": [],
     "id": "zh_0432"
   },
   {
@@ -5194,10 +5088,7 @@
     "source": "詠桃",
     "lang": "zh",
     "era": "Tang",
-    "themes": [
-      "solitude",
-      "nature"
-    ],
+    "themes": [],
     "id": "zh_0433"
   },
   {
@@ -5206,9 +5097,7 @@
     "source": "賦簾",
     "lang": "zh",
     "era": "Tang",
-    "themes": [
-      "nature"
-    ],
+    "themes": [],
     "id": "zh_0434"
   },
   {
@@ -5217,10 +5106,7 @@
     "source": "賦簾",
     "lang": "zh",
     "era": "Tang",
-    "themes": [
-      "nature",
-      "solitude"
-    ],
+    "themes": [],
     "id": "zh_0435"
   },
   {
@@ -5229,9 +5115,7 @@
     "source": "賦簾",
     "lang": "zh",
     "era": "Tang",
-    "themes": [
-      "nature"
-    ],
+    "themes": [],
     "id": "zh_0436"
   },
   {
@@ -5240,10 +5124,7 @@
     "source": "賦簾",
     "lang": "zh",
     "era": "Tang",
-    "themes": [
-      "home",
-      "joy"
-    ],
+    "themes": [],
     "id": "zh_0437"
   },
   {
@@ -5252,10 +5133,7 @@
     "source": "詠烏代陳師道",
     "lang": "zh",
     "era": "Tang",
-    "themes": [
-      "travel",
-      "nature"
-    ],
+    "themes": [],
     "id": "zh_0438"
   },
   {
@@ -5264,10 +5142,7 @@
     "source": "詠烏代陳師道",
     "lang": "zh",
     "era": "Tang",
-    "themes": [
-      "nature",
-      "change"
-    ],
+    "themes": [],
     "id": "zh_0439"
   },
   {
@@ -5276,10 +5151,7 @@
     "source": "詠烏代陳師道",
     "lang": "zh",
     "era": "Tang",
-    "themes": [
-      "perseverance",
-      "nature"
-    ],
+    "themes": [],
     "id": "zh_0440"
   },
   {
@@ -5288,10 +5160,7 @@
     "source": "詠烏代陳師道",
     "lang": "zh",
     "era": "Tang",
-    "themes": [
-      "grief",
-      "solitude"
-    ],
+    "themes": [],
     "id": "zh_0441"
   },
   {
@@ -5300,10 +5169,7 @@
     "source": "詠飲馬",
     "lang": "zh",
     "era": "Tang",
-    "themes": [
-      "nature",
-      "ambition"
-    ],
+    "themes": [],
     "id": "zh_0442"
   },
   {
@@ -5312,9 +5178,7 @@
     "source": "詠飲馬",
     "lang": "zh",
     "era": "Tang",
-    "themes": [
-      "nature"
-    ],
+    "themes": [],
     "id": "zh_0443"
   },
   {
@@ -5323,10 +5187,7 @@
     "source": "詠飲馬",
     "lang": "zh",
     "era": "Tang",
-    "themes": [
-      "nature",
-      "travel"
-    ],
+    "themes": [],
     "id": "zh_0444"
   },
   {
@@ -5335,10 +5196,7 @@
     "source": "詠飲馬",
     "lang": "zh",
     "era": "Tang",
-    "themes": [
-      "nature",
-      "ambition"
-    ],
+    "themes": [],
     "id": "zh_0445"
   },
   {
@@ -5347,10 +5205,7 @@
     "source": "賦得殘菊",
     "lang": "zh",
     "era": "Tang",
-    "themes": [
-      "nature",
-      "seasons"
-    ],
+    "themes": [],
     "id": "zh_0446"
   },
   {
@@ -5359,10 +5214,7 @@
     "source": "賦得殘菊",
     "lang": "zh",
     "era": "Tang",
-    "themes": [
-      "nature",
-      "nostalgia"
-    ],
+    "themes": [],
     "id": "zh_0447"
   },
   {
@@ -5371,11 +5223,7 @@
     "source": "賦得殘菊",
     "lang": "zh",
     "era": "Tang",
-    "themes": [
-      "nature",
-      "seasons",
-      "loss"
-    ],
+    "themes": [],
     "id": "zh_0448"
   },
   {
@@ -5384,11 +5232,7 @@
     "source": "賦得殘菊",
     "lang": "zh",
     "era": "Tang",
-    "themes": [
-      "nature",
-      "hope",
-      "seasons"
-    ],
+    "themes": [],
     "id": "zh_0449"
   },
   {
@@ -5397,11 +5241,7 @@
     "source": "賦秋日懸清光賜房玄齡",
     "lang": "zh",
     "era": "Tang",
-    "themes": [
-      "nature",
-      "seasons",
-      "joy"
-    ],
+    "themes": [],
     "id": "zh_0450"
   },
   {
@@ -5411,7 +5251,6 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "home",
       "nature",
       "joy"
     ],
@@ -5424,9 +5263,8 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "travel",
       "nature",
-      "change"
+      "hope"
     ],
     "id": "zh_0452"
   },
@@ -5438,7 +5276,7 @@
     "era": "Tang",
     "themes": [
       "nature",
-      "joy"
+      "change"
     ],
     "id": "zh_0453"
   },
@@ -5449,6 +5287,7 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
+      "ambition",
       "perseverance",
       "hope"
     ],
@@ -5463,7 +5302,7 @@
     "themes": [
       "nature",
       "time",
-      "change"
+      "seasons"
     ],
     "id": "zh_0455"
   },
@@ -5474,8 +5313,8 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "loss",
       "grief",
+      "loss",
       "regret"
     ],
     "id": "zh_0456"
@@ -5488,7 +5327,7 @@
     "era": "Tang",
     "themes": [
       "joy",
-      "friendship"
+      "rest"
     ],
     "id": "zh_0457"
   },
@@ -5500,7 +5339,7 @@
     "era": "Tang",
     "themes": [
       "joy",
-      "nostalgia"
+      "time"
     ],
     "id": "zh_0458"
   },
@@ -5513,7 +5352,7 @@
     "themes": [
       "love",
       "regret",
-      "loneliness"
+      "loss"
     ],
     "id": "zh_0459"
   },
@@ -5524,9 +5363,9 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "ambition",
       "travel",
-      "change"
+      "ambition",
+      "perseverance"
     ],
     "id": "zh_0460"
   },
@@ -5537,9 +5376,9 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
+      "work",
       "ambition",
-      "perseverance",
-      "work"
+      "perseverance"
     ],
     "id": "zh_0461"
   },
@@ -5551,8 +5390,8 @@
     "era": "Tang",
     "themes": [
       "ambition",
-      "hope",
-      "change"
+      "work",
+      "perseverance"
     ],
     "id": "zh_0462"
   },
@@ -5563,9 +5402,9 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "time",
       "change",
-      "nostalgia"
+      "nostalgia",
+      "time"
     ],
     "id": "zh_0463"
   },
@@ -5577,7 +5416,8 @@
     "era": "Tang",
     "themes": [
       "nature",
-      "joy"
+      "time",
+      "hope"
     ],
     "id": "zh_0464"
   },
@@ -5601,9 +5441,9 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "travel",
       "farewell",
-      "change"
+      "nostalgia",
+      "travel"
     ],
     "id": "zh_0466"
   },
@@ -5615,7 +5455,8 @@
     "era": "Tang",
     "themes": [
       "nature",
-      "joy"
+      "seasons",
+      "change"
     ],
     "id": "zh_0467"
   },
@@ -5627,7 +5468,7 @@
     "era": "Tang",
     "themes": [
       "grief",
-      "loneliness",
+      "solitude",
       "farewell"
     ],
     "id": "zh_0468"
@@ -5639,9 +5480,9 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "grief",
       "farewell",
-      "regret"
+      "loss",
+      "grief"
     ],
     "id": "zh_0469"
   },
@@ -5653,8 +5494,8 @@
     "era": "Tang",
     "themes": [
       "time",
-      "change",
-      "nature"
+      "seasons",
+      "change"
     ],
     "id": "zh_0470"
   },
@@ -5665,9 +5506,9 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
+      "seasons",
       "change",
-      "hope",
-      "nature"
+      "hope"
     ],
     "id": "zh_0471"
   },
@@ -5678,9 +5519,9 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "perseverance",
+      "nature",
       "change",
-      "nature"
+      "ambition"
     ],
     "id": "zh_0472"
   },
@@ -5692,8 +5533,7 @@
     "era": "Tang",
     "themes": [
       "grief",
-      "despair",
-      "loneliness"
+      "regret"
     ],
     "id": "zh_0473"
   },
@@ -5704,8 +5544,9 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
+      "nature",
       "joy",
-      "nature"
+      "ambition"
     ],
     "id": "zh_0474"
   },
@@ -5716,9 +5557,9 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "solitude",
+      "rest",
       "hope",
-      "nature"
+      "solitude"
     ],
     "id": "zh_0475"
   },
@@ -5730,7 +5571,8 @@
     "era": "Tang",
     "themes": [
       "nature",
-      "time"
+      "time",
+      "solitude"
     ],
     "id": "zh_0476"
   },
@@ -5741,8 +5583,9 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "nature",
-      "farewell"
+      "loss",
+      "grief",
+      "loneliness"
     ],
     "id": "zh_0477"
   },
@@ -5754,7 +5597,8 @@
     "era": "Tang",
     "themes": [
       "seasons",
-      "nature"
+      "nature",
+      "time"
     ],
     "id": "zh_0478"
   },
@@ -5765,7 +5609,9 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "nature"
+      "nature",
+      "change",
+      "solitude"
     ],
     "id": "zh_0479"
   },
@@ -5776,7 +5622,9 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "nature"
+      "nature",
+      "time",
+      "nostalgia"
     ],
     "id": "zh_0480"
   },
@@ -5787,7 +5635,9 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "love"
+      "love",
+      "nostalgia",
+      "solitude"
     ],
     "id": "zh_0481"
   },
@@ -5798,8 +5648,9 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
+      "perseverance",
       "nature",
-      "perseverance"
+      "seasons"
     ],
     "id": "zh_0482"
   },
@@ -5810,8 +5661,9 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
+      "hope",
       "ambition",
-      "hope"
+      "nature"
     ],
     "id": "zh_0483"
   },
@@ -5823,7 +5675,8 @@
     "era": "Tang",
     "themes": [
       "nature",
-      "seasons"
+      "seasons",
+      "time"
     ],
     "id": "zh_0484"
   },
@@ -5834,7 +5687,9 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "nature"
+      "nature",
+      "change",
+      "time"
     ],
     "id": "zh_0485"
   },
@@ -5846,6 +5701,7 @@
     "era": "Tang",
     "themes": [
       "nature",
+      "ambition",
       "perseverance"
     ],
     "id": "zh_0486"
@@ -5857,7 +5713,9 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "nature"
+      "ambition",
+      "nature",
+      "hope"
     ],
     "id": "zh_0487"
   },
@@ -5868,7 +5726,9 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "nature"
+      "nature",
+      "solitude",
+      "rest"
     ],
     "id": "zh_0488"
   },
@@ -5879,7 +5739,9 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "nature"
+      "nature",
+      "solitude",
+      "rest"
     ],
     "id": "zh_0489"
   },
@@ -5891,7 +5753,8 @@
     "era": "Tang",
     "themes": [
       "perseverance",
-      "turning-point"
+      "turning-point",
+      "ambition"
     ],
     "id": "zh_0490"
   },
@@ -5902,8 +5765,9 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "love",
-      "perseverance"
+      "perseverance",
+      "change",
+      "ambition"
     ],
     "id": "zh_0491"
   },
@@ -5915,7 +5779,8 @@
     "era": "Tang",
     "themes": [
       "solitude",
-      "ambition"
+      "ambition",
+      "rest"
     ],
     "id": "zh_0492"
   },
@@ -5927,7 +5792,8 @@
     "era": "Tang",
     "themes": [
       "travel",
-      "perseverance"
+      "work",
+      "ambition"
     ],
     "id": "zh_0493"
   },
@@ -5939,7 +5805,8 @@
     "era": "Tang",
     "themes": [
       "nature",
-      "solitude"
+      "solitude",
+      "nostalgia"
     ],
     "id": "zh_0494"
   },
@@ -5951,7 +5818,8 @@
     "era": "Tang",
     "themes": [
       "nature",
-      "solitude"
+      "grief",
+      "loss"
     ],
     "id": "zh_0495"
   },
@@ -5962,7 +5830,9 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
-      "joy"
+      "joy",
+      "rest",
+      "gratitude"
     ],
     "id": "zh_0496"
   },
@@ -5974,7 +5844,8 @@
     "era": "Tang",
     "themes": [
       "joy",
-      "rest"
+      "rest",
+      "time"
     ],
     "id": "zh_0497"
   },
@@ -5986,6 +5857,7 @@
     "era": "Tang",
     "themes": [
       "joy",
+      "hope",
       "gratitude"
     ],
     "id": "zh_0498"
@@ -5998,7 +5870,8 @@
     "era": "Tang",
     "themes": [
       "hope",
-      "change"
+      "change",
+      "joy"
     ],
     "id": "zh_0499"
   },
@@ -6009,8 +5882,9 @@
     "lang": "zh",
     "era": "Tang",
     "themes": [
+      "ambition",
       "perseverance",
-      "ambition"
+      "regret"
     ],
     "id": "zh_0500"
   }

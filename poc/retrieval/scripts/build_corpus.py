@@ -23,7 +23,9 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
+from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Any, Dict, List
 
@@ -105,16 +107,36 @@ def load_en_from_sources(sources_dir: Path) -> List[Dict[str, Any]]:
     ]
 
 
-def dedupe(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def _norm(text: str) -> str:
+    """Lowercase and keep only alphanumerics + CJK -- a normalized key for
+    duplicate detection that ignores punctuation / casing / whitespace."""
+    return re.sub(r"[\W_]+", "", text.lower(), flags=re.UNICODE)
+
+
+def fuzzy_dedupe(
+    rows: List[Dict[str, Any]], target: int, threshold: float = 0.82,
+) -> List[Dict[str, Any]]:
+    """Keep up to `target` rows, dropping exact-normalized duplicates and
+    near-duplicates -- where the difflib similarity of the normalized text is
+    >= threshold against an already-kept row (e.g. "Most people are about as
+    happy..." vs "Most folks are as happy..."). Processes in order and stops
+    once `target` is reached, so it stays cheap even on a large candidate pool.
+    """
+    kept: List[Dict[str, Any]] = []
+    kept_norms: List[str] = []
     seen = set()
-    out = []
     for r in rows:
-        key = r["text"]
-        if key in seen:
+        key = _norm(r["text"])
+        if not key or key in seen:
+            continue
+        if any(SequenceMatcher(None, key, k).ratio() >= threshold for k in kept_norms):
             continue
         seen.add(key)
-        out.append(r)
-    return out
+        kept.append(r)
+        kept_norms.append(key)
+        if len(kept) >= target:
+            break
+    return kept
 
 
 def _parse_tag_batch(raw: str, n: int) -> List[List[str]]:
@@ -179,6 +201,7 @@ def main():
     parser.add_argument("--target-en", type=int, default=500)
     parser.add_argument("--target-zh", type=int, default=500)
     parser.add_argument("--batch", type=int, default=25)
+    parser.add_argument("--dedupe-threshold", type=float, default=0.82)
     args = parser.parse_args()
 
     load_dotenv(args.out.parent / ".env")
@@ -189,8 +212,8 @@ def main():
     model = os.getenv("LLM_MODEL", "deepseek-chat")
 
     print(f"Loading sources from {args.sources}")
-    zh = dedupe(load_zh_from_chinese_poetry(args.sources))[: args.target_zh]
-    en = dedupe(load_en_from_sources(args.sources))[: args.target_en]
+    zh = fuzzy_dedupe(load_zh_from_chinese_poetry(args.sources), args.target_zh, args.dedupe_threshold)
+    en = fuzzy_dedupe(load_en_from_sources(args.sources), args.target_en, args.dedupe_threshold)
     print(f"  ZH candidates: {len(zh)}, EN candidates: {len(en)}")
 
     args.out.mkdir(parents=True, exist_ok=True)
