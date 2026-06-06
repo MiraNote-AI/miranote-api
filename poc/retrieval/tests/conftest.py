@@ -1,6 +1,5 @@
 from __future__ import annotations
 import importlib.util
-import os
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -90,10 +89,10 @@ def fake_llm():
 @pytest.fixture
 def api_client(stub_embedder_model, fake_llm, monkeypatch, tmp_path):
     """FastAPI TestClient with all externals stubbed."""
-    os.environ.setdefault("LLM_API_KEY", "fake-key-for-tests")
+    monkeypatch.setenv("LLM_API_KEY", "fake-key-for-tests")
     # Use a temporary database file for each test
     test_db_path = tmp_path / "test_index.db"
-    os.environ["INDEX_DB_PATH"] = str(test_db_path)
+    monkeypatch.setenv("INDEX_DB_PATH", str(test_db_path))
     from poc.retrieval import config as config_module
     monkeypatch.setattr(config_module, "LLM_API_KEY", "fake-key-for-tests")
     monkeypatch.setattr(config_module, "INDEX_DB_PATH", test_db_path)
