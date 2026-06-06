@@ -86,7 +86,7 @@ curl -s http://localhost:8004/health | python3 -m json.tool
 ## Tests
 
 ```bash
-cd /Users/mengjia/MiraNote/miranote-api
+# from the repo root
 PYTHONPATH=. ./poc/retrieval/.venv/bin/python3 -m pytest poc/retrieval/tests -v
 ```
 
