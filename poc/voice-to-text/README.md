@@ -204,6 +204,6 @@ curl -s -X POST http://localhost:8000/emotion -F file=@demo_data/en_short.m4a | 
 ## Tests
 
 ```bash
-cd /Users/mengjia/MiraNote/miranote-api/poc/voice-to-text
+cd poc/voice-to-text
 PYTHONPATH=. .venv/bin/python3 -m pytest tests/ -v
 ```

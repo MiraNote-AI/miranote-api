@@ -6,6 +6,7 @@ Whisper transcription + optional LLM correction (any OpenAI-compatible provider)
 import os
 import tempfile
 import asyncio
+from threading import Lock
 from typing import Any, Dict, Literal, Optional, Tuple
 
 import whisper
@@ -26,24 +27,39 @@ LLM_MODEL = os.getenv("LLM_MODEL", "gemini-2.5-flash")
 
 # ---------- Lazy model loading ----------
 _whisper_model = None
+_whisper_lock = Lock()
 
 
 def get_whisper_model():
-    """Lazy-load Whisper on first call so import is cheap (tests, /health)."""
+    """Lazy-load Whisper on first call so import is cheap (tests, /health).
+
+    Double-checked locking mirrors emotion._get_pipeline(): under concurrent
+    asyncio.to_thread() calls at startup, only one thread loads the model
+    instead of several racing to load ~2 GB each.
+    """
     global _whisper_model
     if _whisper_model is None:
-        print(f"Loading Whisper model: {WHISPER_MODEL} ...")
-        _whisper_model = whisper.load_model(WHISPER_MODEL)
-        print("Whisper model loaded.")
+        with _whisper_lock:
+            if _whisper_model is None:
+                print(f"Loading Whisper model: {WHISPER_MODEL} ...")
+                _whisper_model = whisper.load_model(WHISPER_MODEL)
+                print("Whisper model loaded.")
     return _whisper_model
 
 llm = OpenAI(api_key=LLM_API_KEY, base_url=LLM_BASE_URL) if LLM_API_KEY else None
 
 app = FastAPI(title="MiraNote Voice-to-Text", version="0.1.0")
 
+# POC default is permissive so the unified local UI can call across ports.
+# Set CORS_ALLOW_ORIGIN (comma-separated) to scope this in any real
+# deployment, e.g. CORS_ALLOW_ORIGIN=https://app.miranote.ai.
+_CORS_ORIGINS = [
+    o.strip() for o in os.getenv("CORS_ALLOW_ORIGIN", "*").split(",") if o.strip()
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_CORS_ORIGINS,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -202,8 +218,12 @@ async def emotion_endpoint(
         tmp_path = tmp.name
     try:
         return await asyncio.to_thread(analyze_emotion, tmp_path)
-    except Exception as e:  # noqa: BLE001
-        raise HTTPException(status_code=502, detail=f"Emotion analysis failed: {e}")
+    except Exception as e:  # noqa: BLE001 -- log internally, return generic detail
+        print(f"/emotion analysis failed: {e}")
+        raise HTTPException(
+            status_code=502,
+            detail="Emotion analysis failed. See server logs.",
+        )
     finally:
         os.unlink(tmp_path)
 
