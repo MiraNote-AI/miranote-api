@@ -52,25 +52,28 @@ class Store:
         return int(result[0][0]) if result else 0
 
     def insert(self, id_: str, payload: Dict[str, Any], embedding: np.ndarray) -> None:
-        cur = self._conn.cursor()
-        # If id_ already exists, delete the old row first (REPLACE on id).
-        existing = cur.execute("SELECT rowid FROM items WHERE id = ?", (id_,)).fetchall()
-        if existing:
-            old_rowid = existing[0][0]
-            cur.execute("DELETE FROM items WHERE rowid = ?", (old_rowid,))
-            cur.execute("DELETE FROM vecs WHERE rowid = ?", (old_rowid,))
-
-        cur.execute(
-            "INSERT INTO items (id, payload) VALUES (?, ?)",
-            (id_, json.dumps(payload, ensure_ascii=False)),
-        )
-        # Get the rowid of the inserted row
-        rowid = cur.execute("SELECT last_insert_rowid()").fetchall()[0][0]
         vec_blob = embedding.astype(np.float32).tobytes()
-        cur.execute(
-            "INSERT INTO vecs (rowid, embedding) VALUES (?, ?)",
-            (rowid, vec_blob),
-        )
+        # Wrap delete + insert + insert in one transaction so a crash can't
+        # leave an item without its vector (or vice versa). apsw's context
+        # manager opens a SAVEPOINT and rolls back on any exception.
+        with self._conn:
+            cur = self._conn.cursor()
+            # If id_ already exists, delete the old row first (REPLACE on id).
+            existing = cur.execute("SELECT rowid FROM items WHERE id = ?", (id_,)).fetchall()
+            if existing:
+                old_rowid = existing[0][0]
+                cur.execute("DELETE FROM items WHERE rowid = ?", (old_rowid,))
+                cur.execute("DELETE FROM vecs WHERE rowid = ?", (old_rowid,))
+
+            cur.execute(
+                "INSERT INTO items (id, payload) VALUES (?, ?)",
+                (id_, json.dumps(payload, ensure_ascii=False)),
+            )
+            rowid = cur.execute("SELECT last_insert_rowid()").fetchall()[0][0]
+            cur.execute(
+                "INSERT INTO vecs (rowid, embedding) VALUES (?, ?)",
+                (rowid, vec_blob),
+            )
 
     def search(self, query: np.ndarray, k: int = 10) -> List[Dict[str, Any]]:
         vec_blob = query.astype(np.float32).tobytes()
