@@ -1,51 +1,59 @@
 # Text Clean & Expand POC
 
-AI-powered text processing: turn messy input into polished notes.
+FastAPI service that transforms a user's free-form text using an
+OpenAI-compatible LLM. Six endpoints, each with its own prompt:
 
-## Endpoints
+| Endpoint | Purpose |
+|---|---|
+| `POST /clean` | Restructure messy input into a readable note |
+| `POST /expand` | Develop the user's input as if they wrote a longer version |
+| `POST /polish` | Final editing pass -- word choice + flow, no restructuring |
+| `POST /shorten` | Produce a shorter version. `target`: 30% / 50% / tweet |
+| `POST /keywords` | Extract 5-10 keywords with salience scores (1-10) |
+| `POST /caption` | 1-2 sentence caption. `style`: instagram / diary / tweet |
 
-| Endpoint | Description |
-|----------|-------------|
-| `POST /clean` | Fix typos, punctuation, grammar + restructure into readable text. Light expansion to fill gaps. |
-| `POST /expand` | Fully expand fragments into complete paragraphs, like drafting an email from bullet points. |
-| `GET /health` | Health check |
-| `GET /` | Web UI (unified POC frontend with Text / Voice / Image tabs) |
+Bilingual: every endpoint preserves the input language (English in -> English out, any Chinese in -> Chinese out).
 
 ## Setup
 
 ```bash
 cd poc/text-clean-expand
-python3 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-cp .env.example .env   # then fill in your API key
-uvicorn main:app --host 0.0.0.0 --port 8001
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+cp .env.example .env  # fill in LLM_API_KEY
 ```
 
-Open http://localhost:8001 for the web UI.
-
-## LLM Provider
-
-Uses OpenAI-compatible API. Switch provider by editing `.env`:
-
-- **DeepSeek**: `LLM_BASE_URL=https://api.deepseek.com`, `LLM_MODEL=deepseek-chat`
-- **Gemini**: `LLM_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai`, `LLM_MODEL=gemini-2.5-flash`
-- **OpenAI**: leave `LLM_BASE_URL` empty, `LLM_MODEL=gpt-4o`
-
-## API Usage
+## Run
 
 ```bash
-# Clean
-curl -X POST http://localhost:8001/clean \
-  -H "Content-Type: application/json" \
-  -d '{"text": "今天开会讨论了三个事情 第一是产品路线图 第二是美化功能怎么做"}'
+PYTHONPATH=../.. .venv/bin/python3 -m uvicorn main:app --port 8001 --reload
+```
 
-# Expand
-curl -X POST http://localhost:8001/expand \
-  -H "Content-Type: application/json" \
-  -d '{"text": "明天要做的事 早上先把poc跑通 下午对一下调研结果"}'
+UI at <http://localhost:8001/>. Or use `./start-all.sh` at the repo root to bring up all three POCs.
 
-# Expand with context
-curl -X POST http://localhost:8001/expand \
-  -H "Content-Type: application/json" \
-  -d '{"text": "voice memo做好了 下一步搞text", "context": "MiraNote是AI日记应用"}'
+## Curl examples
+
+```bash
+curl -s -X POST http://localhost:8001/polish \
+  -H 'Content-Type: application/json' \
+  -d '{"text":"morning light warm. coffee strong. happy."}' | python3 -m json.tool
+
+curl -s -X POST http://localhost:8001/shorten \
+  -H 'Content-Type: application/json' \
+  -d '{"text":"long text here","target":"tweet"}' | python3 -m json.tool
+
+curl -s -X POST http://localhost:8001/keywords \
+  -H 'Content-Type: application/json' \
+  -d '{"text":"We shipped voice transcription beta to 10 partners.","max":5}' | python3 -m json.tool
+
+curl -s -X POST http://localhost:8001/caption \
+  -H 'Content-Type: application/json' \
+  -d '{"text":"Long journal entry...","style":"diary"}' | python3 -m json.tool
+```
+
+## Tests
+
+```bash
+cd /Users/mengjia/MiraNote/miranote-api/poc/text-clean-expand
+PYTHONPATH=. .venv/bin/python3 -m pytest tests/ -v
 ```
