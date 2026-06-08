@@ -1,10 +1,22 @@
 """Tool registry + dispatcher for the chatbot POC."""
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any, Dict, List
 
 from poc.chatbot import tools_fs
 from poc.chatbot.config import ChatbotConfig
+
+
+# Load tool descriptions from prompts file to support CJK trigger phrases.
+_TOOL_DESC_PATH = Path(__file__).parent / "prompts" / "tool_descriptions.txt"
+_TOOL_DESCRIPTIONS = {}
+for _line in _TOOL_DESC_PATH.read_text(encoding="utf-8").splitlines():
+    _line = _line.strip()
+    if not _line or _line.startswith("#"):
+        continue
+    _name, _, _desc = _line.partition("|")
+    _TOOL_DESCRIPTIONS[_name.strip()] = _desc.strip()
 
 
 TOOLS: List[Dict[str, Any]] = [
@@ -86,7 +98,111 @@ TOOLS: List[Dict[str, Any]] = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "clean_text",
+            "description": _TOOL_DESCRIPTIONS["clean_text"],
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "text": {"type": "string", "description": "The messy text to clean."},
+                    "context": {"type": "string", "description": "Optional surrounding context."},
+                },
+                "required": ["text"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "expand_text",
+            "description": _TOOL_DESCRIPTIONS["expand_text"],
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "text": {"type": "string"},
+                    "context": {"type": "string"},
+                },
+                "required": ["text"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "polish_text",
+            "description": _TOOL_DESCRIPTIONS["polish_text"],
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "text": {"type": "string"},
+                    "context": {"type": "string"},
+                },
+                "required": ["text"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "shorten_text",
+            "description": _TOOL_DESCRIPTIONS["shorten_text"],
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "text": {"type": "string"},
+                    "target": {
+                        "type": "string",
+                        "enum": ["30%", "50%", "tweet"],
+                        "default": "50%",
+                    },
+                },
+                "required": ["text"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "extract_keywords",
+            "description": _TOOL_DESCRIPTIONS["extract_keywords"],
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "text": {"type": "string"},
+                    "max": {"type": "integer", "default": 10},
+                },
+                "required": ["text"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "generate_caption",
+            "description": _TOOL_DESCRIPTIONS["generate_caption"],
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "text": {"type": "string"},
+                    "style": {
+                        "type": "string",
+                        "enum": ["instagram", "diary", "tweet"],
+                        "default": "instagram",
+                    },
+                },
+                "required": ["text"],
+            },
+        },
+    },
 ]
+
+# Tools that delegate to the text-clean-expand service via config.text_client.
+_TEXT_TOOL_NAMES = frozenset({
+    "clean_text", "expand_text", "polish_text",
+    "shorten_text", "extract_keywords", "generate_caption",
+})
 
 
 def dispatch(config: ChatbotConfig, name: str, args: Dict[str, Any]) -> Any:
@@ -107,6 +223,23 @@ def dispatch(config: ChatbotConfig, name: str, args: Dict[str, Any]) -> Any:
             return tools_fs.search_docs(config.docs_root, args["query"], int(args.get("max_hits", 20)))
         if name == "set_docs_root":
             return config.set_docs_root(args["path"])
+        # Text tools delegate to text-clean-expand; if TEXT_API_URL was not
+        # configured, text_client is None. Guard here so the model gets a
+        # clear message instead of a cryptic AttributeError on None.
+        if name in _TEXT_TOOL_NAMES and config.text_client is None:
+            return {"error": "text tools unavailable: TEXT_API_URL not configured"}
+        if name == "clean_text":
+            return config.text_client.clean(args["text"], args.get("context"))
+        if name == "expand_text":
+            return config.text_client.expand(args["text"], args.get("context"))
+        if name == "polish_text":
+            return config.text_client.polish(args["text"], args.get("context"))
+        if name == "shorten_text":
+            return config.text_client.shorten(args["text"], args.get("target", "50%"))
+        if name == "extract_keywords":
+            return config.text_client.keywords(args["text"], int(args.get("max", 10)))
+        if name == "generate_caption":
+            return config.text_client.caption(args["text"], args.get("style", "instagram"))
         return {"error": f"unknown tool: {name}"}
     except KeyError as e:
         return {"error": f"missing required argument: {e.args[0]}"}
