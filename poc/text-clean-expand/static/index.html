@@ -225,6 +225,7 @@
           <option value="shorten">Shorten</option>
           <option value="keywords">Keywords</option>
           <option value="caption">Caption</option>
+          <option value="quote">Quote</option>
         </select>
         <button class="btn btn-primary" id="txt-run">Run</button>
       </div>
@@ -243,6 +244,15 @@
       <div class="row" id="txt-sub-keywords" hidden style="margin-top: 10px; gap: 12px;">
         <span style="font-size: 13px; color: var(--muted);">Max:</span>
         <input id="txt-keywords-max" type="number" min="1" max="20" value="10" style="width: 80px; padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px; font: inherit;" />
+      </div>
+      <div class="row" id="txt-sub-quote" hidden style="margin-top: 10px; gap: 12px;">
+        <span style="font-size: 13px; color: var(--muted);">Lang:</span>
+        <label class="option"><input type="radio" name="txt-quote-lang" value="auto" checked /> auto</label>
+        <label class="option"><input type="radio" name="txt-quote-lang" value="en" /> en</label>
+        <label class="option"><input type="radio" name="txt-quote-lang" value="zh" /> zh</label>
+        <label class="option"><input type="radio" name="txt-quote-lang" value="both" /> both</label>
+        <span style="font-size: 13px; color: var(--muted); margin-left: 12px;">Max:</span>
+        <input id="txt-quote-max" type="number" min="1" max="5" value="3" style="width: 60px; padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px; font: inherit;" />
       </div>
     </div>
     <div id="txt-error" class="error-msg" hidden></div>
@@ -334,6 +344,7 @@
 const TEXT_API  = '';                        // same origin (port 8001)
 const VOICE_API = 'http://localhost:8000';   // voice-to-text server
 const CHAT_API  = 'http://localhost:8003';   // chatbot server
+const RETRIEVAL_API = 'http://localhost:8004';   // retrieval / quotes server
 
 const $ = id => document.getElementById(id);
 
@@ -390,6 +401,12 @@ function textBuildPayload(action) {
   if (action === 'keywords') {
     base.max = parseInt($('txt-keywords-max').value, 10) || 10;
   }
+  if (action === 'quote') {
+    const l = document.querySelector('input[name="txt-quote-lang"]:checked');
+    base.lang = l ? l.value : 'auto';
+    base.max = parseInt($('txt-quote-max').value, 10) || 3;
+    // /quotes expects 'text' (already in base); 'lang' and 'max' as above.
+  }
   return base;
 }
 
@@ -413,6 +430,36 @@ function textRenderResult(action, data) {
     out.appendChild(wrap);
     return;
   }
+  if (action === 'quote') {
+    out.textContent = '';
+    const matches = data.matches || [];
+    if (matches.length === 0) {
+      out.textContent = 'Nothing felt quite right -- try rephrasing or adding context.';
+      out.classList.add('empty');
+      return;
+    }
+    matches.forEach(function (m) {
+      const card = document.createElement('div');
+      card.style.cssText = 'margin: 0 0 14px; padding: 14px 16px; background: var(--warm-light); border: 1px solid var(--border); border-radius: 10px;';
+      const qt = document.createElement('div');
+      qt.style.cssText = 'font-size: 16px; font-style: italic; line-height: 1.6; margin-bottom: 8px;';
+      qt.textContent = '"' + m.text + '"';
+      const meta = document.createElement('div');
+      meta.style.cssText = 'font-size: 12px; color: var(--muted); margin-bottom: 6px;';
+      const author = m.author || 'anon';
+      const source = m.source ? ', ' + m.source : '';
+      const pct = Math.round((m.score || 0) * 100);
+      meta.textContent = '-- ' + author + source + '  |  match: ' + pct + '%';
+      const why = document.createElement('div');
+      why.style.cssText = 'font-size: 13px; color: var(--accent); font-style: italic;';
+      why.textContent = m.why ? '~ ' + m.why : '';
+      card.appendChild(qt);
+      card.appendChild(meta);
+      if (m.why) card.appendChild(why);
+      out.appendChild(card);
+    });
+    return;
+  }
   const fieldByAction = {
     clean: 'cleaned',
     expand: 'expanded',
@@ -427,6 +474,7 @@ function textTitleFor(action) {
   return {
     clean: 'Cleaned', expand: 'Expanded', polish: 'Polished',
     shorten: 'Shortened', keywords: 'Keywords', caption: 'Caption',
+    quote: 'Quotes',
   }[action] || action;
 }
 
@@ -441,7 +489,10 @@ async function textRun() {
   $('txt-run').disabled = true;
 
   try {
-    const r = await fetch(TEXT_API + '/' + action, {
+    const url = action === 'quote'
+      ? RETRIEVAL_API + '/quotes'
+      : TEXT_API + '/' + action;
+    const r = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
@@ -468,6 +519,7 @@ function textUpdateSubControls() {
   $('txt-sub-shorten').hidden = action !== 'shorten';
   $('txt-sub-caption').hidden = action !== 'caption';
   $('txt-sub-keywords').hidden = action !== 'keywords';
+  $('txt-sub-quote').hidden = action !== 'quote';
 }
 
 $('txt-run').addEventListener('click', textRun);

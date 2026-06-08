@@ -79,3 +79,29 @@ def test_config_text_client_defaults_to_none(tmp_path):
         session_ttl_seconds=3600,
     )
     assert cfg.text_client is None
+
+
+def test_config_accepts_retrieval_client(tmp_path):
+    class FakeClient:
+        pass
+    cfg = ChatbotConfig(
+        docs_root=tmp_path,
+        model="fake",
+        max_tool_iterations=6,
+        max_history_messages=40,
+        session_ttl_seconds=3600,
+        retrieval_client=FakeClient(),
+    )
+    assert cfg.retrieval_client is not None
+    assert isinstance(cfg.retrieval_client, FakeClient)
+
+
+def test_config_retrieval_client_defaults_to_none(tmp_path):
+    cfg = ChatbotConfig(
+        docs_root=tmp_path,
+        model="fake",
+        max_tool_iterations=6,
+        max_history_messages=40,
+        session_ttl_seconds=3600,
+    )
+    assert cfg.retrieval_client is None

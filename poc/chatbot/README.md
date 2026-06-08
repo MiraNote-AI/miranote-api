@@ -43,8 +43,8 @@ pointing back here. All other formats work out of the box.
 
 ## Run
 
-Easiest: from the repo root, `./start-all.sh` brings up all three POC
-servers (text on 8001, voice on 8000, chat on 8003) at once with
+Easiest: from the repo root, `./start-all.sh` brings up all four POC
+servers (text on 8001, voice on 8000, chat on 8003, retrieval on 8004) at once with
 prefixed log streams. Ctrl-C stops them all.
 
 To run just the chatbot backend on its own:
@@ -119,6 +119,7 @@ PYTHONPATH=. python3 -m pytest poc/chatbot/tests -v
 | `shorten_text(text, target)` | Shorter version. `target` 30%/50%/tweet. Delegates to `/shorten`. | -- |
 | `extract_keywords(text, max)` | 5-10 salient keywords with score. Delegates to `/keywords`. | max 20 |
 | `generate_caption(text, style)` | 1-2 sentence caption. `style` instagram/diary/tweet. Delegates to `/caption`. | -- |
+| `find_quote(text, max, lang)` | Find quotes/poetry that fit a mood. Delegates to retrieval POC `/quotes`. May return 0 matches. | -- |
 
 All `read_doc`/`list_docs`/`search_docs` calls resolve paths under
 `DOCS_ROOT`; anything escaping is rejected with
@@ -148,3 +149,7 @@ See `.env.example`. The important knobs:
   and `generate_caption` tools HTTP-delegate to this server. If the
   text server is down, the corresponding tools return a friendly error
   message and the agent recovers.
+- `RETRIEVAL_API_URL` -- URL of the retrieval POC server. Defaults to
+  `http://localhost:8004`. The chatbot's `find_quote` tool
+  HTTP-delegates to this server. Server down -> tool returns an error
+  and the agent recovers.
