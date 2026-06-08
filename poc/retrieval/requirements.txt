@@ -1,0 +1,13 @@
+fastapi>=0.110
+uvicorn>=0.29
+openai>=1.0
+python-dotenv>=1.0
+pytest>=8.0
+numpy>=1.24
+sentence-transformers>=2.7
+# BGE-M3 uses an XLM-RoBERTa tokenizer: sentencepiece loads its vocab,
+# protobuf is needed to build the fast tokenizer.
+sentencepiece>=0.2.0
+protobuf>=4.21
+sqlite-vec>=0.1.6
+apsw>=3.9.2

@@ -1,0 +1,5891 @@
+[
+  {
+    "text": "秦川雄帝宅，函谷壯皇居。",
+    "author": "太宗皇帝",
+    "source": "帝京篇十首 一",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "ambition",
+      "home"
+    ],
+    "id": "zh_0001"
+  },
+  {
+    "text": "綺殿千尋起，離宮百雉餘。",
+    "author": "太宗皇帝",
+    "source": "帝京篇十首 一",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "ambition"
+    ],
+    "id": "zh_0002"
+  },
+  {
+    "text": "連甍遙接漢，飛觀迥凌虛。",
+    "author": "太宗皇帝",
+    "source": "帝京篇十首 一",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "ambition",
+      "nature"
+    ],
+    "id": "zh_0003"
+  },
+  {
+    "text": "雲日隱層闕，風煙出綺疎。",
+    "author": "太宗皇帝",
+    "source": "帝京篇十首 一",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature"
+    ],
+    "id": "zh_0004"
+  },
+  {
+    "text": "巖廊罷機務，崇文聊駐輦。",
+    "author": "太宗皇帝",
+    "source": "帝京篇十首 二",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "work",
+      "rest"
+    ],
+    "id": "zh_0005"
+  },
+  {
+    "text": "玉匣啓龍圖，金繩披鳳篆。",
+    "author": "太宗皇帝",
+    "source": "帝京篇十首 二",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "work",
+      "ambition"
+    ],
+    "id": "zh_0006"
+  },
+  {
+    "text": "韋編斷仍續，縹帙舒還卷。",
+    "author": "太宗皇帝",
+    "source": "帝京篇十首 二",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "perseverance",
+      "work"
+    ],
+    "id": "zh_0007"
+  },
+  {
+    "text": "對此乃淹留，欹案觀墳典。",
+    "author": "太宗皇帝",
+    "source": "帝京篇十首 二",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "perseverance",
+      "work"
+    ],
+    "id": "zh_0008"
+  },
+  {
+    "text": "移步出詞林，停輿欣武宴。",
+    "author": "太宗皇帝",
+    "source": "帝京篇十首 三",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "joy",
+      "change"
+    ],
+    "id": "zh_0009"
+  },
+  {
+    "text": "琱弓寫明月，駿馬疑流電。",
+    "author": "太宗皇帝",
+    "source": "帝京篇十首 三",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "joy",
+      "ambition"
+    ],
+    "id": "zh_0010"
+  },
+  {
+    "text": "驚雁落虛弦，啼猿悲急箭。",
+    "author": "太宗皇帝",
+    "source": "帝京篇十首 三",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature"
+    ],
+    "id": "zh_0011"
+  },
+  {
+    "text": "閱賞誠多美，於茲乃忘倦。",
+    "author": "太宗皇帝",
+    "source": "帝京篇十首 三",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "joy",
+      "gratitude"
+    ],
+    "id": "zh_0012"
+  },
+  {
+    "text": "鳴笳臨樂館，眺聽歡芳節。",
+    "author": "太宗皇帝",
+    "source": "帝京篇十首 四",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "joy"
+    ],
+    "id": "zh_0013"
+  },
+  {
+    "text": "急管韻朱絃，清歌凝白雪。",
+    "author": "太宗皇帝",
+    "source": "帝京篇十首 四",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "joy",
+      "nature"
+    ],
+    "id": "zh_0014"
+  },
+  {
+    "text": "彩鳳肅來儀，玄鶴紛成列。",
+    "author": "太宗皇帝",
+    "source": "帝京篇十首 四",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "joy",
+      "hope"
+    ],
+    "id": "zh_0015"
+  },
+  {
+    "text": "去茲鄭衛聲，雅音方可悅。",
+    "author": "太宗皇帝",
+    "source": "帝京篇十首 四",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "joy",
+      "change"
+    ],
+    "id": "zh_0016"
+  },
+  {
+    "text": "芳辰追逸趣，禁苑信多奇。",
+    "author": "太宗皇帝",
+    "source": "帝京篇十首 五",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "joy",
+      "nature"
+    ],
+    "id": "zh_0017"
+  },
+  {
+    "text": "橋形通漢上，峰勢接雲危。",
+    "author": "太宗皇帝",
+    "source": "帝京篇十首 五",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "ambition"
+    ],
+    "id": "zh_0018"
+  },
+  {
+    "text": "煙霞交隱映，花鳥自參差。",
+    "author": "太宗皇帝",
+    "source": "帝京篇十首 五",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "joy"
+    ],
+    "id": "zh_0019"
+  },
+  {
+    "text": "何如肆轍跡？萬里賞瑤池。",
+    "author": "太宗皇帝",
+    "source": "帝京篇十首 五",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "travel",
+      "joy"
+    ],
+    "id": "zh_0020"
+  },
+  {
+    "text": "飛蓋去芳園，蘭橈遊翠渚。",
+    "author": "太宗皇帝",
+    "source": "帝京篇十首 六",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "travel",
+      "joy",
+      "nature"
+    ],
+    "id": "zh_0021"
+  },
+  {
+    "text": "萍間日彩亂，荷處香風舉。",
+    "author": "太宗皇帝",
+    "source": "帝京篇十首 六",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "joy"
+    ],
+    "id": "zh_0022"
+  },
+  {
+    "text": "桂楫滿中川，弦歌振長嶼。",
+    "author": "太宗皇帝",
+    "source": "帝京篇十首 六",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "joy",
+      "travel"
+    ],
+    "id": "zh_0023"
+  },
+  {
+    "text": "豈必汾河曲，方爲歡宴所。",
+    "author": "太宗皇帝",
+    "source": "帝京篇十首 六",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "joy",
+      "travel"
+    ],
+    "id": "zh_0024"
+  },
+  {
+    "text": "落日雙闕昏，回輿九重暮。",
+    "author": "太宗皇帝",
+    "source": "帝京篇十首 七",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "time",
+      "farewell"
+    ],
+    "id": "zh_0025"
+  },
+  {
+    "text": "長煙散初碧，皎月澄輕素。",
+    "author": "太宗皇帝",
+    "source": "帝京篇十首 七",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "change"
+    ],
+    "id": "zh_0026"
+  },
+  {
+    "text": "搴幌翫琴書，開軒引雲霧。",
+    "author": "太宗皇帝",
+    "source": "帝京篇十首 七",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "rest",
+      "joy",
+      "nature"
+    ],
+    "id": "zh_0027"
+  },
+  {
+    "text": "斜漢耿層閣，清風搖玉樹。",
+    "author": "太宗皇帝",
+    "source": "帝京篇十首 七",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "time",
+      "solitude"
+    ],
+    "id": "zh_0028"
+  },
+  {
+    "text": "歡樂難再逢，芳辰良可惜。",
+    "author": "太宗皇帝",
+    "source": "帝京篇十首 八",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "regret",
+      "loss",
+      "time"
+    ],
+    "id": "zh_0029"
+  },
+  {
+    "text": "玉酒泛雲罍，蘭殽陳綺席。",
+    "author": "太宗皇帝",
+    "source": "帝京篇十首 八",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "joy",
+      "gratitude",
+      "friendship"
+    ],
+    "id": "zh_0030"
+  },
+  {
+    "text": "千鍾合堯禹，百獸諧金石。",
+    "author": "太宗皇帝",
+    "source": "帝京篇十首 八",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "joy",
+      "ambition",
+      "work"
+    ],
+    "id": "zh_0031"
+  },
+  {
+    "text": "得志重寸陰，忘懷輕尺璧。",
+    "author": "太宗皇帝",
+    "source": "帝京篇十首 八",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "ambition",
+      "time",
+      "perseverance"
+    ],
+    "id": "zh_0032"
+  },
+  {
+    "text": "建章歡賞夕，二八盡妖妍。",
+    "author": "太宗皇帝",
+    "source": "帝京篇十首 九",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "joy",
+      "gratitude",
+      "nostalgia"
+    ],
+    "id": "zh_0033"
+  },
+  {
+    "text": "羅綺昭陽殿，芬芳玳瑁筵。",
+    "author": "太宗皇帝",
+    "source": "帝京篇十首 九",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "joy",
+      "gratitude",
+      "nostalgia"
+    ],
+    "id": "zh_0034"
+  },
+  {
+    "text": "珮移星正動，扇掩月初圓。",
+    "author": "太宗皇帝",
+    "source": "帝京篇十首 九",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "time",
+      "solitude"
+    ],
+    "id": "zh_0035"
+  },
+  {
+    "text": "無勞上懸圃，即此對神仙。",
+    "author": "太宗皇帝",
+    "source": "帝京篇十首 九",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "joy",
+      "gratitude",
+      "rest"
+    ],
+    "id": "zh_0036"
+  },
+  {
+    "text": "以茲遊觀極，悠然獨長想。",
+    "author": "太宗皇帝",
+    "source": "帝京篇十首 十",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "solitude",
+      "nostalgia",
+      "rest"
+    ],
+    "id": "zh_0037"
+  },
+  {
+    "text": "披卷覽前蹤，撫躬尋既往。",
+    "author": "太宗皇帝",
+    "source": "帝京篇十首 十",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nostalgia",
+      "regret",
+      "turning-point"
+    ],
+    "id": "zh_0038"
+  },
+  {
+    "text": "望古茅茨約，瞻今蘭殿廣。",
+    "author": "太宗皇帝",
+    "source": "帝京篇十首 十",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "change",
+      "nostalgia",
+      "time"
+    ],
+    "id": "zh_0039"
+  },
+  {
+    "text": "人道惡高危，虛心戒盈蕩。",
+    "author": "太宗皇帝",
+    "source": "帝京篇十首 十",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "work",
+      "perseverance",
+      "ambition"
+    ],
+    "id": "zh_0040"
+  },
+  {
+    "text": "奉天竭誠敬，臨民思惠養。",
+    "author": "太宗皇帝",
+    "source": "帝京篇十首 十",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "work",
+      "ambition",
+      "gratitude"
+    ],
+    "id": "zh_0041"
+  },
+  {
+    "text": "納善察忠諫，明科慎刑賞。",
+    "author": "太宗皇帝",
+    "source": "帝京篇十首 十",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "work",
+      "perseverance",
+      "ambition"
+    ],
+    "id": "zh_0042"
+  },
+  {
+    "text": "六五誠難繼，四三非易仰。",
+    "author": "太宗皇帝",
+    "source": "帝京篇十首 十",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "perseverance",
+      "work",
+      "regret"
+    ],
+    "id": "zh_0043"
+  },
+  {
+    "text": "廣待淳化敷，方嗣云亭響。",
+    "author": "太宗皇帝",
+    "source": "帝京篇十首 十",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "hope",
+      "perseverance",
+      "work"
+    ],
+    "id": "zh_0044"
+  },
+  {
+    "text": "塞外悲風切，交河冰已結。",
+    "author": "太宗皇帝",
+    "source": "飲馬長城窟行",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "grief",
+      "loss",
+      "nature"
+    ],
+    "id": "zh_0045"
+  },
+  {
+    "text": "瀚海百重波，陰山千里雪。",
+    "author": "太宗皇帝",
+    "source": "飲馬長城窟行",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "solitude",
+      "change"
+    ],
+    "id": "zh_0046"
+  },
+  {
+    "text": "迥戍危烽火，層巒引高節。",
+    "author": "太宗皇帝",
+    "source": "飲馬長城窟行",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "work",
+      "perseverance",
+      "ambition"
+    ],
+    "id": "zh_0047"
+  },
+  {
+    "text": "悠悠卷斾旌，飲馬出長城。",
+    "author": "太宗皇帝",
+    "source": "飲馬長城窟行",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "travel",
+      "work",
+      "perseverance"
+    ],
+    "id": "zh_0048"
+  },
+  {
+    "text": "寒沙連騎跡，朔吹斷邊聲。",
+    "author": "太宗皇帝",
+    "source": "飲馬長城窟行",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "loneliness",
+      "loss",
+      "nature"
+    ],
+    "id": "zh_0049"
+  },
+  {
+    "text": "胡塵清玉塞，羌笛韻金鉦。",
+    "author": "太宗皇帝",
+    "source": "飲馬長城窟行",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "change",
+      "joy",
+      "perseverance"
+    ],
+    "id": "zh_0050"
+  },
+  {
+    "text": "絕漠干戈戢，車徒振原隰。",
+    "author": "太宗皇帝",
+    "source": "飲馬長城窟行",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "work",
+      "ambition",
+      "change"
+    ],
+    "id": "zh_0051"
+  },
+  {
+    "text": "都尉反龍堆，將軍旋馬邑。",
+    "author": "太宗皇帝",
+    "source": "飲馬長城窟行",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "work",
+      "hope",
+      "ambition"
+    ],
+    "id": "zh_0052"
+  },
+  {
+    "text": "揚麾氛霧靜，紀石功名立。",
+    "author": "太宗皇帝",
+    "source": "飲馬長城窟行",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "ambition",
+      "work",
+      "perseverance"
+    ],
+    "id": "zh_0053"
+  },
+  {
+    "text": "荒裔一戎衣，靈臺凱歌入。",
+    "author": "太宗皇帝",
+    "source": "飲馬長城窟行",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "work",
+      "hope",
+      "joy"
+    ],
+    "id": "zh_0054"
+  },
+  {
+    "text": "執契靜三邊，持衡臨萬姓。",
+    "author": "太宗皇帝",
+    "source": "執契靜三邊",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "work",
+      "ambition",
+      "perseverance"
+    ],
+    "id": "zh_0055"
+  },
+  {
+    "text": "玉彩輝關燭，金華流日鏡。",
+    "author": "太宗皇帝",
+    "source": "執契靜三邊",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "joy",
+      "hope"
+    ],
+    "id": "zh_0056"
+  },
+  {
+    "text": "無爲宇宙清，有美璇璣正。",
+    "author": "太宗皇帝",
+    "source": "執契靜三邊",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "hope",
+      "rest",
+      "change"
+    ],
+    "id": "zh_0057"
+  },
+  {
+    "text": "皎佩星連景，飄衣雲結慶。",
+    "author": "太宗皇帝",
+    "source": "執契靜三邊",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "joy",
+      "hope",
+      "nature"
+    ],
+    "id": "zh_0058"
+  },
+  {
+    "text": "戢武耀七德，昇文輝九功。",
+    "author": "太宗皇帝",
+    "source": "執契靜三邊",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "work",
+      "ambition",
+      "perseverance"
+    ],
+    "id": "zh_0059"
+  },
+  {
+    "text": "煙波澄舊碧，塵火息前紅。",
+    "author": "太宗皇帝",
+    "source": "執契靜三邊",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "change",
+      "hope",
+      "nature"
+    ],
+    "id": "zh_0060"
+  },
+  {
+    "text": "霜野韜蓮劒，關城罷月弓。",
+    "author": "太宗皇帝",
+    "source": "執契靜三邊",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "change",
+      "work",
+      "perseverance"
+    ],
+    "id": "zh_0061"
+  },
+  {
+    "text": "錢綴榆天合，新城柳塞空。",
+    "author": "太宗皇帝",
+    "source": "執契靜三邊",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "work",
+      "nature",
+      "change"
+    ],
+    "id": "zh_0062"
+  },
+  {
+    "text": "花銷蔥嶺雪，縠盡流沙霧。",
+    "author": "太宗皇帝",
+    "source": "執契靜三邊",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "change",
+      "seasons"
+    ],
+    "id": "zh_0063"
+  },
+  {
+    "text": "秋駕轉兢懷，春冰彌軫慮。",
+    "author": "太宗皇帝",
+    "source": "執契靜三邊",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "seasons",
+      "change",
+      "perseverance"
+    ],
+    "id": "zh_0064"
+  },
+  {
+    "text": "書絕龍庭羽，烽休鳳穴戍。",
+    "author": "太宗皇帝",
+    "source": "執契靜三邊",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "change",
+      "hope",
+      "perseverance"
+    ],
+    "id": "zh_0065"
+  },
+  {
+    "text": "衣宵寢二難，食旰餐三懼。",
+    "author": "太宗皇帝",
+    "source": "執契靜三邊",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "work",
+      "perseverance",
+      "ambition"
+    ],
+    "id": "zh_0066"
+  },
+  {
+    "text": "翦暴興先廢，除兇存昔亡。",
+    "author": "太宗皇帝",
+    "source": "執契靜三邊",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "work",
+      "change",
+      "perseverance"
+    ],
+    "id": "zh_0067"
+  },
+  {
+    "text": "圓蓋歸天壤，方輿入地荒。",
+    "author": "太宗皇帝",
+    "source": "執契靜三邊",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "change"
+    ],
+    "id": "zh_0068"
+  },
+  {
+    "text": "孔海池京邑，雙河沼帝鄉。",
+    "author": "太宗皇帝",
+    "source": "執契靜三邊",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "home",
+      "nature",
+      "travel"
+    ],
+    "id": "zh_0069"
+  },
+  {
+    "text": "循躬思勵己，撫俗媿時康。",
+    "author": "太宗皇帝",
+    "source": "執契靜三邊",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "regret",
+      "perseverance",
+      "ambition"
+    ],
+    "id": "zh_0070"
+  },
+  {
+    "text": "元首佇鹽梅，股肱惟輔弼。",
+    "author": "太宗皇帝",
+    "source": "執契靜三邊",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "work",
+      "ambition",
+      "perseverance"
+    ],
+    "id": "zh_0071"
+  },
+  {
+    "text": "羽賢崆嶺四，翼聖襄城七。",
+    "author": "太宗皇帝",
+    "source": "執契靜三邊",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "work",
+      "friendship",
+      "ambition"
+    ],
+    "id": "zh_0072"
+  },
+  {
+    "text": "澆俗庶反淳，替文聊就質。",
+    "author": "太宗皇帝",
+    "source": "執契靜三邊",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "change",
+      "hope",
+      "ambition"
+    ],
+    "id": "zh_0073"
+  },
+  {
+    "text": "已知隆至道，共歡區宇一。",
+    "author": "太宗皇帝",
+    "source": "執契靜三邊",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "joy",
+      "hope",
+      "change"
+    ],
+    "id": "zh_0074"
+  },
+  {
+    "text": "條風開獻節，灰律動初陽。",
+    "author": "太宗皇帝",
+    "source": "正日臨朝",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "seasons",
+      "nature",
+      "hope"
+    ],
+    "id": "zh_0075"
+  },
+  {
+    "text": "百蠻奉遐賮，萬國朝未央。",
+    "author": "太宗皇帝",
+    "source": "正日臨朝",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "ambition",
+      "hope"
+    ],
+    "id": "zh_0076"
+  },
+  {
+    "text": "雖無舜禹迹，幸欣天地康。",
+    "author": "太宗皇帝",
+    "source": "正日臨朝",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "gratitude",
+      "joy"
+    ],
+    "id": "zh_0077"
+  },
+  {
+    "text": "車軌同八表，書文混四方。",
+    "author": "太宗皇帝",
+    "source": "正日臨朝",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "ambition",
+      "change"
+    ],
+    "id": "zh_0078"
+  },
+  {
+    "text": "赫奕儼冠蓋，紛綸盛服章。",
+    "author": "太宗皇帝",
+    "source": "正日臨朝",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "ambition",
+      "joy"
+    ],
+    "id": "zh_0079"
+  },
+  {
+    "text": "羽旄飛馳道，鐘鼓震巖廊。",
+    "author": "太宗皇帝",
+    "source": "正日臨朝",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "ambition",
+      "joy"
+    ],
+    "id": "zh_0080"
+  },
+  {
+    "text": "組練輝霞色，霜戟耀朝光。",
+    "author": "太宗皇帝",
+    "source": "正日臨朝",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "ambition",
+      "joy"
+    ],
+    "id": "zh_0081"
+  },
+  {
+    "text": "晨宵懷至理，終媿撫遐荒。",
+    "author": "太宗皇帝",
+    "source": "正日臨朝",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "regret",
+      "perseverance"
+    ],
+    "id": "zh_0082"
+  },
+  {
+    "text": "壽丘惟舊跡，酆邑乃前基。",
+    "author": "太宗皇帝",
+    "source": "幸武功慶善宮",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nostalgia",
+      "time"
+    ],
+    "id": "zh_0083"
+  },
+  {
+    "text": "粵予承累聖，懸弧亦在茲。",
+    "author": "太宗皇帝",
+    "source": "幸武功慶善宮",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "family",
+      "ambition"
+    ],
+    "id": "zh_0084"
+  },
+  {
+    "text": "弱齡逢運改，提劒鬱匡時。",
+    "author": "太宗皇帝",
+    "source": "幸武功慶善宮",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "turning-point",
+      "ambition",
+      "perseverance"
+    ],
+    "id": "zh_0085"
+  },
+  {
+    "text": "指麾八荒定，懷柔萬國夷。",
+    "author": "太宗皇帝",
+    "source": "幸武功慶善宮",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "ambition",
+      "perseverance"
+    ],
+    "id": "zh_0086"
+  },
+  {
+    "text": "梯山咸入款，駕海亦來思。",
+    "author": "太宗皇帝",
+    "source": "幸武功慶善宮",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "ambition",
+      "hope"
+    ],
+    "id": "zh_0087"
+  },
+  {
+    "text": "單于陪武帳，日逐衛文㮰。",
+    "author": "太宗皇帝",
+    "source": "幸武功慶善宮",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "ambition",
+      "perseverance"
+    ],
+    "id": "zh_0088"
+  },
+  {
+    "text": "端扆朝四岳，無爲任百司。",
+    "author": "太宗皇帝",
+    "source": "幸武功慶善宮",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "ambition",
+      "rest"
+    ],
+    "id": "zh_0089"
+  },
+  {
+    "text": "霜節明秋景，輕冰結水湄。",
+    "author": "太宗皇帝",
+    "source": "幸武功慶善宮",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "seasons"
+    ],
+    "id": "zh_0090"
+  },
+  {
+    "text": "芸黃徧原隰，禾穎積京畿。",
+    "author": "太宗皇帝",
+    "source": "幸武功慶善宮",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "gratitude",
+      "joy"
+    ],
+    "id": "zh_0091"
+  },
+  {
+    "text": "共樂還鄉宴，歡比大風詩。",
+    "author": "太宗皇帝",
+    "source": "幸武功慶善宮",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "home",
+      "joy",
+      "nostalgia"
+    ],
+    "id": "zh_0092"
+  },
+  {
+    "text": "代馬依朔吹，驚禽愁昔叢。",
+    "author": "太宗皇帝",
+    "source": "重幸武功",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nostalgia",
+      "grief",
+      "loneliness"
+    ],
+    "id": "zh_0093"
+  },
+  {
+    "text": "況茲承眷德，懷舊感深衷。",
+    "author": "太宗皇帝",
+    "source": "重幸武功",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nostalgia",
+      "gratitude"
+    ],
+    "id": "zh_0094"
+  },
+  {
+    "text": "積善忻餘慶，暢武悅成功。",
+    "author": "太宗皇帝",
+    "source": "重幸武功",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "gratitude",
+      "joy",
+      "ambition"
+    ],
+    "id": "zh_0095"
+  },
+  {
+    "text": "垂衣天下治，端拱車書同。",
+    "author": "太宗皇帝",
+    "source": "重幸武功",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "ambition",
+      "rest"
+    ],
+    "id": "zh_0096"
+  },
+  {
+    "text": "白水巡前跡，丹陵幸舊宮。",
+    "author": "太宗皇帝",
+    "source": "重幸武功",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nostalgia",
+      "time",
+      "home"
+    ],
+    "id": "zh_0097"
+  },
+  {
+    "text": "列筵歡故老，高宴聚新豐。",
+    "author": "太宗皇帝",
+    "source": "重幸武功",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "friendship",
+      "joy"
+    ],
+    "id": "zh_0098"
+  },
+  {
+    "text": "駐蹕撫田畯，回輿訪牧童。",
+    "author": "太宗皇帝",
+    "source": "重幸武功",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "rest",
+      "nature",
+      "gratitude"
+    ],
+    "id": "zh_0099"
+  },
+  {
+    "text": "瑞氣縈丹闕，祥煙散碧空。",
+    "author": "太宗皇帝",
+    "source": "重幸武功",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "hope",
+      "joy",
+      "nature"
+    ],
+    "id": "zh_0100"
+  },
+  {
+    "text": "孤嶼含霜白，遙山帶日紅。",
+    "author": "太宗皇帝",
+    "source": "重幸武功",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "solitude"
+    ],
+    "id": "zh_0101"
+  },
+  {
+    "text": "於焉歡擊筑，聊以詠南風。",
+    "author": "太宗皇帝",
+    "source": "重幸武功",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "joy"
+    ],
+    "id": "zh_0102"
+  },
+  {
+    "text": "昔年懷壯氣，提戈初仗節。",
+    "author": "太宗皇帝",
+    "source": "經破薛舉戰地",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "ambition",
+      "perseverance"
+    ],
+    "id": "zh_0103"
+  },
+  {
+    "text": "心隨朗日高，志與秋霜潔。",
+    "author": "太宗皇帝",
+    "source": "經破薛舉戰地",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "ambition"
+    ],
+    "id": "zh_0104"
+  },
+  {
+    "text": "移鋒驚電起，轉戰長河決。",
+    "author": "太宗皇帝",
+    "source": "經破薛舉戰地",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "ambition",
+      "perseverance"
+    ],
+    "id": "zh_0105"
+  },
+  {
+    "text": "營碎落星沈，陣卷橫雲裂。",
+    "author": "太宗皇帝",
+    "source": "經破薛舉戰地",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "ambition",
+      "perseverance"
+    ],
+    "id": "zh_0106"
+  },
+  {
+    "text": "一揮氛沴靜，再舉鯨鯢滅。",
+    "author": "太宗皇帝",
+    "source": "經破薛舉戰地",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "ambition",
+      "hope"
+    ],
+    "id": "zh_0107"
+  },
+  {
+    "text": "於茲俯舊原，屬目駐華軒。",
+    "author": "太宗皇帝",
+    "source": "經破薛舉戰地",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nostalgia",
+      "time"
+    ],
+    "id": "zh_0108"
+  },
+  {
+    "text": "沈沙無故迹，減竈有殘痕。",
+    "author": "太宗皇帝",
+    "source": "經破薛舉戰地",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nostalgia",
+      "change"
+    ],
+    "id": "zh_0109"
+  },
+  {
+    "text": "浪霞穿水淨，峰霧抱蓮昏。",
+    "author": "太宗皇帝",
+    "source": "經破薛舉戰地",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature"
+    ],
+    "id": "zh_0110"
+  },
+  {
+    "text": "世途亟流易，人事殊今昔。",
+    "author": "太宗皇帝",
+    "source": "經破薛舉戰地",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "change",
+      "time",
+      "nostalgia"
+    ],
+    "id": "zh_0111"
+  },
+  {
+    "text": "長想眺前蹤，撫躬聊自適。",
+    "author": "太宗皇帝",
+    "source": "經破薛舉戰地",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nostalgia",
+      "rest"
+    ],
+    "id": "zh_0112"
+  },
+  {
+    "text": "新豐停翠輦，譙邑駐鳴笳。",
+    "author": "太宗皇帝",
+    "source": "過舊宅二首 一",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "travel"
+    ],
+    "id": "zh_0113"
+  },
+  {
+    "text": "園荒一徑斷，苔古半階斜。",
+    "author": "太宗皇帝",
+    "source": "過舊宅二首 一",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "loss",
+      "nostalgia",
+      "nature"
+    ],
+    "id": "zh_0114"
+  },
+  {
+    "text": "前池消舊水，昔樹發今花。",
+    "author": "太宗皇帝",
+    "source": "過舊宅二首 一",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "change",
+      "time",
+      "nature"
+    ],
+    "id": "zh_0115"
+  },
+  {
+    "text": "一朝辭此地，四海遂爲家。",
+    "author": "太宗皇帝",
+    "source": "過舊宅二首 一",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "farewell",
+      "travel",
+      "home"
+    ],
+    "id": "zh_0116"
+  },
+  {
+    "text": "金輿巡白水，玉輦駐新豐。",
+    "author": "太宗皇帝",
+    "source": "過舊宅二首 二",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "travel"
+    ],
+    "id": "zh_0117"
+  },
+  {
+    "text": "紐落藤披架，花殘菊破叢。",
+    "author": "太宗皇帝",
+    "source": "過舊宅二首 二",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "loss",
+      "nature",
+      "change"
+    ],
+    "id": "zh_0118"
+  },
+  {
+    "text": "葉鋪荒草蔓，流竭半池空。",
+    "author": "太宗皇帝",
+    "source": "過舊宅二首 二",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "loss",
+      "nature",
+      "change"
+    ],
+    "id": "zh_0119"
+  },
+  {
+    "text": "紉珮蘭凋徑，舒圭葉翦桐。",
+    "author": "太宗皇帝",
+    "source": "過舊宅二首 二",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "loss",
+      "nature"
+    ],
+    "id": "zh_0120"
+  },
+  {
+    "text": "昔地一蕃內，今宅九圍中。",
+    "author": "太宗皇帝",
+    "source": "過舊宅二首 二",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "change",
+      "nostalgia"
+    ],
+    "id": "zh_0121"
+  },
+  {
+    "text": "架海波澄鏡，韜戈器反農。",
+    "author": "太宗皇帝",
+    "source": "過舊宅二首 二",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "rest",
+      "change",
+      "hope"
+    ],
+    "id": "zh_0122"
+  },
+  {
+    "text": "八表文同軌，無勞歌大風。",
+    "author": "太宗皇帝",
+    "source": "過舊宅二首 二",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "joy",
+      "gratitude"
+    ],
+    "id": "zh_0123"
+  },
+  {
+    "text": "慨然撫長劒，濟世豈邀名。",
+    "author": "太宗皇帝",
+    "source": "還陝述懷",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "ambition",
+      "perseverance"
+    ],
+    "id": "zh_0124"
+  },
+  {
+    "text": "星旂紛電舉，日羽肅天行。",
+    "author": "太宗皇帝",
+    "source": "還陝述懷",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "ambition",
+      "perseverance"
+    ],
+    "id": "zh_0125"
+  },
+  {
+    "text": "徧野屯萬騎，臨原駐五營。",
+    "author": "太宗皇帝",
+    "source": "還陝述懷",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [],
+    "id": "zh_0126"
+  },
+  {
+    "text": "登山麾武節，背水縱神兵。",
+    "author": "太宗皇帝",
+    "source": "還陝述懷",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [],
+    "id": "zh_0127"
+  },
+  {
+    "text": "在昔戎戈動，今來宇宙平。",
+    "author": "太宗皇帝",
+    "source": "還陝述懷",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [],
+    "id": "zh_0128"
+  },
+  {
+    "text": "崤函稱地險，襟帶壯兩京。",
+    "author": "太宗皇帝",
+    "source": "入潼關",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [],
+    "id": "zh_0129"
+  },
+  {
+    "text": "霜峰直臨道，冰河曲繞城。",
+    "author": "太宗皇帝",
+    "source": "入潼關",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [],
+    "id": "zh_0130"
+  },
+  {
+    "text": "古木參差影，寒猿斷續聲。",
+    "author": "太宗皇帝",
+    "source": "入潼關",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [],
+    "id": "zh_0131"
+  },
+  {
+    "text": "冠蓋往來合，風塵朝夕驚。",
+    "author": "太宗皇帝",
+    "source": "入潼關",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [],
+    "id": "zh_0132"
+  },
+  {
+    "text": "高談先馬度，僞曉預雞鳴。",
+    "author": "太宗皇帝",
+    "source": "入潼關",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [],
+    "id": "zh_0133"
+  },
+  {
+    "text": "棄繻懷遠志，封泥負壯情。",
+    "author": "太宗皇帝",
+    "source": "入潼關",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [],
+    "id": "zh_0134"
+  },
+  {
+    "text": "別有真人氣，安知名不名。",
+    "author": "太宗皇帝",
+    "source": "入潼關",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [],
+    "id": "zh_0135"
+  },
+  {
+    "text": "翠野駐戎軒，盧龍轉征斾。",
+    "author": "太宗皇帝",
+    "source": "於北平作",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [],
+    "id": "zh_0136"
+  },
+  {
+    "text": "遙山麗如綺，長流縈似帶。",
+    "author": "太宗皇帝",
+    "source": "於北平作",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [],
+    "id": "zh_0137"
+  },
+  {
+    "text": "海氣百重樓，巖松千丈蓋。",
+    "author": "太宗皇帝",
+    "source": "於北平作",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [],
+    "id": "zh_0138"
+  },
+  {
+    "text": "玄兔月初明，澄輝照遼碣。",
+    "author": "太宗皇帝",
+    "source": "遼城望月",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [],
+    "id": "zh_0139"
+  },
+  {
+    "text": "映雲光暫隱，隔樹花如綴。",
+    "author": "太宗皇帝",
+    "source": "遼城望月",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [],
+    "id": "zh_0140"
+  },
+  {
+    "text": "魄滿桂枝圓，輪虧鏡彩缺。",
+    "author": "太宗皇帝",
+    "source": "遼城望月",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [],
+    "id": "zh_0141"
+  },
+  {
+    "text": "臨城却影散，帶暈重圍結。",
+    "author": "太宗皇帝",
+    "source": "遼城望月",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [],
+    "id": "zh_0142"
+  },
+  {
+    "text": "駐蹕俯九都，停觀妖氛滅。",
+    "author": "太宗皇帝",
+    "source": "遼城望月",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [],
+    "id": "zh_0143"
+  },
+  {
+    "text": "碧原開霧隰，綺嶺峻霞城。",
+    "author": "太宗皇帝",
+    "source": "春日登陝州城樓俯眺原野迴丹碧綴煙霞密翠斑紅芳菲花柳即目川岫聊以命篇",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [],
+    "id": "zh_0144"
+  },
+  {
+    "text": "煙峰高下翠，日浪淺深明。",
+    "author": "太宗皇帝",
+    "source": "春日登陝州城樓俯眺原野迴丹碧綴煙霞密翠斑紅芳菲花柳即目川岫聊以命篇",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [],
+    "id": "zh_0145"
+  },
+  {
+    "text": "斑紅粧橤樹，圓青壓溜荆。",
+    "author": "太宗皇帝",
+    "source": "春日登陝州城樓俯眺原野迴丹碧綴煙霞密翠斑紅芳菲花柳即目川岫聊以命篇",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [],
+    "id": "zh_0146"
+  },
+  {
+    "text": "迹巖勞傅想，窺野訪莘情。",
+    "author": "太宗皇帝",
+    "source": "春日登陝州城樓俯眺原野迴丹碧綴煙霞密翠斑紅芳菲花柳即目川岫聊以命篇",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [],
+    "id": "zh_0147"
+  },
+  {
+    "text": "巨川何以濟，舟楫佇時英。",
+    "author": "太宗皇帝",
+    "source": "春日登陝州城樓俯眺原野迴丹碧綴煙霞密翠斑紅芳菲花柳即目川岫聊以命篇",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [],
+    "id": "zh_0148"
+  },
+  {
+    "text": "韶光開令序，淑氣動芳年。",
+    "author": "太宗皇帝",
+    "source": "春日玄武門宴羣臣",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [],
+    "id": "zh_0149"
+  },
+  {
+    "text": "駐輦華林側，高宴柏梁前。",
+    "author": "太宗皇帝",
+    "source": "春日玄武門宴羣臣",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [],
+    "id": "zh_0150"
+  },
+  {
+    "text": "紫庭文珮滿，丹墀衮紱連。",
+    "author": "太宗皇帝",
+    "source": "春日玄武門宴羣臣",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "ambition"
+    ],
+    "id": "zh_0151"
+  },
+  {
+    "text": "九夷簉瑤席，五狄列瓊筵。",
+    "author": "太宗皇帝",
+    "source": "春日玄武門宴羣臣",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "friendship",
+      "joy"
+    ],
+    "id": "zh_0152"
+  },
+  {
+    "text": "娛賓歌湛露，廣樂奏鈞天。",
+    "author": "太宗皇帝",
+    "source": "春日玄武門宴羣臣",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "joy",
+      "friendship"
+    ],
+    "id": "zh_0153"
+  },
+  {
+    "text": "清尊浮綠醑，雅曲韻朱弦。",
+    "author": "太宗皇帝",
+    "source": "春日玄武門宴羣臣",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "joy",
+      "friendship"
+    ],
+    "id": "zh_0154"
+  },
+  {
+    "text": "粵余君萬國，還慙撫八埏。",
+    "author": "太宗皇帝",
+    "source": "春日玄武門宴羣臣",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "ambition"
+    ],
+    "id": "zh_0155"
+  },
+  {
+    "text": "庶幾保貞固，虛己厲求賢。",
+    "author": "太宗皇帝",
+    "source": "春日玄武門宴羣臣",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "ambition",
+      "perseverance"
+    ],
+    "id": "zh_0156"
+  },
+  {
+    "text": "未央初壯漢，阿房昔侈秦。",
+    "author": "太宗皇帝",
+    "source": "登三臺言志",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "time",
+      "regret"
+    ],
+    "id": "zh_0157"
+  },
+  {
+    "text": "在危猶騁麗，居奢遂役人。",
+    "author": "太宗皇帝",
+    "source": "登三臺言志",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "regret",
+      "change"
+    ],
+    "id": "zh_0158"
+  },
+  {
+    "text": "豈如家四海，日宇罄朝倫。",
+    "author": "太宗皇帝",
+    "source": "登三臺言志",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "ambition",
+      "home"
+    ],
+    "id": "zh_0159"
+  },
+  {
+    "text": "扇天裁戶舊，砌地翦基新。",
+    "author": "太宗皇帝",
+    "source": "登三臺言志",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "work",
+      "change"
+    ],
+    "id": "zh_0160"
+  },
+  {
+    "text": "引月擎宵桂，飄雲逼曙鱗。",
+    "author": "太宗皇帝",
+    "source": "登三臺言志",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature"
+    ],
+    "id": "zh_0161"
+  },
+  {
+    "text": "露除光炫玉，霜闕映雕銀。",
+    "author": "太宗皇帝",
+    "source": "登三臺言志",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature"
+    ],
+    "id": "zh_0162"
+  },
+  {
+    "text": "舞接花梁燕，歌迎鳥路塵。",
+    "author": "太宗皇帝",
+    "source": "登三臺言志",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "joy",
+      "nature"
+    ],
+    "id": "zh_0163"
+  },
+  {
+    "text": "鏡池波太液，莊苑麗宜春。",
+    "author": "太宗皇帝",
+    "source": "登三臺言志",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "seasons"
+    ],
+    "id": "zh_0164"
+  },
+  {
+    "text": "作異甘泉日，停非路寢辰。",
+    "author": "太宗皇帝",
+    "source": "登三臺言志",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "time",
+      "change"
+    ],
+    "id": "zh_0165"
+  },
+  {
+    "text": "念勞慙逸己，居曠返勞神。",
+    "author": "太宗皇帝",
+    "source": "登三臺言志",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "regret",
+      "work"
+    ],
+    "id": "zh_0166"
+  },
+  {
+    "text": "所欣成大厦，宏材佇渭濱。",
+    "author": "太宗皇帝",
+    "source": "登三臺言志",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "joy",
+      "ambition"
+    ],
+    "id": "zh_0167"
+  },
+  {
+    "text": "楚王雲夢澤，漢帝長楊宮。",
+    "author": "太宗皇帝",
+    "source": "出獵",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "time"
+    ],
+    "id": "zh_0168"
+  },
+  {
+    "text": "豈若因農暇，閱武出轘嵩。",
+    "author": "太宗皇帝",
+    "source": "出獵",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "work"
+    ],
+    "id": "zh_0169"
+  },
+  {
+    "text": "三驅陳銳卒，七萃列材雄。",
+    "author": "太宗皇帝",
+    "source": "出獵",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "ambition"
+    ],
+    "id": "zh_0170"
+  },
+  {
+    "text": "寒野霜氛白，平原燒火紅。",
+    "author": "太宗皇帝",
+    "source": "出獵",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature"
+    ],
+    "id": "zh_0171"
+  },
+  {
+    "text": "琱戈夏服箭，羽騎綠沈弓。",
+    "author": "太宗皇帝",
+    "source": "出獵",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "work"
+    ],
+    "id": "zh_0172"
+  },
+  {
+    "text": "怖獸潛幽壑，驚禽散翠空。",
+    "author": "太宗皇帝",
+    "source": "出獵",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature"
+    ],
+    "id": "zh_0173"
+  },
+  {
+    "text": "長煙晦落景，灌木振嚴風。",
+    "author": "太宗皇帝",
+    "source": "出獵",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature"
+    ],
+    "id": "zh_0174"
+  },
+  {
+    "text": "所爲除民瘼，非是悅林叢。",
+    "author": "太宗皇帝",
+    "source": "出獵",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "ambition",
+      "work"
+    ],
+    "id": "zh_0175"
+  },
+  {
+    "text": "烈烈寒風起，慘慘飛雲浮。",
+    "author": "太宗皇帝",
+    "source": "冬狩",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "grief",
+      "solitude"
+    ],
+    "id": "zh_0176"
+  },
+  {
+    "text": "霜濃凝廣隰，冰厚結清流。",
+    "author": "太宗皇帝",
+    "source": "冬狩",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "seasons"
+    ],
+    "id": "zh_0177"
+  },
+  {
+    "text": "金鞍移上苑，玉勒騁平疇。",
+    "author": "太宗皇帝",
+    "source": "冬狩",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "ambition",
+      "joy"
+    ],
+    "id": "zh_0178"
+  },
+  {
+    "text": "旌旗四望合，罝羅一面求。",
+    "author": "太宗皇帝",
+    "source": "冬狩",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "ambition",
+      "perseverance"
+    ],
+    "id": "zh_0179"
+  },
+  {
+    "text": "楚踣爭兕殪，秦亡角鹿愁。",
+    "author": "太宗皇帝",
+    "source": "冬狩",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "loss",
+      "grief",
+      "nostalgia"
+    ],
+    "id": "zh_0180"
+  },
+  {
+    "text": "獸忙投密樹，鴻驚起礫洲。",
+    "author": "太宗皇帝",
+    "source": "冬狩",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "change"
+    ],
+    "id": "zh_0181"
+  },
+  {
+    "text": "騎斂原塵靜，戈迴嶺日收。",
+    "author": "太宗皇帝",
+    "source": "冬狩",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "rest",
+      "nature"
+    ],
+    "id": "zh_0182"
+  },
+  {
+    "text": "心非洛汭逸，意在渭濱游。",
+    "author": "太宗皇帝",
+    "source": "冬狩",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "ambition",
+      "travel",
+      "joy"
+    ],
+    "id": "zh_0183"
+  },
+  {
+    "text": "禽荒非所樂，撫轡更招憂。",
+    "author": "太宗皇帝",
+    "source": "冬狩",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "regret",
+      "grief",
+      "despair"
+    ],
+    "id": "zh_0184"
+  },
+  {
+    "text": "披襟眺滄海，憑軾翫春芳。",
+    "author": "太宗皇帝",
+    "source": "春日望海",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "joy",
+      "gratitude"
+    ],
+    "id": "zh_0185"
+  },
+  {
+    "text": "積流橫地紀，疎派引天潢。",
+    "author": "太宗皇帝",
+    "source": "春日望海",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "time"
+    ],
+    "id": "zh_0186"
+  },
+  {
+    "text": "仙氣凝三嶺，和風扇八荒。",
+    "author": "太宗皇帝",
+    "source": "春日望海",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "hope",
+      "joy"
+    ],
+    "id": "zh_0187"
+  },
+  {
+    "text": "拂潮雲布色，穿浪日舒光。",
+    "author": "太宗皇帝",
+    "source": "春日望海",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "joy",
+      "gratitude"
+    ],
+    "id": "zh_0188"
+  },
+  {
+    "text": "照岸花分彩，迷雲雁斷行。",
+    "author": "太宗皇帝",
+    "source": "春日望海",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "loneliness",
+      "nostalgia"
+    ],
+    "id": "zh_0189"
+  },
+  {
+    "text": "懷卑運深廣，持滿守靈長。",
+    "author": "太宗皇帝",
+    "source": "春日望海",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "perseverance",
+      "ambition",
+      "gratitude"
+    ],
+    "id": "zh_0190"
+  },
+  {
+    "text": "有形非易測，無源詎可量。",
+    "author": "太宗皇帝",
+    "source": "春日望海",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "time",
+      "change",
+      "perseverance"
+    ],
+    "id": "zh_0191"
+  },
+  {
+    "text": "洪濤經變野，翠島屢成桑。",
+    "author": "太宗皇帝",
+    "source": "春日望海",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "change",
+      "loss",
+      "time"
+    ],
+    "id": "zh_0192"
+  },
+  {
+    "text": "之罘思漢帝，碣石想秦皇。",
+    "author": "太宗皇帝",
+    "source": "春日望海",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nostalgia",
+      "time",
+      "loss"
+    ],
+    "id": "zh_0193"
+  },
+  {
+    "text": "霓裳非本意，端拱且圖王。",
+    "author": "太宗皇帝",
+    "source": "春日望海",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "ambition",
+      "perseverance",
+      "turning-point"
+    ],
+    "id": "zh_0194"
+  },
+  {
+    "text": "春蒐馳駿骨，總轡俯長河。",
+    "author": "太宗皇帝",
+    "source": "臨洛水",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "ambition",
+      "travel"
+    ],
+    "id": "zh_0195"
+  },
+  {
+    "text": "霞處流縈錦，風前瀁卷羅。",
+    "author": "太宗皇帝",
+    "source": "臨洛水",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "joy",
+      "gratitude"
+    ],
+    "id": "zh_0196"
+  },
+  {
+    "text": "水花翻照樹，堤蘭倒插波。",
+    "author": "太宗皇帝",
+    "source": "臨洛水",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "joy",
+      "gratitude"
+    ],
+    "id": "zh_0197"
+  },
+  {
+    "text": "豈必汾陰曲，秋雲發棹歌。",
+    "author": "太宗皇帝",
+    "source": "臨洛水",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "seasons",
+      "joy"
+    ],
+    "id": "zh_0198"
+  },
+  {
+    "text": "重巒俯渭水，碧嶂插遙天。",
+    "author": "太宗皇帝",
+    "source": "望終南山",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "time"
+    ],
+    "id": "zh_0199"
+  },
+  {
+    "text": "出紅扶嶺日，入翠貯巖煙。",
+    "author": "太宗皇帝",
+    "source": "望終南山",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "time",
+      "change"
+    ],
+    "id": "zh_0200"
+  },
+  {
+    "text": "疊松朝若夜，複岫闕疑全。",
+    "author": "太宗皇帝",
+    "source": "望終南山",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature"
+    ],
+    "id": "zh_0201"
+  },
+  {
+    "text": "對此恬千慮，無勞訪九仙。",
+    "author": "太宗皇帝",
+    "source": "望終南山",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "rest",
+      "nature"
+    ],
+    "id": "zh_0202"
+  },
+  {
+    "text": "高軒曖春色，邃閣媚朝光。",
+    "author": "太宗皇帝",
+    "source": "元日",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "seasons"
+    ],
+    "id": "zh_0203"
+  },
+  {
+    "text": "彤庭飛綵斾，翠幌曜明璫。",
+    "author": "太宗皇帝",
+    "source": "元日",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature"
+    ],
+    "id": "zh_0204"
+  },
+  {
+    "text": "恭己臨四極，垂衣馭八荒。",
+    "author": "太宗皇帝",
+    "source": "元日",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "ambition",
+      "work"
+    ],
+    "id": "zh_0205"
+  },
+  {
+    "text": "霜戟列丹陛，絲竹韻長廊。",
+    "author": "太宗皇帝",
+    "source": "元日",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "work",
+      "ambition"
+    ],
+    "id": "zh_0206"
+  },
+  {
+    "text": "穆矣熏風茂，康哉帝道昌。",
+    "author": "太宗皇帝",
+    "source": "元日",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "ambition",
+      "joy"
+    ],
+    "id": "zh_0207"
+  },
+  {
+    "text": "繼文遵後軌，循古鑒前王。",
+    "author": "太宗皇帝",
+    "source": "元日",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "work",
+      "ambition"
+    ],
+    "id": "zh_0208"
+  },
+  {
+    "text": "草秀故春色，梅豔昔年粧。",
+    "author": "太宗皇帝",
+    "source": "元日",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "nostalgia",
+      "seasons"
+    ],
+    "id": "zh_0209"
+  },
+  {
+    "text": "巨川思欲濟，終以寄舟航。",
+    "author": "太宗皇帝",
+    "source": "元日",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "ambition",
+      "hope",
+      "perseverance"
+    ],
+    "id": "zh_0210"
+  },
+  {
+    "text": "憑軒俯蘭閣，眺矚散靈襟。",
+    "author": "太宗皇帝",
+    "source": "初春登樓即目觀作述懷",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "rest"
+    ],
+    "id": "zh_0211"
+  },
+  {
+    "text": "綺峰含翠霧，照日蕊紅林。",
+    "author": "太宗皇帝",
+    "source": "初春登樓即目觀作述懷",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature"
+    ],
+    "id": "zh_0212"
+  },
+  {
+    "text": "鏤丹霞錦岫，殘素雪斑岑。",
+    "author": "太宗皇帝",
+    "source": "初春登樓即目觀作述懷",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "seasons"
+    ],
+    "id": "zh_0213"
+  },
+  {
+    "text": "拂浪堤垂柳，嬌花鳥續吟。",
+    "author": "太宗皇帝",
+    "source": "初春登樓即目觀作述懷",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "joy"
+    ],
+    "id": "zh_0214"
+  },
+  {
+    "text": "連甍豈一拱，衆幹如千尋。",
+    "author": "太宗皇帝",
+    "source": "初春登樓即目觀作述懷",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "work"
+    ],
+    "id": "zh_0215"
+  },
+  {
+    "text": "明非獨材力，終藉棟梁深。",
+    "author": "太宗皇帝",
+    "source": "初春登樓即目觀作述懷",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "work",
+      "perseverance"
+    ],
+    "id": "zh_0216"
+  },
+  {
+    "text": "彌懷矜樂志，更懼戒盈心。",
+    "author": "太宗皇帝",
+    "source": "初春登樓即目觀作述懷",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "ambition",
+      "turning-point"
+    ],
+    "id": "zh_0217"
+  },
+  {
+    "text": "媿制勞居逸，方規十產金。",
+    "author": "太宗皇帝",
+    "source": "初春登樓即目觀作述懷",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "work",
+      "ambition",
+      "regret"
+    ],
+    "id": "zh_0218"
+  },
+  {
+    "text": "寒隨窮律變，春逐鳥聲開。",
+    "author": "太宗皇帝",
+    "source": "首春",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "seasons",
+      "nature",
+      "change"
+    ],
+    "id": "zh_0219"
+  },
+  {
+    "text": "初風飄帶柳，晚雪間花梅。",
+    "author": "太宗皇帝",
+    "source": "首春",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "seasons"
+    ],
+    "id": "zh_0220"
+  },
+  {
+    "text": "碧林青舊竹，綠沼翠新苔。",
+    "author": "太宗皇帝",
+    "source": "首春",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "change"
+    ],
+    "id": "zh_0221"
+  },
+  {
+    "text": "芝田初雁去，綺樹巧鸎來。",
+    "author": "太宗皇帝",
+    "source": "首春",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "seasons"
+    ],
+    "id": "zh_0222"
+  },
+  {
+    "text": "晚霞聊自怡，初晴彌可喜。",
+    "author": "太宗皇帝",
+    "source": "初晴落景",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "joy",
+      "rest"
+    ],
+    "id": "zh_0223"
+  },
+  {
+    "text": "日晃百花色，風動千林翠。",
+    "author": "太宗皇帝",
+    "source": "初晴落景",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature"
+    ],
+    "id": "zh_0224"
+  },
+  {
+    "text": "池魚躍不同，園鳥聲還異。",
+    "author": "太宗皇帝",
+    "source": "初晴落景",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature"
+    ],
+    "id": "zh_0225"
+  },
+  {
+    "text": "寄言博通者，知予物外志。",
+    "author": "太宗皇帝",
+    "source": "初晴落景",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [],
+    "id": "zh_0226"
+  },
+  {
+    "text": "一朝春夏改，隔夜鳥花遷。",
+    "author": "太宗皇帝",
+    "source": "初夏",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [],
+    "id": "zh_0227"
+  },
+  {
+    "text": "陰陽深淺葉，曉夕重輕煙。",
+    "author": "太宗皇帝",
+    "source": "初夏",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [],
+    "id": "zh_0228"
+  },
+  {
+    "text": "哢鸎猶響殿，橫絲正網天。",
+    "author": "太宗皇帝",
+    "source": "初夏",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [],
+    "id": "zh_0229"
+  },
+  {
+    "text": "珮高蘭影接，綬細草紋連。",
+    "author": "太宗皇帝",
+    "source": "初夏",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [],
+    "id": "zh_0230"
+  },
+  {
+    "text": "碧鱗驚櫂側，玄燕舞檐前。",
+    "author": "太宗皇帝",
+    "source": "初夏",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [],
+    "id": "zh_0231"
+  },
+  {
+    "text": "何必汾陽處，始復有山泉。",
+    "author": "太宗皇帝",
+    "source": "初夏",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [],
+    "id": "zh_0232"
+  },
+  {
+    "text": "夏律昨留灰，秋箭今移晷。",
+    "author": "太宗皇帝",
+    "source": "度秋",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [],
+    "id": "zh_0233"
+  },
+  {
+    "text": "峨嵋岫初出，洞庭波漸起。",
+    "author": "太宗皇帝",
+    "source": "度秋",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [],
+    "id": "zh_0234"
+  },
+  {
+    "text": "桂白發幽巖，菊黃開灞涘。",
+    "author": "太宗皇帝",
+    "source": "度秋",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [],
+    "id": "zh_0235"
+  },
+  {
+    "text": "運流方可歎，含毫屬微理。",
+    "author": "太宗皇帝",
+    "source": "度秋",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [],
+    "id": "zh_0236"
+  },
+  {
+    "text": "寒驚薊門葉，秋發小山枝。",
+    "author": "太宗皇帝",
+    "source": "儀鸞殿早秋",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [],
+    "id": "zh_0237"
+  },
+  {
+    "text": "松陰背日轉，竹影避風移。",
+    "author": "太宗皇帝",
+    "source": "儀鸞殿早秋",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [],
+    "id": "zh_0238"
+  },
+  {
+    "text": "提壺菊花岸，高興芙蓉池。",
+    "author": "太宗皇帝",
+    "source": "儀鸞殿早秋",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [],
+    "id": "zh_0239"
+  },
+  {
+    "text": "欲知涼氣早，巢空燕不窺。",
+    "author": "太宗皇帝",
+    "source": "儀鸞殿早秋",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [],
+    "id": "zh_0240"
+  },
+  {
+    "text": "爽氣浮丹闕，秋光澹紫宮。",
+    "author": "太宗皇帝",
+    "source": "秋日即目",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [],
+    "id": "zh_0241"
+  },
+  {
+    "text": "衣碎荷疎影，花明菊點叢。",
+    "author": "太宗皇帝",
+    "source": "秋日即目",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [],
+    "id": "zh_0242"
+  },
+  {
+    "text": "袍輕低草露，蓋側舞松風。",
+    "author": "太宗皇帝",
+    "source": "秋日即目",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [],
+    "id": "zh_0243"
+  },
+  {
+    "text": "散岫飄雲葉，迷路飛煙鴻。",
+    "author": "太宗皇帝",
+    "source": "秋日即目",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [],
+    "id": "zh_0244"
+  },
+  {
+    "text": "砌冷蘭凋佩，閨寒樹隕桐。",
+    "author": "太宗皇帝",
+    "source": "秋日即目",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [],
+    "id": "zh_0245"
+  },
+  {
+    "text": "別鶴棲琴裏，離猿啼峽中。",
+    "author": "太宗皇帝",
+    "source": "秋日即目",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [],
+    "id": "zh_0246"
+  },
+  {
+    "text": "落野飛星箭，弦虛半月弓。",
+    "author": "太宗皇帝",
+    "source": "秋日即目",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [],
+    "id": "zh_0247"
+  },
+  {
+    "text": "芳菲夕霧起，暮色滿房櫳。",
+    "author": "太宗皇帝",
+    "source": "秋日即目",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [],
+    "id": "zh_0248"
+  },
+  {
+    "text": "山亭秋色滿，巖牖涼風度。",
+    "author": "太宗皇帝",
+    "source": "山閣晚秋",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [],
+    "id": "zh_0249"
+  },
+  {
+    "text": "疎蘭尚染煙，殘菊猶承露。",
+    "author": "太宗皇帝",
+    "source": "山閣晚秋",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [],
+    "id": "zh_0250"
+  },
+  {
+    "text": "古石衣新苔，新巢封古樹。",
+    "author": "太宗皇帝",
+    "source": "山閣晚秋",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "time",
+      "change"
+    ],
+    "id": "zh_0251"
+  },
+  {
+    "text": "歷覽情無極，咫尺輸光暮。",
+    "author": "太宗皇帝",
+    "source": "山閣晚秋",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "time",
+      "nostalgia",
+      "regret"
+    ],
+    "id": "zh_0252"
+  },
+  {
+    "text": "朝光浮燒野，霜華淨碧空。",
+    "author": "太宗皇帝",
+    "source": "秋暮言志",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "seasons"
+    ],
+    "id": "zh_0253"
+  },
+  {
+    "text": "結浪冰初鏡，在逕菊方叢。",
+    "author": "太宗皇帝",
+    "source": "秋暮言志",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "seasons"
+    ],
+    "id": "zh_0254"
+  },
+  {
+    "text": "約嶺煙深翠，分旗霞散紅。",
+    "author": "太宗皇帝",
+    "source": "秋暮言志",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature"
+    ],
+    "id": "zh_0255"
+  },
+  {
+    "text": "抽思滋泉側，飛想傅巖中。",
+    "author": "太宗皇帝",
+    "source": "秋暮言志",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "solitude",
+      "ambition"
+    ],
+    "id": "zh_0256"
+  },
+  {
+    "text": "碧昏朝合霧，丹卷暝韜霞。",
+    "author": "太宗皇帝",
+    "source": "喜雪",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "time"
+    ],
+    "id": "zh_0257"
+  },
+  {
+    "text": "結葉繁雲色，凝璚徧雪華。",
+    "author": "太宗皇帝",
+    "source": "喜雪",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "seasons"
+    ],
+    "id": "zh_0258"
+  },
+  {
+    "text": "光樓皎若粉，映幕集疑沙。",
+    "author": "太宗皇帝",
+    "source": "喜雪",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "seasons"
+    ],
+    "id": "zh_0259"
+  },
+  {
+    "text": "泛柳飛飛絮，粧梅片片花。",
+    "author": "太宗皇帝",
+    "source": "喜雪",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "seasons"
+    ],
+    "id": "zh_0260"
+  },
+  {
+    "text": "照璧臺圓月，飄珠箔穿露。",
+    "author": "太宗皇帝",
+    "source": "喜雪",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "time"
+    ],
+    "id": "zh_0261"
+  },
+  {
+    "text": "瑤潔短長階，玉藂高下樹。",
+    "author": "太宗皇帝",
+    "source": "喜雪",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature"
+    ],
+    "id": "zh_0262"
+  },
+  {
+    "text": "映桐珪累白，縈峰蓮抱素。",
+    "author": "太宗皇帝",
+    "source": "喜雪",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "seasons"
+    ],
+    "id": "zh_0263"
+  },
+  {
+    "text": "斷續氣將沈，徘徊歲云暮。",
+    "author": "太宗皇帝",
+    "source": "喜雪",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "time",
+      "nostalgia",
+      "loss"
+    ],
+    "id": "zh_0264"
+  },
+  {
+    "text": "懷珍媿隱德，表瑞佇豐年。",
+    "author": "太宗皇帝",
+    "source": "喜雪",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "gratitude",
+      "hope"
+    ],
+    "id": "zh_0265"
+  },
+  {
+    "text": "橤間飛禁苑，鶴處舞伊川。",
+    "author": "太宗皇帝",
+    "source": "喜雪",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature"
+    ],
+    "id": "zh_0266"
+  },
+  {
+    "text": "儻詠幽蘭曲，同懽黃竹篇。",
+    "author": "太宗皇帝",
+    "source": "喜雪",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "joy",
+      "friendship"
+    ],
+    "id": "zh_0267"
+  },
+  {
+    "text": "嶺銜宵月桂，珠穿曉露叢。",
+    "author": "太宗皇帝",
+    "source": "秋日斅庾信體",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "time"
+    ],
+    "id": "zh_0268"
+  },
+  {
+    "text": "蟬啼覺樹冷，螢火不溫風。",
+    "author": "太宗皇帝",
+    "source": "秋日斅庾信體",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "seasons"
+    ],
+    "id": "zh_0269"
+  },
+  {
+    "text": "花生圓菊橤，荷盡戲魚通。",
+    "author": "太宗皇帝",
+    "source": "秋日斅庾信體",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "seasons"
+    ],
+    "id": "zh_0270"
+  },
+  {
+    "text": "晨浦鳴飛雁，夕渚集栖鴻。",
+    "author": "太宗皇帝",
+    "source": "秋日斅庾信體",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "time"
+    ],
+    "id": "zh_0271"
+  },
+  {
+    "text": "颯颯高天吹，氛澄下熾空。",
+    "author": "太宗皇帝",
+    "source": "秋日斅庾信體",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature"
+    ],
+    "id": "zh_0272"
+  },
+  {
+    "text": "崇文時駐步，東觀還停輦。",
+    "author": "太宗皇帝",
+    "source": "賦尚書",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "work",
+      "rest"
+    ],
+    "id": "zh_0273"
+  },
+  {
+    "text": "輟膳翫三墳，暉燈披五典。",
+    "author": "太宗皇帝",
+    "source": "賦尚書",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "work",
+      "ambition"
+    ],
+    "id": "zh_0274"
+  },
+  {
+    "text": "寒心覩肉林，飛魄看沈湎。",
+    "author": "太宗皇帝",
+    "source": "賦尚書",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "regret",
+      "despair"
+    ],
+    "id": "zh_0275"
+  },
+  {
+    "text": "縱情昏主多，克己明君鮮。",
+    "author": "太宗皇帝",
+    "source": "賦尚書",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "regret",
+      "perseverance"
+    ],
+    "id": "zh_0276"
+  },
+  {
+    "text": "滅身資累惡，成名由積善。",
+    "author": "太宗皇帝",
+    "source": "賦尚書",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "perseverance"
+    ],
+    "id": "zh_0277"
+  },
+  {
+    "text": "既承百王末，戰兢隨歲轉。",
+    "author": "太宗皇帝",
+    "source": "賦尚書",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "time",
+      "change",
+      "perseverance"
+    ],
+    "id": "zh_0278"
+  },
+  {
+    "text": "二儀初創象，三才乃分位。",
+    "author": "太宗皇帝",
+    "source": "詠司馬彪續漢志",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "time"
+    ],
+    "id": "zh_0279"
+  },
+  {
+    "text": "非惟樹司牧，固亦垂文字。",
+    "author": "太宗皇帝",
+    "source": "詠司馬彪續漢志",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "work",
+      "change"
+    ],
+    "id": "zh_0280"
+  },
+  {
+    "text": "緜代更膺期，芳圖無輟記。",
+    "author": "太宗皇帝",
+    "source": "詠司馬彪續漢志",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "time",
+      "perseverance"
+    ],
+    "id": "zh_0281"
+  },
+  {
+    "text": "炎漢承君道，英謨纂神器。",
+    "author": "太宗皇帝",
+    "source": "詠司馬彪續漢志",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "ambition",
+      "work"
+    ],
+    "id": "zh_0282"
+  },
+  {
+    "text": "潛龍既可躍，逵兔奚難致。",
+    "author": "太宗皇帝",
+    "source": "詠司馬彪續漢志",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "hope",
+      "turning-point"
+    ],
+    "id": "zh_0283"
+  },
+  {
+    "text": "前史殫妙詞，後昆沈雅思。",
+    "author": "太宗皇帝",
+    "source": "詠司馬彪續漢志",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nostalgia",
+      "time"
+    ],
+    "id": "zh_0284"
+  },
+  {
+    "text": "書言揚盛跡，補闕興洪志。",
+    "author": "太宗皇帝",
+    "source": "詠司馬彪續漢志",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "ambition",
+      "perseverance"
+    ],
+    "id": "zh_0285"
+  },
+  {
+    "text": "川谷猶舊途，郡國開新意。",
+    "author": "太宗皇帝",
+    "source": "詠司馬彪續漢志",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "change",
+      "nature"
+    ],
+    "id": "zh_0286"
+  },
+  {
+    "text": "梅山未覺朽，穀水誰云異。",
+    "author": "太宗皇帝",
+    "source": "詠司馬彪續漢志",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "nostalgia"
+    ],
+    "id": "zh_0287"
+  },
+  {
+    "text": "車服隨名表，文物因時置。",
+    "author": "太宗皇帝",
+    "source": "詠司馬彪續漢志",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "time",
+      "change"
+    ],
+    "id": "zh_0288"
+  },
+  {
+    "text": "鳳戟翼康衢，鑾輿總柔轡。",
+    "author": "太宗皇帝",
+    "source": "詠司馬彪續漢志",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "work",
+      "ambition"
+    ],
+    "id": "zh_0289"
+  },
+  {
+    "text": "清濁必能澄，洪纖幸無棄。",
+    "author": "太宗皇帝",
+    "source": "詠司馬彪續漢志",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "perseverance",
+      "hope"
+    ],
+    "id": "zh_0290"
+  },
+  {
+    "text": "觀儀不失序，遵禮方由事。",
+    "author": "太宗皇帝",
+    "source": "詠司馬彪續漢志",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "work",
+      "perseverance"
+    ],
+    "id": "zh_0291"
+  },
+  {
+    "text": "政宣竹律和，時平玉條備。",
+    "author": "太宗皇帝",
+    "source": "詠司馬彪續漢志",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "work",
+      "joy"
+    ],
+    "id": "zh_0292"
+  },
+  {
+    "text": "文囿雕奇彩，藝門蘊深致。",
+    "author": "太宗皇帝",
+    "source": "詠司馬彪續漢志",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "work",
+      "ambition"
+    ],
+    "id": "zh_0293"
+  },
+  {
+    "text": "雲飛星共流，風揚月兼至。",
+    "author": "太宗皇帝",
+    "source": "詠司馬彪續漢志",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "time"
+    ],
+    "id": "zh_0294"
+  },
+  {
+    "text": "類禋遵令典，壇壝資良地。",
+    "author": "太宗皇帝",
+    "source": "詠司馬彪續漢志",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "work",
+      "gratitude"
+    ],
+    "id": "zh_0295"
+  },
+  {
+    "text": "五勝竟無違，百司誠有庇。",
+    "author": "太宗皇帝",
+    "source": "詠司馬彪續漢志",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "hope",
+      "perseverance"
+    ],
+    "id": "zh_0296"
+  },
+  {
+    "text": "粵予承暇景，談叢引泉祕。",
+    "author": "太宗皇帝",
+    "source": "詠司馬彪續漢志",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "rest",
+      "joy",
+      "nature"
+    ],
+    "id": "zh_0297"
+  },
+  {
+    "text": "討論窮義府，看覈披經笥。",
+    "author": "太宗皇帝",
+    "source": "詠司馬彪續漢志",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "work",
+      "ambition",
+      "perseverance"
+    ],
+    "id": "zh_0298"
+  },
+  {
+    "text": "大辨良難仰，小學終先匱。",
+    "author": "太宗皇帝",
+    "source": "詠司馬彪續漢志",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "work",
+      "regret"
+    ],
+    "id": "zh_0299"
+  },
+  {
+    "text": "聞道諒知榮，含毫孰忘媿。",
+    "author": "太宗皇帝",
+    "source": "詠司馬彪續漢志",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "gratitude",
+      "regret",
+      "perseverance"
+    ],
+    "id": "zh_0300"
+  },
+  {
+    "text": "蕭條起關塞，搖颺下蓬瀛。",
+    "author": "太宗皇帝",
+    "source": "詠風",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "loneliness",
+      "travel",
+      "nature"
+    ],
+    "id": "zh_0301"
+  },
+  {
+    "text": "拂林花亂彩，響谷鳥分聲。",
+    "author": "太宗皇帝",
+    "source": "詠風",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "joy"
+    ],
+    "id": "zh_0302"
+  },
+  {
+    "text": "披雲羅影散，泛水織文生。",
+    "author": "太宗皇帝",
+    "source": "詠風",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "change"
+    ],
+    "id": "zh_0303"
+  },
+  {
+    "text": "勞歌大風曲，威加四海清。",
+    "author": "太宗皇帝",
+    "source": "詠風",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "work",
+      "ambition",
+      "perseverance"
+    ],
+    "id": "zh_0304"
+  },
+  {
+    "text": "罩雲飄遠岫，噴雨泛長河。",
+    "author": "太宗皇帝",
+    "source": "詠雨",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature"
+    ],
+    "id": "zh_0305"
+  },
+  {
+    "text": "低飛昏嶺腹，斜足灑巖阿。",
+    "author": "太宗皇帝",
+    "source": "詠雨",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "solitude"
+    ],
+    "id": "zh_0306"
+  },
+  {
+    "text": "泫叢珠締葉，起溜鏡圖波。",
+    "author": "太宗皇帝",
+    "source": "詠雨",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "joy"
+    ],
+    "id": "zh_0307"
+  },
+  {
+    "text": "濛柳添絲密，含吹織空羅。",
+    "author": "太宗皇帝",
+    "source": "詠雨",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "change"
+    ],
+    "id": "zh_0308"
+  },
+  {
+    "text": "潔野凝晨曜，裝墀帶夕暉。",
+    "author": "太宗皇帝",
+    "source": "詠雪",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "time",
+      "seasons"
+    ],
+    "id": "zh_0309"
+  },
+  {
+    "text": "集條分樹玉，拂浪影泉璣。",
+    "author": "太宗皇帝",
+    "source": "詠雪",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "joy"
+    ],
+    "id": "zh_0310"
+  },
+  {
+    "text": "色灑妝臺粉，花飄綺席衣。",
+    "author": "太宗皇帝",
+    "source": "詠雪",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nostalgia",
+      "joy"
+    ],
+    "id": "zh_0311"
+  },
+  {
+    "text": "入扇縈離匣，點素皎殘機。",
+    "author": "太宗皇帝",
+    "source": "詠雪",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "loneliness",
+      "regret"
+    ],
+    "id": "zh_0312"
+  },
+  {
+    "text": "北闕三春晚，南榮九夏初。",
+    "author": "太宗皇帝",
+    "source": "賦得夏首啓節",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "time",
+      "seasons",
+      "change"
+    ],
+    "id": "zh_0313"
+  },
+  {
+    "text": "黃鶯弄漸變，翠林花落餘。",
+    "author": "太宗皇帝",
+    "source": "賦得夏首啓節",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "change",
+      "nostalgia"
+    ],
+    "id": "zh_0314"
+  },
+  {
+    "text": "瀑流還響谷，猿啼自應虛。",
+    "author": "太宗皇帝",
+    "source": "賦得夏首啓節",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "solitude",
+      "loneliness"
+    ],
+    "id": "zh_0315"
+  },
+  {
+    "text": "早荷向心卷，長楊就影舒。",
+    "author": "太宗皇帝",
+    "source": "賦得夏首啓節",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "rest"
+    ],
+    "id": "zh_0316"
+  },
+  {
+    "text": "此時歡不極，調軫坐相於。",
+    "author": "太宗皇帝",
+    "source": "賦得夏首啓節",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "joy",
+      "friendship"
+    ],
+    "id": "zh_0317"
+  },
+  {
+    "text": "紅輪不暫駐，烏飛豈復停。",
+    "author": "太宗皇帝",
+    "source": "賦得白日半西山",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "time",
+      "change",
+      "perseverance"
+    ],
+    "id": "zh_0318"
+  },
+  {
+    "text": "岑霞漸漸落，溪陰寸寸生。",
+    "author": "太宗皇帝",
+    "source": "賦得白日半西山",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "time",
+      "change"
+    ],
+    "id": "zh_0319"
+  },
+  {
+    "text": "藿葉隨光轉，葵心逐照傾。",
+    "author": "太宗皇帝",
+    "source": "賦得白日半西山",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "perseverance"
+    ],
+    "id": "zh_0320"
+  },
+  {
+    "text": "晚煙含樹色，棲鳥雜流聲。",
+    "author": "太宗皇帝",
+    "source": "賦得白日半西山",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "rest",
+      "solitude"
+    ],
+    "id": "zh_0321"
+  },
+  {
+    "text": "高軒臨碧渚，飛檐迥架空。",
+    "author": "太宗皇帝",
+    "source": "置酒坐飛閣",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "travel"
+    ],
+    "id": "zh_0322"
+  },
+  {
+    "text": "餘花攢鏤檻，殘柳散雕櫳。",
+    "author": "太宗皇帝",
+    "source": "置酒坐飛閣",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "nostalgia",
+      "loss"
+    ],
+    "id": "zh_0323"
+  },
+  {
+    "text": "岸菊初含橤，園梨始帶紅。",
+    "author": "太宗皇帝",
+    "source": "置酒坐飛閣",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "joy"
+    ],
+    "id": "zh_0324"
+  },
+  {
+    "text": "莫慮崑山暗，還共盡杯中。",
+    "author": "太宗皇帝",
+    "source": "置酒坐飛閣",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "friendship",
+      "joy",
+      "perseverance"
+    ],
+    "id": "zh_0325"
+  },
+  {
+    "text": "結伴戲方塘，攜手上雕航。",
+    "author": "太宗皇帝",
+    "source": "采芙蓉",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "friendship",
+      "joy"
+    ],
+    "id": "zh_0326"
+  },
+  {
+    "text": "船移分細浪，風散動浮香。",
+    "author": "太宗皇帝",
+    "source": "采芙蓉",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature"
+    ],
+    "id": "zh_0327"
+  },
+  {
+    "text": "遊鸎無定曲，驚鳧有亂行。",
+    "author": "太宗皇帝",
+    "source": "采芙蓉",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature"
+    ],
+    "id": "zh_0328"
+  },
+  {
+    "text": "蓮稀釧聲斷，水廣櫂歌長。",
+    "author": "太宗皇帝",
+    "source": "采芙蓉",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "solitude"
+    ],
+    "id": "zh_0329"
+  },
+  {
+    "text": "棲烏還密樹，泛流歸建章。",
+    "author": "太宗皇帝",
+    "source": "采芙蓉",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "home"
+    ],
+    "id": "zh_0330"
+  },
+  {
+    "text": "華林滿芳景，洛陽徧陽春。",
+    "author": "太宗皇帝",
+    "source": "賦得櫻桃",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "joy"
+    ],
+    "id": "zh_0331"
+  },
+  {
+    "text": "朱顏含遠日，翠色影長津。",
+    "author": "太宗皇帝",
+    "source": "賦得櫻桃",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "time"
+    ],
+    "id": "zh_0332"
+  },
+  {
+    "text": "喬柯囀嬌鳥，低枝映美人。",
+    "author": "太宗皇帝",
+    "source": "賦得櫻桃",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "joy"
+    ],
+    "id": "zh_0333"
+  },
+  {
+    "text": "昔作園中實，今來席上珍。",
+    "author": "太宗皇帝",
+    "source": "賦得櫻桃",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "change",
+      "regret"
+    ],
+    "id": "zh_0334"
+  },
+  {
+    "text": "玉衡流桂圃，成蹊正可尋。",
+    "author": "太宗皇帝",
+    "source": "賦得李",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature"
+    ],
+    "id": "zh_0335"
+  },
+  {
+    "text": "鸎啼密葉外，蝶戲脆花心。",
+    "author": "太宗皇帝",
+    "source": "賦得李",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "joy"
+    ],
+    "id": "zh_0336"
+  },
+  {
+    "text": "麗景光朝彩，輕霞散夕陰。",
+    "author": "太宗皇帝",
+    "source": "賦得李",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "time"
+    ],
+    "id": "zh_0337"
+  },
+  {
+    "text": "暫顧暉章側，還眺靈山林。",
+    "author": "太宗皇帝",
+    "source": "賦得李",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature"
+    ],
+    "id": "zh_0338"
+  },
+  {
+    "text": "岸曲非千里，橋斜異七星。",
+    "author": "太宗皇帝",
+    "source": "賦得浮橋",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature"
+    ],
+    "id": "zh_0339"
+  },
+  {
+    "text": "暫低逢輦度，還高值浪驚。",
+    "author": "太宗皇帝",
+    "source": "賦得浮橋",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "change",
+      "turning-point"
+    ],
+    "id": "zh_0340"
+  },
+  {
+    "text": "水搖文鷁動，纜轉錦花縈。",
+    "author": "太宗皇帝",
+    "source": "賦得浮橋",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature"
+    ],
+    "id": "zh_0341"
+  },
+  {
+    "text": "遠近隨輪影，輕重應人行。",
+    "author": "太宗皇帝",
+    "source": "賦得浮橋",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "travel",
+      "work"
+    ],
+    "id": "zh_0342"
+  },
+  {
+    "text": "回鑾遊福地，極目玩芳晨。",
+    "author": "太宗皇帝",
+    "source": "謁幷州大興國寺詩",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "joy",
+      "nature"
+    ],
+    "id": "zh_0343"
+  },
+  {
+    "text": "梵鐘交二響，法日轉雙輪。",
+    "author": "太宗皇帝",
+    "source": "謁幷州大興國寺詩",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "hope",
+      "change"
+    ],
+    "id": "zh_0344"
+  },
+  {
+    "text": "寶剎遙承露，天花近足春。",
+    "author": "太宗皇帝",
+    "source": "謁幷州大興國寺詩",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "hope",
+      "nature"
+    ],
+    "id": "zh_0345"
+  },
+  {
+    "text": "未佩蘭猶小，無絲柳尚新。",
+    "author": "太宗皇帝",
+    "source": "謁幷州大興國寺詩",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "change"
+    ],
+    "id": "zh_0346"
+  },
+  {
+    "text": "圓光低月殿，碎影亂風筠。",
+    "author": "太宗皇帝",
+    "source": "謁幷州大興國寺詩",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "solitude"
+    ],
+    "id": "zh_0347"
+  },
+  {
+    "text": "對此留餘想，超然離俗塵。",
+    "author": "太宗皇帝",
+    "source": "謁幷州大興國寺詩",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "hope",
+      "solitude",
+      "change"
+    ],
+    "id": "zh_0348"
+  },
+  {
+    "text": "拂霞疑電落，騰虛狀寫虹。",
+    "author": "太宗皇帝",
+    "source": "詠興國寺佛殿前幡",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "joy"
+    ],
+    "id": "zh_0349"
+  },
+  {
+    "text": "屈伸煙霧裏，低舉白雲中。",
+    "author": "太宗皇帝",
+    "source": "詠興國寺佛殿前幡",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "change"
+    ],
+    "id": "zh_0350"
+  },
+  {
+    "text": "紛披乍依迥，掣曳或隨風。",
+    "author": "太宗皇帝",
+    "source": "詠興國寺佛殿前幡",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature"
+    ],
+    "id": "zh_0351"
+  },
+  {
+    "text": "念茲輕薄質，無翅強搖空。",
+    "author": "太宗皇帝",
+    "source": "詠興國寺佛殿前幡",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "loss",
+      "regret"
+    ],
+    "id": "zh_0352"
+  },
+  {
+    "text": "閶闔總金鞍，上林移玉輦。",
+    "author": "太宗皇帝",
+    "source": "望送魏徵葬",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nostalgia"
+    ],
+    "id": "zh_0353"
+  },
+  {
+    "text": "野郊愴新別，河橋非舊餞。",
+    "author": "太宗皇帝",
+    "source": "望送魏徵葬",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "grief",
+      "farewell",
+      "nostalgia"
+    ],
+    "id": "zh_0354"
+  },
+  {
+    "text": "慘日映峰沈，愁雲隨蓋轉。",
+    "author": "太宗皇帝",
+    "source": "望送魏徵葬",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "grief",
+      "despair"
+    ],
+    "id": "zh_0355"
+  },
+  {
+    "text": "哀笳時斷續，悲旌乍舒卷。",
+    "author": "太宗皇帝",
+    "source": "望送魏徵葬",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "grief"
+    ],
+    "id": "zh_0356"
+  },
+  {
+    "text": "望望情何極，浪浪淚空泫。",
+    "author": "太宗皇帝",
+    "source": "望送魏徵葬",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "grief",
+      "despair"
+    ],
+    "id": "zh_0357"
+  },
+  {
+    "text": "無復昔時人，芳春共誰遣。",
+    "author": "太宗皇帝",
+    "source": "望送魏徵葬",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "loneliness",
+      "nostalgia",
+      "loss"
+    ],
+    "id": "zh_0358"
+  },
+  {
+    "text": "鑿門初奉律，仗戰始臨戎。",
+    "author": "太宗皇帝",
+    "source": "傷遼東戰亡",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "ambition",
+      "turning-point"
+    ],
+    "id": "zh_0359"
+  },
+  {
+    "text": "振鱗方躍浪，騁翼正凌風。",
+    "author": "太宗皇帝",
+    "source": "傷遼東戰亡",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "ambition",
+      "hope"
+    ],
+    "id": "zh_0360"
+  },
+  {
+    "text": "未展六奇術，先虧一簣功。",
+    "author": "太宗皇帝",
+    "source": "傷遼東戰亡",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "regret",
+      "loss"
+    ],
+    "id": "zh_0361"
+  },
+  {
+    "text": "防身豈乏智，殉命有餘忠。",
+    "author": "太宗皇帝",
+    "source": "傷遼東戰亡",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "perseverance",
+      "loss"
+    ],
+    "id": "zh_0362"
+  },
+  {
+    "text": "晦魄移中律，凝暄起麗城。",
+    "author": "太宗皇帝",
+    "source": "月晦",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "seasons"
+    ],
+    "id": "zh_0363"
+  },
+  {
+    "text": "罩雲朝蓋上，穿露曉珠呈。",
+    "author": "太宗皇帝",
+    "source": "月晦",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature"
+    ],
+    "id": "zh_0364"
+  },
+  {
+    "text": "笑樹花分色，啼枝鳥合聲。",
+    "author": "太宗皇帝",
+    "source": "月晦",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "joy",
+      "nature"
+    ],
+    "id": "zh_0365"
+  },
+  {
+    "text": "披襟歡眺望，極目暢春情。",
+    "author": "太宗皇帝",
+    "source": "月晦",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "joy",
+      "nature",
+      "seasons"
+    ],
+    "id": "zh_0366"
+  },
+  {
+    "text": "秋光凝翠嶺，涼吹肅離宮。",
+    "author": "太宗皇帝",
+    "source": "秋日翠微宮",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "seasons",
+      "nature"
+    ],
+    "id": "zh_0367"
+  },
+  {
+    "text": "荷疎一蓋缺，樹冷半帷空。",
+    "author": "太宗皇帝",
+    "source": "秋日翠微宮",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "seasons",
+      "nature",
+      "loss"
+    ],
+    "id": "zh_0368"
+  },
+  {
+    "text": "側陣移鴻影，圓花釘菊叢。",
+    "author": "太宗皇帝",
+    "source": "秋日翠微宮",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "seasons"
+    ],
+    "id": "zh_0369"
+  },
+  {
+    "text": "攄懷俗塵外，高眺白雲中。",
+    "author": "太宗皇帝",
+    "source": "秋日翠微宮",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "solitude",
+      "nature"
+    ],
+    "id": "zh_0370"
+  },
+  {
+    "text": "斜廊連綺閣，初月照宵幃。",
+    "author": "太宗皇帝",
+    "source": "初秋夜坐",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "solitude"
+    ],
+    "id": "zh_0371"
+  },
+  {
+    "text": "塞冷鴻飛疾，園秋蟬噪遲。",
+    "author": "太宗皇帝",
+    "source": "初秋夜坐",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "seasons",
+      "nature"
+    ],
+    "id": "zh_0372"
+  },
+  {
+    "text": "露結林疎葉，寒輕菊吐滋。",
+    "author": "太宗皇帝",
+    "source": "初秋夜坐",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "seasons"
+    ],
+    "id": "zh_0373"
+  },
+  {
+    "text": "愁心逢此節，長歎獨含悲。",
+    "author": "太宗皇帝",
+    "source": "初秋夜坐",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "grief",
+      "loneliness"
+    ],
+    "id": "zh_0374"
+  },
+  {
+    "text": "菊散金風起，荷疎玉露圓。",
+    "author": "太宗皇帝",
+    "source": "秋日二首 一",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "seasons"
+    ],
+    "id": "zh_0375"
+  },
+  {
+    "text": "將秋數行雁，離夏幾林蟬。",
+    "author": "太宗皇帝",
+    "source": "秋日二首 一",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "seasons",
+      "change",
+      "farewell"
+    ],
+    "id": "zh_0376"
+  },
+  {
+    "text": "雲凝愁半嶺，霞碎纈高天。",
+    "author": "太宗皇帝",
+    "source": "秋日二首 一",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "grief"
+    ],
+    "id": "zh_0377"
+  },
+  {
+    "text": "還似成都望，直見峨眉前。",
+    "author": "太宗皇帝",
+    "source": "秋日二首 一",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nostalgia",
+      "travel"
+    ],
+    "id": "zh_0378"
+  },
+  {
+    "text": "爽氣澄蘭沼，秋風動桂林。",
+    "author": "太宗皇帝",
+    "source": "秋日二首 二",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "seasons",
+      "nature"
+    ],
+    "id": "zh_0379"
+  },
+  {
+    "text": "露凝千片玉，菊散一叢金。",
+    "author": "太宗皇帝",
+    "source": "秋日二首 二",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "seasons",
+      "nature"
+    ],
+    "id": "zh_0380"
+  },
+  {
+    "text": "日岫高低影，雲空點綴陰。",
+    "author": "太宗皇帝",
+    "source": "秋日二首 二",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature"
+    ],
+    "id": "zh_0381"
+  },
+  {
+    "text": "蓬瀛不可望，泉石且娛心。",
+    "author": "太宗皇帝",
+    "source": "秋日二首 二",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "joy"
+    ],
+    "id": "zh_0382"
+  },
+  {
+    "text": "雕宮靜龍漏，綺閣宴公侯。",
+    "author": "太宗皇帝",
+    "source": "冬宵各爲四韻",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "joy",
+      "friendship"
+    ],
+    "id": "zh_0383"
+  },
+  {
+    "text": "珠簾燭燄動，繡柱月光浮。",
+    "author": "太宗皇帝",
+    "source": "冬宵各爲四韻",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "joy"
+    ],
+    "id": "zh_0384"
+  },
+  {
+    "text": "雲起將歌發，風停與管遒。",
+    "author": "太宗皇帝",
+    "source": "冬宵各爲四韻",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "joy",
+      "friendship"
+    ],
+    "id": "zh_0385"
+  },
+  {
+    "text": "石鯨分玉溜，劫燼隱平沙。",
+    "author": "太宗皇帝",
+    "source": "冬日臨昆明池",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "time",
+      "loss",
+      "change"
+    ],
+    "id": "zh_0386"
+  },
+  {
+    "text": "柳影冰無葉，梅心凍有花。",
+    "author": "太宗皇帝",
+    "source": "冬日臨昆明池",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "seasons",
+      "nature",
+      "perseverance"
+    ],
+    "id": "zh_0387"
+  },
+  {
+    "text": "寒野凝朝霧，霜天散夕霞。",
+    "author": "太宗皇帝",
+    "source": "冬日臨昆明池",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "seasons",
+      "nature"
+    ],
+    "id": "zh_0388"
+  },
+  {
+    "text": "歡情猶未極，落景遽西斜。",
+    "author": "太宗皇帝",
+    "source": "冬日臨昆明池",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "time",
+      "joy"
+    ],
+    "id": "zh_0389"
+  },
+  {
+    "text": "凍雲宵徧嶺，素雪曉凝華。",
+    "author": "太宗皇帝",
+    "source": "望雪",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "seasons",
+      "nature"
+    ],
+    "id": "zh_0390"
+  },
+  {
+    "text": "入牖千重碎，迎風一半斜。",
+    "author": "太宗皇帝",
+    "source": "望雪",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "seasons",
+      "nature"
+    ],
+    "id": "zh_0391"
+  },
+  {
+    "text": "不妝空散粉，無樹獨飄花。",
+    "author": "太宗皇帝",
+    "source": "望雪",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "seasons",
+      "nature"
+    ],
+    "id": "zh_0392"
+  },
+  {
+    "text": "縈空慙夕照，破彩謝晨霞。",
+    "author": "太宗皇帝",
+    "source": "望雪",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "seasons",
+      "nature"
+    ],
+    "id": "zh_0393"
+  },
+  {
+    "text": "暮景斜芳殿，年華麗綺宮。",
+    "author": "太宗皇帝",
+    "source": "守歲",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "time"
+    ],
+    "id": "zh_0394"
+  },
+  {
+    "text": "寒辭去冬雪，暖帶入春風。",
+    "author": "太宗皇帝",
+    "source": "守歲",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "seasons",
+      "change"
+    ],
+    "id": "zh_0395"
+  },
+  {
+    "text": "階馥舒梅素，盤花卷燭紅。",
+    "author": "太宗皇帝",
+    "source": "守歲",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "seasons",
+      "joy"
+    ],
+    "id": "zh_0396"
+  },
+  {
+    "text": "共歡新故歲，迎送一宵中。",
+    "author": "太宗皇帝",
+    "source": "守歲",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "turning-point",
+      "joy",
+      "time"
+    ],
+    "id": "zh_0397"
+  },
+  {
+    "text": "歲陰窮暮紀，獻節啓新芳。",
+    "author": "太宗皇帝",
+    "source": "除夜",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "time",
+      "change",
+      "turning-point"
+    ],
+    "id": "zh_0398"
+  },
+  {
+    "text": "冬盡今宵促，年開明日長。",
+    "author": "太宗皇帝",
+    "source": "除夜",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "seasons",
+      "time",
+      "change"
+    ],
+    "id": "zh_0399"
+  },
+  {
+    "text": "冰消出鏡水，梅散入風香。",
+    "author": "太宗皇帝",
+    "source": "除夜",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "seasons",
+      "nature",
+      "change"
+    ],
+    "id": "zh_0400"
+  },
+  {
+    "text": "對此歡終宴，傾壺待曙光。",
+    "author": "太宗皇帝",
+    "source": "除夜",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "joy",
+      "hope",
+      "turning-point"
+    ],
+    "id": "zh_0401"
+  },
+  {
+    "text": "和氣吹綠野，梅雨灑芳田。",
+    "author": "太宗皇帝",
+    "source": "詠雨",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "seasons"
+    ],
+    "id": "zh_0402"
+  },
+  {
+    "text": "新流添舊澗，宿霧足朝煙。",
+    "author": "太宗皇帝",
+    "source": "詠雨",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "change"
+    ],
+    "id": "zh_0403"
+  },
+  {
+    "text": "雁溼行無次，花霑色更鮮。",
+    "author": "太宗皇帝",
+    "source": "詠雨",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "joy"
+    ],
+    "id": "zh_0404"
+  },
+  {
+    "text": "對此欣登歲，披襟弄五弦。",
+    "author": "太宗皇帝",
+    "source": "詠雨",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "joy",
+      "gratitude",
+      "time"
+    ],
+    "id": "zh_0405"
+  },
+  {
+    "text": "翠樓含曉霧，蓮峰帶晚雲。",
+    "author": "太宗皇帝",
+    "source": "賦得含峰雲",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "time"
+    ],
+    "id": "zh_0406"
+  },
+  {
+    "text": "玉葉依巖聚，金枝觸石分。",
+    "author": "太宗皇帝",
+    "source": "賦得含峰雲",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature"
+    ],
+    "id": "zh_0407"
+  },
+  {
+    "text": "橫天結陣影，逐吹起羅文。",
+    "author": "太宗皇帝",
+    "source": "賦得含峰雲",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature"
+    ],
+    "id": "zh_0408"
+  },
+  {
+    "text": "非復陽臺下，空將惑楚君。",
+    "author": "太宗皇帝",
+    "source": "賦得含峰雲",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "love",
+      "loss",
+      "regret"
+    ],
+    "id": "zh_0409"
+  },
+  {
+    "text": "綺筵移暮景，紫閣引宵煙。",
+    "author": "太宗皇帝",
+    "source": "三層閣上置音聲",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "time"
+    ],
+    "id": "zh_0410"
+  },
+  {
+    "text": "隔棟歌塵合，分階舞影連。",
+    "author": "太宗皇帝",
+    "source": "三層閣上置音聲",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "joy",
+      "friendship"
+    ],
+    "id": "zh_0411"
+  },
+  {
+    "text": "聲流三處管，響亂一重絃。",
+    "author": "太宗皇帝",
+    "source": "三層閣上置音聲",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "joy"
+    ],
+    "id": "zh_0412"
+  },
+  {
+    "text": "不似秦樓上，吹簫空學仙。",
+    "author": "太宗皇帝",
+    "source": "三層閣上置音聲",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "loss",
+      "regret"
+    ],
+    "id": "zh_0413"
+  },
+  {
+    "text": "殘雲收翠嶺，夕霧結長空。",
+    "author": "太宗皇帝",
+    "source": "遠山澄碧霧",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "time"
+    ],
+    "id": "zh_0414"
+  },
+  {
+    "text": "帶岫凝全碧，障霞隱半紅。",
+    "author": "太宗皇帝",
+    "source": "遠山澄碧霧",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature"
+    ],
+    "id": "zh_0415"
+  },
+  {
+    "text": "髣髴分初月，飄颻度曉風。",
+    "author": "太宗皇帝",
+    "source": "遠山澄碧霧",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "time"
+    ],
+    "id": "zh_0416"
+  },
+  {
+    "text": "還因三里處，冠蓋遠相通。",
+    "author": "太宗皇帝",
+    "source": "遠山澄碧霧",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "friendship",
+      "ambition"
+    ],
+    "id": "zh_0417"
+  },
+  {
+    "text": "蘭氣已熏宮，新橤半粧叢。",
+    "author": "太宗皇帝",
+    "source": "賦得花庭霧",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "joy"
+    ],
+    "id": "zh_0418"
+  },
+  {
+    "text": "色含輕重霧，香引去來風。",
+    "author": "太宗皇帝",
+    "source": "賦得花庭霧",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature"
+    ],
+    "id": "zh_0419"
+  },
+  {
+    "text": "拂樹濃舒碧，縈花薄蔽紅。",
+    "author": "太宗皇帝",
+    "source": "賦得花庭霧",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature"
+    ],
+    "id": "zh_0420"
+  },
+  {
+    "text": "還當雜行雨，髣髴隱遙空。",
+    "author": "太宗皇帝",
+    "source": "賦得花庭霧",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature"
+    ],
+    "id": "zh_0421"
+  },
+  {
+    "text": "年柳變池臺，隋堤曲直回。",
+    "author": "太宗皇帝",
+    "source": "春池柳",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "time",
+      "change",
+      "nostalgia"
+    ],
+    "id": "zh_0422"
+  },
+  {
+    "text": "逐浪絲陰去，迎風帶影來。",
+    "author": "太宗皇帝",
+    "source": "春池柳",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature"
+    ],
+    "id": "zh_0423"
+  },
+  {
+    "text": "疎黃一鳥弄，半翠幾眉開。",
+    "author": "太宗皇帝",
+    "source": "春池柳",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "joy"
+    ],
+    "id": "zh_0424"
+  },
+  {
+    "text": "縈雪臨春岸，參差間早梅。",
+    "author": "太宗皇帝",
+    "source": "春池柳",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "seasons"
+    ],
+    "id": "zh_0425"
+  },
+  {
+    "text": "春暉開紫苑，淑景媚蘭場。",
+    "author": "太宗皇帝",
+    "source": "芳蘭",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [],
+    "id": "zh_0426"
+  },
+  {
+    "text": "映庭含淺色，凝露泫浮光。",
+    "author": "太宗皇帝",
+    "source": "芳蘭",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [],
+    "id": "zh_0427"
+  },
+  {
+    "text": "日麗參差影，風傳輕重香。",
+    "author": "太宗皇帝",
+    "source": "芳蘭",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [],
+    "id": "zh_0428"
+  },
+  {
+    "text": "會須君子折，佩裏作芬芳。",
+    "author": "太宗皇帝",
+    "source": "芳蘭",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [],
+    "id": "zh_0429"
+  },
+  {
+    "text": "禁苑春暉麗，花蹊綺樹妝。",
+    "author": "太宗皇帝",
+    "source": "詠桃",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [],
+    "id": "zh_0430"
+  },
+  {
+    "text": "綴條深淺色，點露參差光。",
+    "author": "太宗皇帝",
+    "source": "詠桃",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [],
+    "id": "zh_0431"
+  },
+  {
+    "text": "向日分千笑，迎風共一香。",
+    "author": "太宗皇帝",
+    "source": "詠桃",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [],
+    "id": "zh_0432"
+  },
+  {
+    "text": "如何仙嶺側，獨秀隱遙芳。",
+    "author": "太宗皇帝",
+    "source": "詠桃",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [],
+    "id": "zh_0433"
+  },
+  {
+    "text": "參差垂玉闕，舒卷映蘭宮。",
+    "author": "太宗皇帝",
+    "source": "賦簾",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [],
+    "id": "zh_0434"
+  },
+  {
+    "text": "珠光搖素月，竹影亂清風。",
+    "author": "太宗皇帝",
+    "source": "賦簾",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [],
+    "id": "zh_0435"
+  },
+  {
+    "text": "彩散銀鉤上，文斜桂戶中。",
+    "author": "太宗皇帝",
+    "source": "賦簾",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [],
+    "id": "zh_0436"
+  },
+  {
+    "text": "惟當雜羅綺，相與媚房櫳。",
+    "author": "太宗皇帝",
+    "source": "賦簾",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [],
+    "id": "zh_0437"
+  },
+  {
+    "text": "凌晨麗城去，薄暮上林棲。",
+    "author": "太宗皇帝",
+    "source": "詠烏代陳師道",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [],
+    "id": "zh_0438"
+  },
+  {
+    "text": "辭枝枝暫起，停樹樹還低。",
+    "author": "太宗皇帝",
+    "source": "詠烏代陳師道",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [],
+    "id": "zh_0439"
+  },
+  {
+    "text": "向日終難託，迎風詎肯迷。",
+    "author": "太宗皇帝",
+    "source": "詠烏代陳師道",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [],
+    "id": "zh_0440"
+  },
+  {
+    "text": "只待纖纖手，曲裏作宵啼。",
+    "author": "太宗皇帝",
+    "source": "詠烏代陳師道",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [],
+    "id": "zh_0441"
+  },
+  {
+    "text": "駿骨飲長涇，奔流灑絡纓。",
+    "author": "太宗皇帝",
+    "source": "詠飲馬",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [],
+    "id": "zh_0442"
+  },
+  {
+    "text": "細紋連噴聚，亂荇繞蹄縈。",
+    "author": "太宗皇帝",
+    "source": "詠飲馬",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [],
+    "id": "zh_0443"
+  },
+  {
+    "text": "水光鞍上側，馬影溜中橫。",
+    "author": "太宗皇帝",
+    "source": "詠飲馬",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [],
+    "id": "zh_0444"
+  },
+  {
+    "text": "翻似天池裏，騰波龍種生。",
+    "author": "太宗皇帝",
+    "source": "詠飲馬",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [],
+    "id": "zh_0445"
+  },
+  {
+    "text": "階蘭凝曙霜，岸菊照晨光。",
+    "author": "太宗皇帝",
+    "source": "賦得殘菊",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [],
+    "id": "zh_0446"
+  },
+  {
+    "text": "露濃晞晚笑，風勁淺殘香。",
+    "author": "太宗皇帝",
+    "source": "賦得殘菊",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [],
+    "id": "zh_0447"
+  },
+  {
+    "text": "細葉凋輕翠，圓花飛碎黃。",
+    "author": "太宗皇帝",
+    "source": "賦得殘菊",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [],
+    "id": "zh_0448"
+  },
+  {
+    "text": "還持今歲色，復結後年芳。",
+    "author": "太宗皇帝",
+    "source": "賦得殘菊",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [],
+    "id": "zh_0449"
+  },
+  {
+    "text": "秋露凝高掌，朝光上翠微。",
+    "author": "太宗皇帝",
+    "source": "賦秋日懸清光賜房玄齡",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [],
+    "id": "zh_0450"
+  },
+  {
+    "text": "參差麗雙闕，照耀滿重闈。",
+    "author": "太宗皇帝",
+    "source": "賦秋日懸清光賜房玄齡",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "joy"
+    ],
+    "id": "zh_0451"
+  },
+  {
+    "text": "仙馭隨輪轉，靈烏帶影飛。",
+    "author": "太宗皇帝",
+    "source": "賦秋日懸清光賜房玄齡",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "hope"
+    ],
+    "id": "zh_0452"
+  },
+  {
+    "text": "臨波無定彩，入隙有圓暉。",
+    "author": "太宗皇帝",
+    "source": "賦秋日懸清光賜房玄齡",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "change"
+    ],
+    "id": "zh_0453"
+  },
+  {
+    "text": "還當葵藿志，傾葉自相依。",
+    "author": "太宗皇帝",
+    "source": "賦秋日懸清光賜房玄齡",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "ambition",
+      "perseverance",
+      "hope"
+    ],
+    "id": "zh_0454"
+  },
+  {
+    "text": "半月無雙影，全花有四時。",
+    "author": "太宗皇帝",
+    "source": "琵琶",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "time",
+      "seasons"
+    ],
+    "id": "zh_0455"
+  },
+  {
+    "text": "摧藏千里態，掩抑幾重悲。",
+    "author": "太宗皇帝",
+    "source": "琵琶",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "grief",
+      "loss",
+      "regret"
+    ],
+    "id": "zh_0456"
+  },
+  {
+    "text": "促節縈紅袖，清音滿翠帷。",
+    "author": "太宗皇帝",
+    "source": "琵琶",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "joy",
+      "rest"
+    ],
+    "id": "zh_0457"
+  },
+  {
+    "text": "駛彈風響急，緩曲釧聲遲。",
+    "author": "太宗皇帝",
+    "source": "琵琶",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "joy",
+      "time"
+    ],
+    "id": "zh_0458"
+  },
+  {
+    "text": "空餘關隴恨，因此代相思。",
+    "author": "太宗皇帝",
+    "source": "琵琶",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "love",
+      "regret",
+      "loss"
+    ],
+    "id": "zh_0459"
+  },
+  {
+    "text": "驅馬出遼陽，萬里轉旂常。",
+    "author": "太宗皇帝",
+    "source": "宴中山",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "travel",
+      "ambition",
+      "perseverance"
+    ],
+    "id": "zh_0460"
+  },
+  {
+    "text": "對敵六奇舉，臨戎八陣張。",
+    "author": "太宗皇帝",
+    "source": "宴中山",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "work",
+      "ambition",
+      "perseverance"
+    ],
+    "id": "zh_0461"
+  },
+  {
+    "text": "斬鯨澄碧海，卷霧掃扶桑。",
+    "author": "太宗皇帝",
+    "source": "宴中山",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "ambition",
+      "work",
+      "perseverance"
+    ],
+    "id": "zh_0462"
+  },
+  {
+    "text": "昔去蘭縈翠，今來桂染芳。",
+    "author": "太宗皇帝",
+    "source": "宴中山",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "change",
+      "nostalgia",
+      "time"
+    ],
+    "id": "zh_0463"
+  },
+  {
+    "text": "雲芝浮碎葉，冰鏡上朝光。",
+    "author": "太宗皇帝",
+    "source": "宴中山",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "time",
+      "hope"
+    ],
+    "id": "zh_0464"
+  },
+  {
+    "text": "回首長安道，方歡宴柏梁。",
+    "author": "太宗皇帝",
+    "source": "宴中山",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nostalgia",
+      "joy",
+      "home"
+    ],
+    "id": "zh_0465"
+  },
+  {
+    "text": "曖曖去塵昏灞岸，飛飛輕蓋指河梁。",
+    "author": "太宗皇帝",
+    "source": "餞中書侍郎來濟",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "farewell",
+      "nostalgia",
+      "travel"
+    ],
+    "id": "zh_0466"
+  },
+  {
+    "text": "雲峰衣結千重葉，雪岫花開幾樹妝。",
+    "author": "太宗皇帝",
+    "source": "餞中書侍郎來濟",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "seasons",
+      "change"
+    ],
+    "id": "zh_0467"
+  },
+  {
+    "text": "深悲黃鶴孤舟遠，獨歎青山別路長。",
+    "author": "太宗皇帝",
+    "source": "餞中書侍郎來濟",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "grief",
+      "solitude",
+      "farewell"
+    ],
+    "id": "zh_0468"
+  },
+  {
+    "text": "聊將分袂霑巾淚，還用持添離席觴。",
+    "author": "太宗皇帝",
+    "source": "餞中書侍郎來濟",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "farewell",
+      "loss",
+      "grief"
+    ],
+    "id": "zh_0469"
+  },
+  {
+    "text": "四時運灰琯，一夕變冬春。",
+    "author": "太宗皇帝",
+    "source": "於太原召侍臣賜宴守歲",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "time",
+      "seasons",
+      "change"
+    ],
+    "id": "zh_0470"
+  },
+  {
+    "text": "送寒餘雪盡，迎歲早梅新。",
+    "author": "太宗皇帝",
+    "source": "於太原召侍臣賜宴守歲",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "seasons",
+      "change",
+      "hope"
+    ],
+    "id": "zh_0471"
+  },
+  {
+    "text": "燄聽風來動，花開不待春。",
+    "author": "太宗皇帝",
+    "source": "詠燭二首 一",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "change",
+      "ambition"
+    ],
+    "id": "zh_0472"
+  },
+  {
+    "text": "鎮下千行淚，非是爲思人。",
+    "author": "太宗皇帝",
+    "source": "詠燭二首 一",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "grief",
+      "regret"
+    ],
+    "id": "zh_0473"
+  },
+  {
+    "text": "九龍蟠燄動，四照逐花生。",
+    "author": "太宗皇帝",
+    "source": "詠燭二首 二",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "joy",
+      "ambition"
+    ],
+    "id": "zh_0474"
+  },
+  {
+    "text": "即此流高殿，堪持待月明。",
+    "author": "太宗皇帝",
+    "source": "詠燭二首 二",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "rest",
+      "hope",
+      "solitude"
+    ],
+    "id": "zh_0475"
+  },
+  {
+    "text": "上弦明月半，激箭流星遠。",
+    "author": "太宗皇帝",
+    "source": "詠弓",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "time",
+      "solitude"
+    ],
+    "id": "zh_0476"
+  },
+  {
+    "text": "落雁帶書驚，啼猿映枝轉。",
+    "author": "太宗皇帝",
+    "source": "詠弓",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "loss",
+      "grief",
+      "loneliness"
+    ],
+    "id": "zh_0477"
+  },
+  {
+    "text": "初秋玉露清，早雁出空鳴。",
+    "author": "太宗皇帝",
+    "source": "賦得早雁出雲鳴",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "seasons",
+      "nature",
+      "time"
+    ],
+    "id": "zh_0478"
+  },
+  {
+    "text": "隔雲時亂影，因風乍含聲。",
+    "author": "太宗皇帝",
+    "source": "賦得早雁出雲鳴",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "change",
+      "solitude"
+    ],
+    "id": "zh_0479"
+  },
+  {
+    "text": "岸曲絲陰聚，波移帶影疎。",
+    "author": "太宗皇帝",
+    "source": "賦得臨池柳",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "time",
+      "nostalgia"
+    ],
+    "id": "zh_0480"
+  },
+  {
+    "text": "還將眉裏翠，來就鏡中舒。",
+    "author": "太宗皇帝",
+    "source": "賦得臨池柳",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "love",
+      "nostalgia",
+      "solitude"
+    ],
+    "id": "zh_0481"
+  },
+  {
+    "text": "貞條障曲砌，翠葉貫寒霜。",
+    "author": "太宗皇帝",
+    "source": "賦得臨池竹",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "perseverance",
+      "nature",
+      "seasons"
+    ],
+    "id": "zh_0482"
+  },
+  {
+    "text": "拂牖分龍影，臨池待鳳翔。",
+    "author": "太宗皇帝",
+    "source": "賦得臨池竹",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "hope",
+      "ambition",
+      "nature"
+    ],
+    "id": "zh_0483"
+  },
+  {
+    "text": "散影玉階柳，含翠隱鳴蟬。",
+    "author": "太宗皇帝",
+    "source": "賦得弱柳鳴秋蟬",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "seasons",
+      "time"
+    ],
+    "id": "zh_0484"
+  },
+  {
+    "text": "微形藏葉裏，亂響出風前。",
+    "author": "太宗皇帝",
+    "source": "賦得弱柳鳴秋蟬",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "change",
+      "time"
+    ],
+    "id": "zh_0485"
+  },
+  {
+    "text": "盤根直盈渚，交幹橫倚天。",
+    "author": "太宗皇帝",
+    "source": "探得李",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "ambition",
+      "perseverance"
+    ],
+    "id": "zh_0486"
+  },
+  {
+    "text": "舒華光四海，卷葉蔭三川。",
+    "author": "太宗皇帝",
+    "source": "探得李",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "ambition",
+      "nature",
+      "hope"
+    ],
+    "id": "zh_0487"
+  },
+  {
+    "text": "近谷交縈橤，遙峰對出蓮。",
+    "author": "太宗皇帝",
+    "source": "詠小山",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "solitude",
+      "rest"
+    ],
+    "id": "zh_0488"
+  },
+  {
+    "text": "徑細無全磴，松小未含煙。",
+    "author": "太宗皇帝",
+    "source": "詠小山",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "solitude",
+      "rest"
+    ],
+    "id": "zh_0489"
+  },
+  {
+    "text": "疾風知勁草，板蕩識誠臣。",
+    "author": "太宗皇帝",
+    "source": "賜蕭瑀",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "perseverance",
+      "turning-point",
+      "ambition"
+    ],
+    "id": "zh_0490"
+  },
+  {
+    "text": "勇夫安識義，智者必懷仁。",
+    "author": "太宗皇帝",
+    "source": "賜蕭瑀",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "perseverance",
+      "change",
+      "ambition"
+    ],
+    "id": "zh_0491"
+  },
+  {
+    "text": "太液仙舟迥，西園隱上才。",
+    "author": "太宗皇帝",
+    "source": "賜房玄齡",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "solitude",
+      "ambition",
+      "rest"
+    ],
+    "id": "zh_0492"
+  },
+  {
+    "text": "未曉征車度，雞鳴關早開。",
+    "author": "太宗皇帝",
+    "source": "賜房玄齡",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "travel",
+      "work",
+      "ambition"
+    ],
+    "id": "zh_0493"
+  },
+  {
+    "text": "煙生遙岸隱，月落半崖陰。",
+    "author": "太宗皇帝",
+    "source": "遼東山夜臨秋",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "solitude",
+      "nostalgia"
+    ],
+    "id": "zh_0494"
+  },
+  {
+    "text": "連山驚鳥亂，隔岫斷猿吟。",
+    "author": "太宗皇帝",
+    "source": "遼東山夜臨秋",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "nature",
+      "grief",
+      "loss"
+    ],
+    "id": "zh_0495"
+  },
+  {
+    "text": "醽醁勝蘭生，翠濤過玉䪥。",
+    "author": "太宗皇帝",
+    "source": "賜魏徵詩",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "joy",
+      "rest",
+      "gratitude"
+    ],
+    "id": "zh_0496"
+  },
+  {
+    "text": "千日醉不醒，十年味不敗。",
+    "author": "太宗皇帝",
+    "source": "賜魏徵詩",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "joy",
+      "rest",
+      "time"
+    ],
+    "id": "zh_0497"
+  },
+  {
+    "text": "絕域降附天下平，八表無事悅聖情。",
+    "author": "太宗皇帝",
+    "source": "兩儀殿賦柏梁體",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "joy",
+      "hope",
+      "gratitude"
+    ],
+    "id": "zh_0498"
+  },
+  {
+    "text": "雲披霧斂天地明，登封日觀禪云亭。",
+    "author": "太宗皇帝",
+    "source": "兩儀殿賦柏梁體",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "hope",
+      "change",
+      "joy"
+    ],
+    "id": "zh_0499"
+  },
+  {
+    "text": "雪恥酬百王，除兇報千古。",
+    "author": "太宗皇帝",
+    "source": "句",
+    "lang": "zh",
+    "era": "Tang",
+    "themes": [
+      "ambition",
+      "perseverance",
+      "regret"
+    ],
+    "id": "zh_0500"
+  }
+]
