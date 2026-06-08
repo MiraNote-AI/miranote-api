@@ -496,6 +496,30 @@ function renderVoiceResult(data) {
   clearChildren(badges);
   badges.appendChild(makeBadge('lang: ' + (data.language || '?')));
   badges.appendChild(makeBadge('correction: ' + (data.corrected_text ? 'ok' : 'skipped'), data.corrected_text ? 'ok' : ''));
+  if (data.emotion) {
+    const pct = Math.round((data.emotion.confidence || 0) * 100);
+    const emoBadge = makeBadge('emotion: ' + data.emotion.label + ' ' + pct + '%', 'ok');
+    emoBadge.style.cursor = 'pointer';
+    emoBadge.title = 'Click for full distribution';
+    const detail = document.createElement('div');
+    detail.style.cssText = 'display:none; margin-top:6px; padding:8px 12px; background:var(--warm-light); border:1px solid var(--border); border-radius:8px; font-size:12px;';
+    (data.emotion.all_scores || []).forEach(function (s) {
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex; justify-content:space-between; gap:12px;';
+      const lbl = document.createElement('span'); lbl.textContent = s.label;
+      const sc = document.createElement('span'); sc.textContent = (s.score * 100).toFixed(1) + '%';
+      sc.style.color = 'var(--muted)';
+      row.appendChild(lbl); row.appendChild(sc);
+      detail.appendChild(row);
+    });
+    emoBadge.addEventListener('click', function () {
+      detail.style.display = detail.style.display === 'none' ? 'block' : 'none';
+    });
+    badges.appendChild(emoBadge);
+    badges.appendChild(detail);
+  } else if (data.emotion_status === 'failed') {
+    badges.appendChild(makeBadge('emotion: failed', ''));
+  }
 
   // Raw text
   $('v-raw').textContent = data.raw_text || '(empty)';

@@ -4,3 +4,5 @@ openai-whisper>=20231117
 python-multipart>=0.0.9
 openai>=1.0
 python-dotenv>=1.0
+transformers>=4.40
+pytest>=8.0
