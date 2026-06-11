@@ -42,6 +42,10 @@ The alpha check also detects **orphan** check scripts -- every `.py` file at the
 direct top level of `checks/` (excluding `__init__.py`) must be referenced
 by at least one rule's `Enforced by:` line.
 
+When gamma reports parse errors (CONTRIBUTING.md structural problems), alpha
+skips orphan detection to avoid false-positive cascades; fix the parse errors
+first, then rerun alpha to see any remaining orphans.
+
 **Rationale:** Without paired checks, rules degrade to wall-art over time.
 **Enforced by:** `checks/_meta/all_rules_have_checks.py`
 
@@ -119,7 +123,7 @@ PRs from the sync bot (branch matching `chore/sync-ai-docs-*`) are exempt.
 ### Rule 7: Synced files cannot be modified inside a target repo
 
 The files synced from `MiraNote-AI/.github` to each code repo
-(`CLAUDE.md`, `CONTRIBUTING.md`, `docs/ai/**`,
+(`CLAUDE.md`, `CONTRIBUTING.md`, `docs/ai/**`, `.claude/skills/**`,
 `.github/workflows/checks.yml`) must be edited only at the source. Direct
 edits to these paths inside a target repo will cause the eta check to fail.
 
@@ -134,3 +138,34 @@ separately under sub-project F.
 silently diverge from the canonical source until the next sync round-trip,
 producing confusion and lost edits.
 **Enforced by:** `checks/protected_paths.py`
+
+### Rule 8: PR title follows Conventional Commits format
+
+Every pull request title must be self-explanatory to readers outside the
+immediate working session. Concretely:
+
+- Title starts with a Conventional Commits prefix from this set: `feat`,
+  `fix`, `chore`, `docs`, `refactor`, `test`, `ci`, `perf`, `build`,
+  `revert`. An optional `!` may follow the prefix to mark breaking changes.
+- An optional scope in parentheses must come from the whitelist:
+  `api`, `web`, `ios`, `bot`, `infra`. Omit the scope for cross-cutting
+  changes. Internal codenames (`F-2`, `F-final`, `step-3`) are rejected
+  because the scope must be a real component name.
+- The prefix is followed by exactly `: ` and a description.
+- Description starts with a lowercase letter and does not end with a period.
+- Description uses the imperative mood: `add` not `added`/`adding`,
+  `fix` not `fixed`/`fixing`.
+- Total title length is at most 72 characters.
+- Title must not contain `#<integer>` issue references (move them to the
+  body, where Rule 6 already requires a reference).
+- Title must not contain `WIP`, `DRAFT`, `FIXME`, or `TODO` markers; use
+  GitHub's Draft PR state instead.
+
+PRs from the sync bot (branch matching `chore/sync-ai-docs-*`) are exempt.
+
+**Rationale:** PR titles surface in GitHub lists, release-tooling input,
+changelog generators, and Slack/email notifications. A title that means
+something only to the author at write-time becomes opaque to teammates and
+to the author's future self; mechanical enforcement removes the social cost
+of asking for renames.
+**Enforced by:** `checks/pr_title_format.py`
