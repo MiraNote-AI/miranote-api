@@ -18,7 +18,7 @@ Branch: `fix/api-zh-corpus-diversity` (worktree `../miranote-api-wt-corpus`)
       rebuilds to corpus size; live ZH smoke returns picks from more than
       one author.
 - [x] AC6: Rule 3 exit 0.
-- [ ] AC7: PR open, CI green. Merge stays human.
+- [x] AC7: PR open (#21), CI green in 12s. Merge stays human.
 
 HUMAN: none.
 
