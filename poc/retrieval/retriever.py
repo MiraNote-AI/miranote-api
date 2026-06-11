@@ -34,9 +34,9 @@ class Retriever:
             payload = r["payload"]
             if lang and payload.get("lang") != lang:
                 continue
-            # Cosine distance from sqlite-vec is in [0, 2]; normalised
-            # embeddings make cosine_sim = 1 - distance / 2. Use the more
-            # common mapping `score = max(0, 1 - distance)` for display.
+            # The vecs table uses distance_metric=cosine, so
+            # distance = 1 - cosine_sim and this mapping recovers the
+            # similarity exactly (clamped at 0 for opposing vectors).
             score = max(0.0, 1.0 - r["distance"])
             hits.append({
                 "id": r["id"],

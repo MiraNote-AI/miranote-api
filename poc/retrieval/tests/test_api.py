@@ -108,4 +108,7 @@ def test_quotes_reranker_invalid_json_returns_502(api_client):
     fake_llm.reply_with('not JSON')
     r = test_client.post("/quotes", json={"text": "y"})
     assert r.status_code == 502
-    assert "invalid JSON" in r.json()["detail"]
+    # Detail is generic by design: raw LLM output must never be echoed
+    # back to the client.
+    assert r.json()["detail"] == "reranker returned unusable output"
+    assert "not JSON" not in r.json()["detail"]

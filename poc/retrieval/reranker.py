@@ -57,8 +57,12 @@ def rerank(
     if n == 0:
         return []
     system = SYSTEM.format(max_picks=max_picks, n=n)
-    # Strip any forged delimiter so the user text can't break out of its tags.
-    safe_user_text = user_text.replace("</user_text>", "").replace("<user_text>", "")
+    # Strip forged delimiters so the user text can't break out of its tags.
+    # Loop until stable: a single pass can be defeated by nesting, e.g.
+    # "</user_</user_text>text>" reassembles the tag after one strip.
+    safe_user_text = user_text
+    while "<user_text>" in safe_user_text or "</user_text>" in safe_user_text:
+        safe_user_text = safe_user_text.replace("</user_text>", "").replace("<user_text>", "")
     user = USER_TEMPLATE.format(
         user_text=safe_user_text,
         candidates_block=_format_candidates(candidates),
@@ -71,6 +75,8 @@ def rerank(
         ],
     )
     raw = resp.choices[0].message.content
+    if raw is None:
+        raise ValueError("reranker returned empty content")
     try:
         parsed = json.loads(raw)
     except json.JSONDecodeError as e:
