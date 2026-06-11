@@ -24,7 +24,7 @@ from poc.retrieval.store import Store
 
 
 class SearchRequest(BaseModel):
-    query: str = Field(..., min_length=1)
+    query: str = Field(..., min_length=1, max_length=500)
     k: int = Field(10, ge=1, le=50)
     namespace: str = Field("quotes")
 
@@ -41,7 +41,7 @@ class SearchResponse(BaseModel):
 
 
 class QuotesRequest(BaseModel):
-    text: str = Field(..., min_length=1)
+    text: str = Field(..., min_length=1, max_length=2000)
     max: int = Field(3, ge=1, le=5)
     lang: Literal["auto", "en", "zh", "both"] = Field("auto")
 
@@ -134,7 +134,10 @@ async def quotes(req: QuotesRequest):
             llm, config.LLM_MODEL, req.text, candidates, max_picks=req.max,
         )
     except ValueError as e:
-        raise HTTPException(status_code=502, detail=str(e))
+        # Log the specifics server-side; the client gets a generic detail
+        # so raw LLM output is never echoed back to callers.
+        print(f"[quotes] reranker failed: {e}", flush=True)
+        raise HTTPException(status_code=502, detail="reranker returned unusable output")
 
     matches: List[QuoteMatch] = []
     for p in picks:

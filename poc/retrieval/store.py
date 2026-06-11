@@ -41,7 +41,7 @@ class Store:
         cur.execute(
             f"""
             CREATE VIRTUAL TABLE IF NOT EXISTS vecs USING vec0(
-                embedding float[{self._dim}]
+                embedding float[{self._dim}] distance_metric=cosine
             )
             """
         )
