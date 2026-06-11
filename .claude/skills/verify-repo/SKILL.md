@@ -100,12 +100,41 @@ claim what syntax checks prove. The first loop task in this repo should be
 adding a real test harness (pytest + mocked Discord/AI clients) so later
 loops have something to trust.
 
-### miranote-web / miranote-ios
+### miranote-ios
+
+The v1 app exists and brings its own three-layer verifier; run all of it
+from the repo (or loop worktree) root:
+
+```bash
+(cd MiraNoteKit && swift test)   # view-model and service unit tests
+swiftlint --strict               # 0 violations required
+xcodegen generate && xcodebuild -project MiraNote.xcodeproj \
+  -scheme MiraNote \
+  -destination 'platform=iOS Simulator,name=iPhone 17' build test
+```
+
+The xcodebuild run executes BOTH test targets: MiraNoteTests (unit) and
+MiraNoteUITests (XCUITest regression tests pinning Save round-trip,
+long-press menu placement, and the empty-state hint).
+
+Caveats:
+- Needs a Mac with full Xcode and a registered iOS simulator runtime.
+  CI never runs any of this (governance only) -- local green is the only
+  code signal.
+- `MiraNote.xcodeproj` is generated and gitignored; rerun
+  `xcodegen generate` after switching branches.
+- UI-behavior claims need the UI tests, not just Kit tests: the v1 merge
+  blockers were invisible to every unit test.
+- A new view-layer regression test ships with mutation evidence (prove
+  it fails when the bug it guards is reintroduced; ledger pattern in
+  the repo's `docs/plans/2026-06-11-xcuitest-ui-tests.md`).
+
+### miranote-web
 
 No application code exists, so no code verifier exists -- governance checks
 only. A loop that scaffolds the app MUST bring its own verifier: tests and
 lint land in the same PR as the first code ("no verifier, no loop").
-Neither repo has a `.gitignore` yet; add one before generating any local
+The repo has no `.gitignore` yet; add one before generating any local
 artifacts.
 
 ## Trust rules
