@@ -9,14 +9,15 @@ ships and what `build_index.py` embeds.
 ## Files
 
 - `quotes_en.json` -- English quotes (500)
-- `quotes_zh.json` -- Chinese classical poetry lines (500, all Tang shi)
+- `quotes_zh.json` -- Chinese classical poetry lines (500: 250 Tang shi
+  + 250 Song ci, roughly 250 distinct authors)
 
-Known limitation of the current zh build: candidates are consumed in
-file order from the head of Quan Tang Shi, so the 500-entry quota fills
-before author variety appears -- the shipped set is single-author
-(Emperor Taizong). Retrieval quality is unaffected (ranking is by
-embedding similarity), but attribution variety is poor. Backlog:
-sample across the whole dataset (and add Song ci) in a rebuild.
+The zh set is selected by `diverse_select` in the build script: a
+fixed-seed shuffle over the full candidate pool (260k+ lines), a
+per-author cap of 2 percent, an even era split, and the same fuzzy
+near-duplicate rejection as the en path. Rebuilds with the same seed
+are reproducible. (The first shipped build was a single-author
+head-take; fixed by the diversity rebuild.)
 
 ## Per-entry schema
 
@@ -33,17 +34,17 @@ sample across the whole dataset (and add Song ci) in a rebuild.
 ```
 
 `era` is present on Chinese entries only. `themes` holds 0-3 tags from
-the fixed taxonomy. An empty list is schema-valid; note that 75 zh
-entries currently have empty themes because three 25-entry tagging
-batches failed during the build and were absorbed by the graceful
-fallback rather than re-run (backlog: re-tag those batches). Themes are
-metadata only: retrieval ranks by embedding similarity, not by theme.
+the fixed taxonomy. An empty list is schema-valid, but the build script
+retries a failed tagging batch up to 3 attempts before degrading to
+empty (the corpus test caps empties at 5 percent; the current build has
+zero). Themes are metadata only: retrieval ranks by embedding
+similarity, not by theme.
 
 ## Sources
 
 | Dataset | License | URL | Pulled | Used for |
 |---|---|---|---|---|
-| chinese-poetry/chinese-poetry | MIT | https://github.com/chinese-poetry/chinese-poetry | 2026-06-05 | quotes_zh.json (Tang shi via `poet.tang.*`; Song ci loading exists in the script but no ci lines made the current 500 cut) |
+| chinese-poetry/chinese-poetry | MIT | https://github.com/chinese-poetry/chinese-poetry | 2026-06-05 | quotes_zh.json (Tang shi via `poet.tang.*`, Song ci via `ci.song.*`, 250 each) |
 | dwyl/quotes | GPL-2.0 | https://github.com/dwyl/quotes | 2026-06-05 | quotes_en.json (English quotations) |
 
 Note on the English set: the dwyl/quotes *compilation* is GPL-2.0; the
@@ -66,9 +67,12 @@ git clone --depth=1 https://github.com/chinese-poetry/chinese-poetry.git
 # English: produce sources/en_raw.json as [{"text","author","source"}],
 #   e.g. mapped from https://github.com/dwyl/quotes (quotes.json)
 cd ..
-# 2. Build the corpus JSONs (batched LLM theme-tagging)
+# 2. Build the corpus JSONs (batched LLM theme-tagging).
+#    --langs rebuilds one corpus without churning the other;
+#    --seed keeps the zh diverse sampling reproducible (default 42).
 PYTHONPATH=../.. .venv/bin/python3 scripts/build_corpus.py \
-    --sources sources --out corpus --target-en 500 --target-zh 500
+    --sources sources --out corpus --target-en 500 --target-zh 500 \
+    --langs zh,en
 ```
 
 ## Rule 3
