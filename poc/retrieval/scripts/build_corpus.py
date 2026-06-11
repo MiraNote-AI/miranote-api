@@ -77,7 +77,10 @@ def _zh_lines(
                 continue
             for line in poem.get("paragraphs", []):
                 line = line.strip()
-                if "□" in line:
+                # Skip corrupt or editorially annotated lines: U+25A1 is
+                # the missing-character placeholder; ASCII brackets carry
+                # upstream role markers like "[zhu]" that are not verse.
+                if "□" in line or "[" in line or "]" in line:
                     continue
                 if 10 <= len(line) <= 30:
                     out.append({
@@ -172,6 +175,12 @@ def _parse_tag_batch(raw: str, n: int) -> Optional[List[List[str]]]:
             out.append([t for t in item if isinstance(t, str) and t in THEMES][:3])
         else:
             out.append([])
+    # A right-length response where EVERY element filtered to empty is a
+    # wrong-shape answer (strings instead of arrays, off-taxonomy tags),
+    # not a judgment that nothing fits -- treat as unusable so the
+    # caller retries instead of silently shipping an empty batch.
+    if out and all(not tags for tags in out):
+        return None
     return out
 
 
@@ -203,7 +212,8 @@ def tag_themes_batched(
                 tags = None
             if tags is not None:
                 break
-            print(f"  batch at {i} attempt {attempt} unusable; retrying")
+            if attempt < attempts:
+                print(f"  batch at {i} attempt {attempt} unusable; retrying")
         if tags is None:
             print(f"  batch at {i} failed {attempts} attempts; leaving themes empty")
             tags = [[] for _ in chunk]

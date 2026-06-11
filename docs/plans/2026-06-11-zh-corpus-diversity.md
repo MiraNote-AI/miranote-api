@@ -5,19 +5,19 @@ Branch: `fix/api-zh-corpus-diversity` (worktree `../miranote-api-wt-corpus`)
 
 ## Goal (acceptance criteria)
 
-- [ ] AC1: no single author exceeds 10 percent of quotes_zh.json
+- [x] AC1: no single author exceeds 10 percent of quotes_zh.json
       (test_zh_author_diversity).
-- [ ] AC2: Tang and Song both represented, at least 50 entries each
+- [x] AC2: Tang and Song both represented, at least 50 entries each
       (test_zh_both_eras_present).
-- [ ] AC3: empty-theme entries at most 5 percent of zh corpus; the build
+- [x] AC3: empty-theme entries at most 5 percent of zh corpus; the build
       script retries failed tagging batches up to 3 attempts
       (test_zh_empty_theme_cap + script logic).
-- [ ] AC4: text/author/source remain verbatim from sources; LLM tags only.
+- [x] AC4: text/author/source remain verbatim from sources; LLM tags only.
       EN corpus byte-identical (rebuild runs with --langs zh).
-- [ ] AC5: full retrieval suite green including the 3 new tests; index
+- [x] AC5: full retrieval suite green including the 3 new tests; index
       rebuilds to corpus size; live ZH smoke returns picks from more than
       one author.
-- [ ] AC6: Rule 3 exit 0.
+- [x] AC6: Rule 3 exit 0.
 - [ ] AC7: PR open, CI green. Merge stays human.
 
 HUMAN: none.
@@ -56,6 +56,17 @@ regression they guard.
    Index rebuilt 1000. Live ZH smoke: 3 picks from 3 distinct authors
    (Zeng Di, Pi Rixiu, Li Liuqian), scores ~0.57. README updated to
    the new reality.
+2. Maker-checker round 1: DONE, 2 WARN + 4 NIT. Fixed in this
+   iteration: all-empty-but-right-shape tag responses now return None
+   (retry) instead of silently shipping an empty batch; ASCII-bracket
+   editorial markers (the zh_0176 case) filtered alongside U+25A1;
+   misleading final-attempt log line. Rebuilt with the same seed:
+   500 entries, 268 authors (top Bai Juyi at the 10 cap), 250/250
+   eras, 0 empty themes, 0 bracket noise; one live retry observed
+   again (batch at 300). Suite 34/34; index rebuilt 1000; Rule 3
+   exit 0. Not fixed (accepted): anonymous author holds 10 capped
+   slots (verbatim attribution); /search lang gap is pre-existing
+   backlog.
 
 ## Deviations and decisions
 
