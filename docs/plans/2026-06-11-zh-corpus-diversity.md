@@ -42,4 +42,25 @@ regression they guard.
 
 ## Iterations
 
+1. RED baseline: 3 new corpus tests written first, all FAILED against
+   the committed corpus (author 100 percent Taizong / Song 0 / 75 empty
+   themes) -- detection power proven. Implemented diverse_select
+   (seeded shuffle over full pool, author cap 2 percent, era split,
+   fuzzy dedupe), widened source reading to 40 files per glob with
+   empty-author and U+25A1 filters, batch-tagging retries (parse
+   failure now returns None -> up to 3 attempts), --langs/--seed args.
+   Rebuild (zh only): pool 263,524 lines -> 500 selected, 254 authors,
+   top author Du Fu at 10 (the cap), eras 250/250, empty themes 0; one
+   live retry observed succeeding (batch at 425). Suite 34/34 GREEN
+   (31 prior + 3 new). EN file untouched (git status clean for it).
+   Index rebuilt 1000. Live ZH smoke: 3 picks from 3 distinct authors
+   (Zeng Di, Pi Rixiu, Li Liuqian), scores ~0.57. README updated to
+   the new reality.
+
 ## Deviations and decisions
+
+- EN corpus deliberately untouched (--langs zh) to avoid re-tagging
+  churn on a healthy file; the --langs flag is the durable mechanism.
+- sources/ staged via a temporary symlink to the main checkout's copy
+  (removed before commit -- the dir-pattern gitignore does not cover
+  symlinks, so it would have shown as untracked).

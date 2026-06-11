@@ -55,3 +55,33 @@ def test_no_duplicate_text_across_corpus():
             if text in seen:
                 pytest.fail(f"duplicate text across files: {text[:40]!r} (both {seen[text]} and {entry['id']})")
             seen[text] = entry["id"]
+
+
+def test_zh_author_diversity():
+    data = _load("quotes_zh.json")
+    counts = {}
+    for entry in data:
+        counts[entry["author"]] = counts.get(entry["author"], 0) + 1
+    top_author, top = max(counts.items(), key=lambda kv: kv[1])
+    assert top <= len(data) * 0.10, (
+        f"author {top_author!r} has {top}/{len(data)} entries; "
+        "no single author may exceed 10 percent of the zh corpus"
+    )
+
+
+def test_zh_both_eras_present():
+    data = _load("quotes_zh.json")
+    eras = {}
+    for entry in data:
+        eras[entry.get("era")] = eras.get(entry.get("era"), 0) + 1
+    assert eras.get("Tang", 0) >= 50, f"want >=50 Tang entries, got {eras}"
+    assert eras.get("Song", 0) >= 50, f"want >=50 Song entries, got {eras}"
+
+
+def test_zh_empty_theme_cap():
+    data = _load("quotes_zh.json")
+    empty = sum(1 for entry in data if not entry["themes"])
+    assert empty <= len(data) * 0.05, (
+        f"{empty}/{len(data)} zh entries have empty themes; "
+        "cap is 5 percent -- failed tagging batches must be retried"
+    )

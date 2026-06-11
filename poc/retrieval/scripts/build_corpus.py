@@ -23,11 +23,12 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import random
 import re
 import sys
 from difflib import SequenceMatcher
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -53,13 +54,15 @@ TAG_SYSTEM = (
 
 def _zh_lines(
     sources_dir: Path, file_glob: str, era: str, source_key: str,
-    max_files: int = 8,
+    max_files: int = 40,
 ) -> List[Dict[str, Any]]:
     """Pull 10-30 char lines from chinese-poetry files matching file_glob.
 
     file_glob is matched one level under the chinese-poetry repo (e.g.
     ``*/poet.tang.*.json``) so we never hard-code the CJK anthology
-    directory names in this ASCII source file.
+    directory names in this ASCII source file. Lines without an author
+    attribution and lines containing the missing-character placeholder
+    (U+25A1) are skipped -- both make poor product content.
     """
     out: List[Dict[str, Any]] = []
     repo = sources_dir / "chinese-poetry"
@@ -69,12 +72,17 @@ def _zh_lines(
         except Exception:
             continue
         for poem in data:
+            author = (poem.get("author") or "").strip()
+            if not author:
+                continue
             for line in poem.get("paragraphs", []):
                 line = line.strip()
+                if "□" in line:
+                    continue
                 if 10 <= len(line) <= 30:
                     out.append({
                         "text": line,
-                        "author": poem.get("author", ""),
+                        "author": author,
                         "source": poem.get(source_key, ""),
                         "lang": "zh",
                         "era": era,
@@ -139,12 +147,13 @@ def fuzzy_dedupe(
     return kept
 
 
-def _parse_tag_batch(raw: str, n: int) -> List[List[str]]:
+def _parse_tag_batch(raw: str, n: int) -> Optional[List[List[str]]]:
     """Parse the LLM's batched tag response into n tag-lists.
 
-    Falls back to empty tag-lists if the response is malformed or the
-    length does not match -- empty themes are schema-valid, so a flaky
-    tagging call degrades gracefully instead of failing the build.
+    Returns None when the response is malformed or the length does not
+    match, so the caller can RETRY the batch instead of silently
+    shipping empty themes (the pre-rebuild corpus had 75 empty entries
+    from exactly that silent fallback).
     """
     s = (raw or "").strip()
     if s.startswith("```"):
@@ -154,9 +163,9 @@ def _parse_tag_batch(raw: str, n: int) -> List[List[str]]:
     try:
         parsed = json.loads(s)
     except Exception:
-        return [[] for _ in range(n)]
+        return None
     if not isinstance(parsed, list) or len(parsed) != n:
-        return [[] for _ in range(n)]
+        return None
     out: List[List[str]] = []
     for item in parsed:
         if isinstance(item, list):
@@ -168,26 +177,101 @@ def _parse_tag_batch(raw: str, n: int) -> List[List[str]]:
 
 def tag_themes_batched(
     client: OpenAI, model: str, rows: List[Dict[str, Any]], batch: int = 25,
+    attempts: int = 3,
 ) -> None:
-    """Assign rows[i]['themes'] in place, batching LLM calls for speed."""
+    """Assign rows[i]['themes'] in place, batching LLM calls for speed.
+
+    A batch whose call errors or whose response cannot be parsed is
+    retried up to `attempts` times before degrading to empty themes.
+    """
     for i in range(0, len(rows), batch):
         chunk = rows[i:i + batch]
         texts = [r["text"] for r in chunk]
-        try:
-            resp = client.chat.completions.create(
-                model=model,
-                messages=[
-                    {"role": "system", "content": TAG_SYSTEM},
-                    {"role": "user", "content": json.dumps(texts, ensure_ascii=False)},
-                ],
-            )
-            tags = _parse_tag_batch(resp.choices[0].message.content, len(chunk))
-        except Exception as e:  # noqa: BLE001
-            print(f"  batch at {i} tagging failed ({e}); leaving themes empty")
+        tags: Optional[List[List[str]]] = None
+        for attempt in range(1, attempts + 1):
+            try:
+                resp = client.chat.completions.create(
+                    model=model,
+                    messages=[
+                        {"role": "system", "content": TAG_SYSTEM},
+                        {"role": "user", "content": json.dumps(texts, ensure_ascii=False)},
+                    ],
+                )
+                tags = _parse_tag_batch(resp.choices[0].message.content, len(chunk))
+            except Exception as e:  # noqa: BLE001
+                print(f"  batch at {i} attempt {attempt} errored: {e}")
+                tags = None
+            if tags is not None:
+                break
+            print(f"  batch at {i} attempt {attempt} unusable; retrying")
+        if tags is None:
+            print(f"  batch at {i} failed {attempts} attempts; leaving themes empty")
             tags = [[] for _ in chunk]
         for r, t in zip(chunk, tags):
             r["themes"] = t
         print(f"  tagged {min(i + batch, len(rows))}/{len(rows)}")
+
+
+def diverse_select(
+    rows: List[Dict[str, Any]],
+    target: int,
+    seed: int = 42,
+    author_cap_frac: float = 0.02,
+    threshold: float = 0.82,
+) -> List[Dict[str, Any]]:
+    """Pick up to `target` rows with author and era diversity.
+
+    The naive head-take filled the whole zh quota from the opening
+    volumes of Quan Tang Shi (one author). This instead:
+      - shuffles candidates with a FIXED seed (rebuilds are reproducible),
+      - caps each author at max(2, target * author_cap_frac) entries,
+      - balances eras toward an even split (a row whose era already holds
+        its half of the quota is skipped while the other era still has
+        candidates),
+      - applies the same exact + fuzzy near-duplicate rejection as
+        fuzzy_dedupe.
+    """
+    rng = random.Random(seed)
+    shuffled = rows[:]
+    rng.shuffle(shuffled)
+
+    author_cap = max(2, int(target * author_cap_frac))
+    era_quota = target // 2
+    kept: List[Dict[str, Any]] = []
+    kept_norms: List[str] = []
+    seen = set()
+    by_author: Dict[str, int] = {}
+    by_era: Dict[str, int] = {}
+
+    def admit(r: Dict[str, Any], era_limit: Optional[int]) -> bool:
+        if by_author.get(r["author"], 0) >= author_cap:
+            return False
+        if era_limit is not None and by_era.get(r.get("era", ""), 0) >= era_limit:
+            return False
+        key = _norm(r["text"])
+        if not key or key in seen:
+            return False
+        if any(SequenceMatcher(None, key, k).ratio() >= threshold for k in kept_norms):
+            return False
+        seen.add(key)
+        kept.append(r)
+        kept_norms.append(key)
+        by_author[r["author"]] = by_author.get(r["author"], 0) + 1
+        by_era[r.get("era", "")] = by_era.get(r.get("era", ""), 0) + 1
+        return True
+
+    # Pass 1: balanced eras. Pass 2: top up from anything left if one
+    # era could not fill its half.
+    for r in shuffled:
+        if len(kept) >= target:
+            break
+        admit(r, era_quota)
+    if len(kept) < target:
+        for r in shuffled:
+            if len(kept) >= target:
+                break
+            admit(r, None)
+    return kept
 
 
 def assign_ids(rows: List[Dict[str, Any]], lang: str) -> List[Dict[str, Any]]:
@@ -202,7 +286,13 @@ def main():
     parser.add_argument("--target-zh", type=int, default=500)
     parser.add_argument("--batch", type=int, default=25)
     parser.add_argument("--dedupe-threshold", type=float, default=0.82)
+    parser.add_argument(
+        "--langs", default="zh,en",
+        help="comma list of corpora to rebuild (zh, en); others untouched",
+    )
+    parser.add_argument("--seed", type=int, default=42)
     args = parser.parse_args()
+    langs = {p.strip() for p in args.langs.split(",") if p.strip()}
 
     load_dotenv(args.out.parent / ".env")
     key = os.getenv("LLM_API_KEY")
@@ -212,25 +302,34 @@ def main():
     model = os.getenv("LLM_MODEL", "deepseek-chat")
 
     print(f"Loading sources from {args.sources}")
-    zh = fuzzy_dedupe(load_zh_from_chinese_poetry(args.sources), args.target_zh, args.dedupe_threshold)
-    en = fuzzy_dedupe(load_en_from_sources(args.sources), args.target_en, args.dedupe_threshold)
-    print(f"  ZH candidates: {len(zh)}, EN candidates: {len(en)}")
-
     args.out.mkdir(parents=True, exist_ok=True)
 
-    print("Tagging ZH...")
-    tag_themes_batched(client, model, zh, args.batch)
-    zh = assign_ids(zh, "zh")
-    (args.out / "quotes_zh.json").write_text(
-        json.dumps(zh, ensure_ascii=False, indent=2), encoding="utf-8")
-    print(f"  wrote {len(zh)} entries to quotes_zh.json")
+    if "zh" in langs:
+        pool = load_zh_from_chinese_poetry(args.sources)
+        print(f"  ZH candidate pool: {len(pool)}")
+        zh = diverse_select(
+            pool, args.target_zh, seed=args.seed,
+            threshold=args.dedupe_threshold,
+        )
+        authors = len({r["author"] for r in zh})
+        eras = {r["era"]: sum(1 for x in zh if x["era"] == r["era"]) for r in zh}
+        print(f"  ZH selected: {len(zh)} ({authors} authors, eras {eras})")
+        print("Tagging ZH...")
+        tag_themes_batched(client, model, zh, args.batch)
+        zh = assign_ids(zh, "zh")
+        (args.out / "quotes_zh.json").write_text(
+            json.dumps(zh, ensure_ascii=False, indent=2), encoding="utf-8")
+        print(f"  wrote {len(zh)} entries to quotes_zh.json")
 
-    print("Tagging EN...")
-    tag_themes_batched(client, model, en, args.batch)
-    en = assign_ids(en, "en")
-    (args.out / "quotes_en.json").write_text(
-        json.dumps(en, ensure_ascii=False, indent=2), encoding="utf-8")
-    print(f"  wrote {len(en)} entries to quotes_en.json")
+    if "en" in langs:
+        en = fuzzy_dedupe(load_en_from_sources(args.sources), args.target_en, args.dedupe_threshold)
+        print(f"  EN candidates: {len(en)}")
+        print("Tagging EN...")
+        tag_themes_batched(client, model, en, args.batch)
+        en = assign_ids(en, "en")
+        (args.out / "quotes_en.json").write_text(
+            json.dumps(en, ensure_ascii=False, indent=2), encoding="utf-8")
+        print(f"  wrote {len(en)} entries to quotes_en.json")
 
 
 if __name__ == "__main__":
