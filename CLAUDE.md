@@ -32,6 +32,12 @@ the `sync-ai-docs.yml` workflow propagates changes to every code repo.
 
 Full text and enforcement details are in [CONTRIBUTING.md](CONTRIBUTING.md).
 
+## Post-day-0 rules
+
+8. **PR title format** -- Conventional Commits prefix (`feat`/`fix`/`ci`/...),
+   whitelisted scopes (`api`/`web`/`ios`/`bot`/`infra`), imperative mood,
+   no `#N` / `WIP`/`TODO` markers, <= 72 chars.
+
 ## Quick local commands
 
 ```bash
@@ -51,7 +57,8 @@ PR.
 
 ## Out of scope (deferred)
 
-- Branch protection / CODEOWNERS -- sub-project F.
+- CODEOWNERS, required-status-check enforcement -- sub-project F follow-ups.
+  Branch protection itself is live on all 5 repos.
 - Per-stack harness (web/api/ios linters, tests, settings.json hooks) --
   sub-project D.
 - Shared org-level skills and memory -- sub-project E.

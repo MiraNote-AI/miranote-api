@@ -21,9 +21,11 @@ from poc.chatbot import tools
 from poc.chatbot.chat_loop import ChatTurnResult, run_turn
 from poc.chatbot.config import ChatbotConfig
 from poc.chatbot.session import SessionStore
+from poc.chatbot.retrieval_client import RetrievalClient
+from poc.chatbot.text_client import TextClient
 
 
-load_dotenv()
+load_dotenv(Path(__file__).parent / ".env")
 
 LLM_API_KEY = os.getenv("LLM_API_KEY")
 LLM_BASE_URL = os.getenv("LLM_BASE_URL")
@@ -35,12 +37,17 @@ if not LLM_API_KEY:
 if not _initial_docs_root.exists() or not _initial_docs_root.is_dir():
     raise RuntimeError(f"DOCS_ROOT does not exist or is not a directory: {_initial_docs_root}")
 
+TEXT_API_URL = os.getenv("TEXT_API_URL", "http://localhost:8001")
+RETRIEVAL_API_URL = os.getenv("RETRIEVAL_API_URL", "http://localhost:8004")
+
 config = ChatbotConfig(
     docs_root=_initial_docs_root,
     model=os.getenv("LLM_MODEL", "deepseek-chat"),
     max_tool_iterations=int(os.getenv("MAX_TOOL_ITERATIONS", "6")),
     max_history_messages=int(os.getenv("MAX_HISTORY_MESSAGES", "40")),
     session_ttl_seconds=int(os.getenv("SESSION_TTL_SECONDS", "3600")),
+    text_client=TextClient(TEXT_API_URL),
+    retrieval_client=RetrievalClient(RETRIEVAL_API_URL),
 )
 
 client_kwargs: Dict[str, Any] = {"api_key": LLM_API_KEY}

@@ -159,3 +159,51 @@ or raw_text`. Clients that care whether the LLM ran should check
 - Single-process; not benchmarked under load
 - LLM retry is 3 attempts with linear 45/90s backoff on HTTP 429; other
   errors fail fast and return raw Whisper output
+
+## Acoustic emotion analysis
+
+`/transcribe?with_emotion=true` (default true) and the new `/emotion`
+endpoint run a HuggingFace audio-classification model on the uploaded
+audio and return a 7-class emotion label (angry, disgust, fear, happy,
+neutral, sad, surprise) plus per-class scores.
+
+**Model:** `hughlan1214/Speech_Emotion_Recognition_wav2vec2-large-xlsr-53_240304_SER_fine-tuned2.0`
+- ~1.3 GB, auto-downloads to `~/.cache/huggingface/` on first emotion request (one-time, ~30 sec on first call)
+- XLSR-53 multilingual backbone; trained on English emotion corpora but the author reports cross-lingual generalisation to Chinese and French (empirical claim, not benchmarked)
+
+**Override the model** via env var `EMOTION_MODEL=<repo-id>`.
+
+**Curl:**
+
+```bash
+# Bundled with transcription
+curl -s -X POST "http://localhost:8000/transcribe?correct=true&with_emotion=true&lang=en" \
+  -F file=@demo_data/en_short.m4a | python3 -m json.tool
+
+# Standalone
+curl -s -X POST http://localhost:8000/emotion -F file=@demo_data/en_short.m4a | python3 -m json.tool
+```
+
+**Response shape (transcribe with emotion):**
+
+```json
+{
+  "language": "en", "raw_text": "...", "corrected_text": "...",
+  "correction_status": "ok",
+  "segments": [...],
+  "emotion": {
+    "label": "happy", "confidence": 0.83,
+    "all_scores": [{"label": "happy", "score": 0.83}, ...]
+  },
+  "emotion_status": "ok"
+}
+```
+
+`emotion` is `null` and `emotion_status` is `"failed"` if classification raised; `null` and `"skipped"` if `with_emotion=false`.
+
+## Tests
+
+```bash
+cd poc/voice-to-text
+PYTHONPATH=. .venv/bin/python3 -m pytest tests/ -v
+```

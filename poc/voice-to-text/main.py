@@ -6,13 +6,16 @@ Whisper transcription + optional LLM correction (any OpenAI-compatible provider)
 import os
 import tempfile
 import asyncio
-from typing import Literal, Optional, Tuple
+from threading import Lock
+from typing import Any, Dict, Literal, Optional, Tuple
 
 import whisper
 from fastapi import FastAPI, UploadFile, File, Query, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
 from openai import OpenAI
+from emotion import analyze_emotion
 
 load_dotenv()
 
@@ -22,15 +25,44 @@ LLM_API_KEY = os.getenv("LLM_API_KEY")
 LLM_BASE_URL = os.getenv("LLM_BASE_URL")
 LLM_MODEL = os.getenv("LLM_MODEL", "gemini-2.5-flash")
 
-# ---------- Load models ----------
-print(f"Loading Whisper model: {WHISPER_MODEL} ...")
-model = whisper.load_model(WHISPER_MODEL)
-print("Whisper model loaded.")
+# ---------- Lazy model loading ----------
+_whisper_model = None
+_whisper_lock = Lock()
+
+
+def get_whisper_model():
+    """Lazy-load Whisper on first call so import is cheap (tests, /health).
+
+    Double-checked locking mirrors emotion._get_pipeline(): under concurrent
+    asyncio.to_thread() calls at startup, only one thread loads the model
+    instead of several racing to load ~2 GB each.
+    """
+    global _whisper_model
+    if _whisper_model is None:
+        with _whisper_lock:
+            if _whisper_model is None:
+                print(f"Loading Whisper model: {WHISPER_MODEL} ...")
+                _whisper_model = whisper.load_model(WHISPER_MODEL)
+                print("Whisper model loaded.")
+    return _whisper_model
 
 llm = OpenAI(api_key=LLM_API_KEY, base_url=LLM_BASE_URL) if LLM_API_KEY else None
 
 app = FastAPI(title="MiraNote Voice-to-Text", version="0.1.0")
 
+# POC default is permissive so the unified local UI can call across ports.
+# Set CORS_ALLOW_ORIGIN (comma-separated) to scope this in any real
+# deployment, e.g. CORS_ALLOW_ORIGIN=https://app.miranote.ai.
+_CORS_ORIGINS = [
+    o.strip() for o in os.getenv("CORS_ALLOW_ORIGIN", "*").split(",") if o.strip()
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_CORS_ORIGINS,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # The correction prompt is loaded from a separate file to keep source code
 # ASCII-only (org Rule 3).  The file ships as a runtime data asset.
@@ -87,6 +119,10 @@ async def transcribe(
             "on short or noisy clips it misfires (e.g. classifies Mandarin as Javanese)."
         ),
     ),
+    with_emotion: bool = Query(
+        True,
+        description="Run acoustic emotion classifier on the audio (adds ~1 sec).",
+    ),
 ):
     """
     Voice-to-text endpoint.
@@ -115,7 +151,7 @@ async def transcribe(
     try:
         try:
             result = await asyncio.to_thread(
-                model.transcribe, tmp_path, language=lang, verbose=False
+                get_whisper_model().transcribe, tmp_path, language=lang, verbose=False
             )
         except Exception as e:
             print(f"Whisper/ffmpeg failed on {file.filename!r}: {e}")
@@ -142,13 +178,52 @@ async def transcribe(
         if correct and raw_text.strip():
             corrected_text, correction_status = await correct_with_ai(raw_text)
 
+        emotion_result: Optional[Dict[str, Any]] = None
+        emotion_status = "skipped"
+        if with_emotion:
+            try:
+                emotion_result = await asyncio.to_thread(analyze_emotion, tmp_path)
+                emotion_status = "ok"
+            except Exception as e:  # noqa: BLE001 -- surface to caller as status
+                print(f"Emotion analysis failed: {e}")
+                emotion_status = "failed"
+
         return {
             "language": language,
             "raw_text": raw_text,
             "corrected_text": corrected_text,
             "correction_status": correction_status,
             "segments": segments,
+            "emotion": emotion_result,
+            "emotion_status": emotion_status,
         }
+    finally:
+        os.unlink(tmp_path)
+
+
+@app.post("/emotion")
+async def emotion_endpoint(
+    file: UploadFile = File(..., description="Audio file"),
+):
+    """Run only the acoustic emotion classifier on an uploaded audio file."""
+    raw_bytes = await file.read()
+    if len(raw_bytes) < 1024:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Audio too small ({len(raw_bytes)} bytes). Record at least 1 second.",
+        )
+    suffix = os.path.splitext(file.filename or "audio.wav")[1]
+    with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+        tmp.write(raw_bytes)
+        tmp_path = tmp.name
+    try:
+        return await asyncio.to_thread(analyze_emotion, tmp_path)
+    except Exception as e:  # noqa: BLE001 -- log internally, return generic detail
+        print(f"/emotion analysis failed: {e}")
+        raise HTTPException(
+            status_code=502,
+            detail="Emotion analysis failed. See server logs.",
+        )
     finally:
         os.unlink(tmp_path)
 

@@ -18,8 +18,11 @@ def _cfg(docs_root: Path) -> ChatbotConfig:
 
 
 def test_tools_schema_lists_four_functions():
+    # Note: this test is superseded by test_tools_schema_now_lists_ten_functions below.
+    # Kept for backwards compatibility as reference.
     names = [t["function"]["name"] for t in tools.TOOLS]
-    assert sorted(names) == ["list_docs", "read_doc", "search_docs", "set_docs_root"]
+    assert len(names) >= 4  # At least the original 4 are still present
+    assert all(n in names for n in ["list_docs", "read_doc", "search_docs", "set_docs_root"])
     for t in tools.TOOLS:
         assert t["type"] == "function"
         assert "parameters" in t["function"]
@@ -87,3 +90,148 @@ def test_dispatch_set_docs_root_rejects_file(tmp_docs: Path, tmp_path: Path):
     out = tools.dispatch(cfg, "set_docs_root", {"path": str(f)})
     assert "error" in out
     assert "not a directory" in out["error"]
+
+
+class _FakeTextClient:
+    """Captures all calls; returns scripted dicts."""
+
+    def __init__(self):
+        self.calls = []
+        self.scripted = {}
+
+    def _record(self, name, kwargs):
+        self.calls.append((name, kwargs))
+        return self.scripted.get(name, {"ok": True, "name": name})
+
+    def clean(self, text, context=None):
+        return self._record("clean", {"text": text, "context": context})
+
+    def expand(self, text, context=None):
+        return self._record("expand", {"text": text, "context": context})
+
+    def polish(self, text, context=None):
+        return self._record("polish", {"text": text, "context": context})
+
+    def shorten(self, text, target="50%"):
+        return self._record("shorten", {"text": text, "target": target})
+
+    def keywords(self, text, max_hits=10):
+        return self._record("keywords", {"text": text, "max_hits": max_hits})
+
+    def caption(self, text, style="instagram"):
+        return self._record("caption", {"text": text, "style": style})
+
+
+def _cfg_with_text(tmp_docs):
+    cfg = _cfg(tmp_docs)
+    cfg.text_client = _FakeTextClient()
+    return cfg
+
+
+def test_tools_schema_exact_eleven_set():
+    names = [t["function"]["name"] for t in tools.TOOLS]
+    assert sorted(names) == sorted([
+        "list_docs", "read_doc", "search_docs", "set_docs_root",
+        "clean_text", "expand_text", "polish_text", "shorten_text",
+        "extract_keywords", "generate_caption", "find_quote",
+    ])
+
+
+def test_dispatch_routes_to_polish_text(tmp_docs):
+    cfg = _cfg_with_text(tmp_docs)
+    out = tools.dispatch(cfg, "polish_text", {"text": "hi"})
+    assert cfg.text_client.calls == [("polish", {"text": "hi", "context": None})]
+    assert out == {"ok": True, "name": "polish"}
+
+
+def test_dispatch_routes_to_shorten_with_target(tmp_docs):
+    cfg = _cfg_with_text(tmp_docs)
+    tools.dispatch(cfg, "shorten_text", {"text": "long", "target": "tweet"})
+    assert cfg.text_client.calls == [("shorten", {"text": "long", "target": "tweet"})]
+
+
+def test_dispatch_routes_to_extract_keywords(tmp_docs):
+    cfg = _cfg_with_text(tmp_docs)
+    tools.dispatch(cfg, "extract_keywords", {"text": "x", "max": 3})
+    assert cfg.text_client.calls == [("keywords", {"text": "x", "max_hits": 3})]
+
+
+def test_dispatch_routes_to_generate_caption_with_style(tmp_docs):
+    cfg = _cfg_with_text(tmp_docs)
+    tools.dispatch(cfg, "generate_caption", {"text": "entry", "style": "diary"})
+    assert cfg.text_client.calls == [("caption", {"text": "entry", "style": "diary"})]
+
+
+def test_dispatch_text_tool_passes_context(tmp_docs):
+    cfg = _cfg_with_text(tmp_docs)
+    tools.dispatch(cfg, "polish_text", {"text": "hi", "context": "notes"})
+    assert cfg.text_client.calls == [("polish", {"text": "hi", "context": "notes"})]
+
+
+def test_dispatch_text_tool_wraps_runtime_error(tmp_docs):
+    cfg = _cfg_with_text(tmp_docs)
+    def boom(text, context=None):
+        raise RuntimeError("text service down")
+    cfg.text_client.polish = boom
+    out = tools.dispatch(cfg, "polish_text", {"text": "hi"})
+    assert "error" in out
+    assert "text service down" in out["error"]
+
+
+@pytest.mark.parametrize("name", sorted(tools._TEXT_TOOL_NAMES))
+def test_dispatch_text_tool_without_client_returns_clear_error(tmp_docs, name):
+    # text_client defaults to None when TEXT_API_URL is not configured; the
+    # guard should yield a clear message rather than an AttributeError on None.
+    cfg = _cfg(tmp_docs)
+    assert cfg.text_client is None
+    out = tools.dispatch(cfg, name, {"text": "hi"})
+    assert out == {"error": "text tools unavailable: TEXT_API_URL not configured"}
+
+
+class _FakeRetrievalClient:
+    def __init__(self):
+        self.calls = []
+        self.scripted = {"matches": [{"text": "stub", "score": 0.9, "why": "ok"}]}
+
+    def quotes(self, text, max_picks=3, lang=None):
+        self.calls.append({"text": text, "max_picks": max_picks, "lang": lang})
+        return self.scripted
+
+
+def _cfg_with_retrieval(tmp_docs):
+    cfg = _cfg(tmp_docs)
+    cfg.retrieval_client = _FakeRetrievalClient()
+    return cfg
+
+
+def test_tools_schema_now_lists_eleven_functions():
+    names = [t["function"]["name"] for t in tools.TOOLS]
+    assert "find_quote" in names
+    assert len(names) == 11  # 10 from prior PRs + find_quote
+
+
+def test_dispatch_routes_to_find_quote(tmp_docs):
+    cfg = _cfg_with_retrieval(tmp_docs)
+    out = tools.dispatch(cfg, "find_quote", {"text": "I am tired"})
+    assert cfg.retrieval_client.calls == [
+        {"text": "I am tired", "max_picks": 3, "lang": None}
+    ]
+    assert "matches" in out
+
+
+def test_dispatch_find_quote_passes_max_and_lang(tmp_docs):
+    cfg = _cfg_with_retrieval(tmp_docs)
+    tools.dispatch(cfg, "find_quote", {"text": "x", "max": 2, "lang": "zh"})
+    assert cfg.retrieval_client.calls == [
+        {"text": "x", "max_picks": 2, "lang": "zh"}
+    ]
+
+
+def test_dispatch_find_quote_wraps_runtime_error(tmp_docs):
+    cfg = _cfg_with_retrieval(tmp_docs)
+    def boom(text, max_picks=3, lang=None):
+        raise RuntimeError("retrieval service down")
+    cfg.retrieval_client.quotes = boom
+    out = tools.dispatch(cfg, "find_quote", {"text": "x"})
+    assert "error" in out
+    assert "retrieval service down" in out["error"]

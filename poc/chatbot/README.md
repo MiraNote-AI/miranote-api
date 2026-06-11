@@ -43,8 +43,8 @@ pointing back here. All other formats work out of the box.
 
 ## Run
 
-Easiest: from the repo root, `./start-all.sh` brings up all three POC
-servers (text on 8001, voice on 8000, chat on 8003) at once with
+Easiest: from the repo root, `./start-all.sh` brings up all four POC
+servers (text on 8001, voice on 8000, chat on 8003, retrieval on 8004) at once with
 prefixed log streams. Ctrl-C stops them all.
 
 To run just the chatbot backend on its own:
@@ -101,7 +101,7 @@ what came back.
 ## Tests
 
 ```bash
-cd /Users/mengjia/MiraNote/miranote-api
+# from the repo root
 PYTHONPATH=. python3 -m pytest poc/chatbot/tests -v
 ```
 
@@ -113,6 +113,13 @@ PYTHONPATH=. python3 -m pytest poc/chatbot/tests -v
 | `read_doc(path)` | Read a file. Dispatches on extension: text/markdown, PDF, DOCX, image (OCR). | 32 KB truncated |
 | `search_docs(query, max_hits)` | Case-insensitive substring search across **UTF-8 text files only** -- PDFs/DOCX/images are invisible to it; use `read_doc` for those. | 200 files, 160-char snippet |
 | `set_docs_root(path)` | Switch the docs directory. Only called when the user explicitly asks. Validates that the new path exists and is a directory. | -- |
+| `clean_text(text, context?)` | Restructure messy/stream-of-consciousness text. Delegates to text-clean-expand `/clean`. | -- |
+| `expand_text(text, context?)` | Expand brief notes in the user's voice. Delegates to `/expand`. | -- |
+| `polish_text(text, context?)` | Final editing pass -- word choice + flow. Delegates to `/polish`. | -- |
+| `shorten_text(text, target)` | Shorter version. `target` 30%/50%/tweet. Delegates to `/shorten`. | -- |
+| `extract_keywords(text, max)` | 5-10 salient keywords with score. Delegates to `/keywords`. | max 20 |
+| `generate_caption(text, style)` | 1-2 sentence caption. `style` instagram/diary/tweet. Delegates to `/caption`. | -- |
+| `find_quote(text, max, lang)` | Find quotes/poetry that fit a mood. Delegates to retrieval POC `/quotes`. May return 0 matches. | -- |
 
 All `read_doc`/`list_docs`/`search_docs` calls resolve paths under
 `DOCS_ROOT`; anything escaping is rejected with
@@ -137,3 +144,12 @@ See `.env.example`. The important knobs:
   `POST /config` (UI Docs root row) or the `set_docs_root` tool.
 - `MAX_TOOL_ITERATIONS` -- safety cap on the tool-call loop.
 - `SESSION_TTL_SECONDS` -- idle eviction for in-memory sessions.
+- `TEXT_API_URL` -- URL of the text-clean-expand server. Defaults to
+  `http://localhost:8001`. The chatbot's `*_text`, `extract_keywords`,
+  and `generate_caption` tools HTTP-delegate to this server. If the
+  text server is down, the corresponding tools return a friendly error
+  message and the agent recovers.
+- `RETRIEVAL_API_URL` -- URL of the retrieval POC server. Defaults to
+  `http://localhost:8004`. The chatbot's `find_quote` tool
+  HTTP-delegates to this server. Server down -> tool returns an error
+  and the agent recovers.
