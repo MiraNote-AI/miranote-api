@@ -3283,3 +3283,18 @@ After all phases:
    atomicity test. Ops note: this entry was first committed to the
    wrong repo (dotgithub main, direct push) by a stateful-cd mistake
    and reverted there within minutes; lesson recorded.
+3. Plot twist + terminal state: PR #19 opened, then discovered the
+   feature had ALREADY shipped -- an interim session (post-handoff)
+   opened PR #13 (retrieval) and PR #15 (integration), both squash-
+   merged to main before this loop began. The stale handoff plus a
+   resume survey that never checked PR history for the branch names
+   caused the duplicate; lesson recorded org-wide. PR #19 repurposed
+   as the hardening PR (merge from main, add/add conflicts resolved
+   keeping hardened versions; verified no main-side lines lost), CI
+   green. Live e2e on the merged stack: chat find_quote trace
+   confirmed against the hardened service; 0-match handled; failure
+   probe (retrieval down) degrades gracefully -- the bot discloses
+   unavailability, though it then offers a clearly-labeled
+   non-corpus quote, a gray zone vs the never-improvise prompt rule
+   (backlog: tighten prompt or accept labeled fallback). Handoff file
+   deleted at SUCCESS; remaining merge is the human's.
