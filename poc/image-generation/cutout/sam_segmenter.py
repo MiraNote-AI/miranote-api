@@ -1,6 +1,7 @@
 """SAM 2.1 Large via official PyTorch package: image + bbox → full-image binary mask PNG."""
 import io
 import os
+import threading
 from pathlib import Path
 from typing import Optional
 
@@ -15,6 +16,14 @@ import config
 
 
 _predictor: Optional[SAM2ImagePredictor] = None
+
+# SAM2ImagePredictor is stateful: set_image() stores the image embedding on the
+# predictor and predict() reads it back. Concurrent /cutout requests share this
+# one predictor (each segment call runs in an asyncio.to_thread worker), so a
+# second request's set_image() can land between the first's set_image() and
+# predict() and return a mask for the wrong image. This lock keeps each
+# set_image + predict pair atomic across threads.
+_predict_lock = threading.Lock()
 
 
 def _cache_dir() -> Path:
@@ -77,7 +86,9 @@ def segment_with_bbox(image_bytes: bytes, bbox_pixels: tuple[float, float, float
     x2 = min(float(orig_w), x2); y2 = min(float(orig_h), y2)
     box = np.array([x1, y1, x2, y2], dtype=np.float32)
 
-    with torch.inference_mode():
+    # Hold the lock only for the stateful set_image + predict pair; the numpy
+    # post-processing below works on returned arrays and is thread-local.
+    with _predict_lock, torch.inference_mode():
         _predictor.set_image(np_img)
         logits, scores, _ = _predictor.predict(
             box=box, multimask_output=True, return_logits=True
