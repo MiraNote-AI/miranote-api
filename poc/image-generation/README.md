@@ -124,8 +124,9 @@ curl -s -X POST "http://localhost:8001/border?mode=ai_outline&prompt=white%20cru
 ## Testing
 
 `test_api.py` is a **manual** test catalog (not an automated suite — no asserts).
-It requires the server running on `:8001` and calls paid Vertex APIs. Sample
-inputs live in `test_input/`, results are written to `test_output/`.
+It requires the server running on `:8001` and calls paid Vertex APIs. Both
+`test_input/` and `test_output/` are git-ignored: drop your own sample images
+into `test_input/` before running; results are written to `test_output/`.
 
 ```bash
 # in one terminal
@@ -154,8 +155,8 @@ stylize/           /stylize   — stylizer, style_presets
 border/            /border    — border, border_presets
 shared/            vertex_client — the shared Vertex AI genai client + response helpers
 test_api.py        manual test / demo catalog
-test_input/        sample input images
-test_output/       generated results
+test_input/        your sample images (git-ignored; not committed)
+test_output/       generated results (git-ignored)
 ```
 
 ## Notes
