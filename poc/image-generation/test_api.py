@@ -210,14 +210,14 @@ test_generate_background("生成复古陈旧的背景", "bg_vintage")
 # ==========================================================================
 # -- auto: no prompt -> full-image rembg background removal.
 #    Also writes test_output/2cut.png, the transparent input the /border tests use. --
-test_cutout("test_input/2.jpeg", prefix="2cut")
+test_cutout("demo_data/2.jpeg", prefix="2cut")
 # test_cutout("test_input/1.jpeg", prefix="1cut")
 # -- prompt-guided: default mode hybrid_sam_prebg_gray (rembg -> gray bg ->
 #    hybrid_sam_union). Omit mode= for the default; pass mode="hybrid_sam_union"
 #    to compare the no-prebg path. --
 # test_cutout("test_input/13.jpeg", prompt="the yellow mango shaved ice on the right", prefix="prebg_mango")
 # test_cutout("test_input/14.jpeg", prompt="the rabbit on the right", prefix="prebg_rabbit_right")
-test_cutout("test_input/17.jpeg", prompt="the boy on the left", prefix="prebg_left_boy")
+test_cutout("demo_data/17.jpeg", prompt="the boy on the left", prefix="prebg_left_boy")
 # test_cutout("test_input/11.jpeg", prompt="the girl in blue dress", mode="hybrid_sam_union", prefix="gsam_girl_union")
 
 
@@ -226,13 +226,13 @@ test_cutout("test_input/17.jpeg", prompt="the boy on the left", prefix="prebg_le
 # Sub-modes: preset style (key) | custom prompt (free-form).
 # ==========================================================================
 # -- preset style: key from style_presets --
-# test_stylize("test_input/17.jpeg", style="impressionist", prefix="style_imp")
-# test_stylize("test_input/17.jpeg", style="cartoon",       prefix="style_cartoon")
-test_stylize("test_input/17.jpeg", style="sketch",        prefix="style_sketch")
-# test_stylize("test_input/17.jpeg", style="line_art",      prefix="style_line")
+# test_stylize("demo_data/17.jpeg", style="impressionist", prefix="style_imp")
+# test_stylize("demo_data/17.jpeg", style="cartoon",       prefix="style_cartoon")
+test_stylize("demo_data/17.jpeg", style="sketch",        prefix="style_sketch")
+# test_stylize("demo_data/17.jpeg", style="line_art",      prefix="style_line")
 
 # -- custom prompt: free-form style description --
-test_stylize("test_input/17.jpeg", prompt="哥特风", prefix="style_custom")
+test_stylize("demo_data/17.jpeg", prompt="哥特风", prefix="style_custom")
 
 
 # ==========================================================================

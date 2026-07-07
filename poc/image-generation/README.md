@@ -89,7 +89,7 @@ backgrounds are returned as-is.
 
 ```bash
 curl -s -X POST "http://localhost:8001/cutout?prompt=the%20cat" \
-  -F "file=@test_input/2.jpeg"
+  -F "file=@demo_data/2.jpeg"
 ```
 
 ### `POST /stylize` — multipart upload + query params
@@ -124,9 +124,11 @@ curl -s -X POST "http://localhost:8001/border?mode=ai_outline&prompt=white%20cru
 ## Testing
 
 `test_api.py` is a **manual** test catalog (not an automated suite — no asserts).
-It requires the server running on `:8001` and calls paid Vertex APIs. Both
-`test_input/` and `test_output/` are git-ignored: drop your own sample images
-into `test_input/` before running; results are written to `test_output/`.
+It requires the server running on `:8001` and calls paid Vertex APIs. The default
+run uses two sample images committed under `demo_data/`, so it works out of the
+box. `test_input/` and `test_output/` are git-ignored: put your own images in
+`test_input/` to run the extra (commented) catalog examples; results are written
+to `test_output/`.
 
 ```bash
 # in one terminal
@@ -155,7 +157,8 @@ stylize/           /stylize   — stylizer, style_presets
 border/            /border    — border, border_presets
 shared/            vertex_client — the shared Vertex AI genai client + response helpers
 test_api.py        manual test / demo catalog
-test_input/        your sample images (git-ignored; not committed)
+demo_data/         committed sample images used by the default test run
+test_input/        your own extra images (git-ignored; not committed)
 test_output/       generated results (git-ignored)
 ```
 
