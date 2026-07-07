@@ -1,0 +1,1 @@
+for digital journaling, isolated object, clean edges, no text, no watermark, placed on a solid flat single-color background; the background color must not appear anywhere in the sticker itself and must strongly contrast with the sticker's palette to ensure clean background removal
