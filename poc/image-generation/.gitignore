@@ -1,5 +1,5 @@
 .env
-output/
+test_output/
 venv/
 __pycache__/
 *.pyc

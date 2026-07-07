@@ -13,6 +13,6 @@ else
     echo ".env already exists, skipping."
 fi
 
-mkdir -p output
+mkdir -p test_output
 
 echo "Setup complete. Run: source venv/bin/activate"
