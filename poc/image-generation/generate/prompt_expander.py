@@ -18,7 +18,9 @@ def expand(user_input: str, model: str) -> str:
         model=model,
         contents=prompt,
     )
-    return response.text.strip()
+    # response.text is None when the model returns no text part (e.g. a safety
+    # block); fall back to the user's own words instead of crashing on .strip().
+    return (response.text or user_input).strip()
 
 
 BACKGROUND_SYSTEM_PROMPT = (_PROMPT_DIR / "background_system.txt").read_text(encoding="utf-8")
@@ -27,4 +29,6 @@ BACKGROUND_SYSTEM_PROMPT = (_PROMPT_DIR / "background_system.txt").read_text(enc
 def expand_background(user_input: str, model: str) -> str:
     prompt = BACKGROUND_SYSTEM_PROMPT.replace("{user_prompt}", user_input)
     response = _get_client().models.generate_content(model=model, contents=prompt)
-    return response.text.strip()
+    # response.text is None when the model returns no text part (e.g. a safety
+    # block); fall back to the user's own words instead of crashing on .strip().
+    return (response.text or user_input).strip()
