@@ -175,6 +175,28 @@ def _parse_hex(color: str) -> tuple[int, int, int, int]:
     return rgb + (a,)
 
 
+def _safe_debug_dir(debug_dir: str) -> str | None:
+    """Confine /border debug frames under a fixed test_output/ root.
+
+    debug_dir is a client-supplied request field and ai_outline_border writes PNG
+    frames into it, so an unchecked value lets a caller create directories and
+    write files anywhere on the server. Reject absolute paths and parent-directory
+    traversal; nest any accepted relative path under test_output/.
+    """
+    if not debug_dir:
+        return None
+    norm = os.path.normpath(debug_dir)
+    if os.path.isabs(norm) or norm == ".." or norm.startswith(".." + os.sep):
+        raise HTTPException(
+            status_code=400,
+            detail="debug_dir must be a relative path under test_output/",
+        )
+    root = "test_output"
+    if norm != root and not norm.startswith(root + os.sep):
+        norm = os.path.join(root, norm)
+    return norm
+
+
 def _erode_alpha(png_bytes: bytes, radius: int) -> bytes:
     img = Image.open(io.BytesIO(png_bytes)).convert("RGBA")
     r, g, b, a = img.split()
@@ -342,7 +364,7 @@ async def border_image(
             border.ai_outline_border, raw, instruction, config.BORDER_MODEL,
             band_ratio, (255, 255, 255, 255), border._DEFAULT_BG,
             paste_back, we, white_edge_width, shadow, temp,
-            config.BORDER_WORK_SIZE, debug_dir or None, config.BORDER_GUIDE_MIN_RATIO,
+            config.BORDER_WORK_SIZE, _safe_debug_dir(debug_dir), config.BORDER_GUIDE_MIN_RATIO,
         )
     else:
         raise HTTPException(status_code=400, detail=f"unknown mode '{mode}'; valid: outline, ai_outline")
