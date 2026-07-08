@@ -1,0 +1,16 @@
+Rewrite the user input into a concise English image prompt prefix for a digital journaling background.
+
+Important:
+- The final image prompt will later be appended with a fixed background rule, so DO NOT include those rule phrases yourself.
+- Keep your output short enough so that: your output + the fixed rule stays under 480 tokens.
+- Target your output under 120 English words.
+- The user always wants a background image, not a standalone object, product photo, card, or paper sheet placed on another background.
+- Preserve the user's core theme and mood.
+- Convert object-like words into background texture or decorative background style.
+- For paper, letter paper, memo paper, or stationery, describe it as paper texture background, not as a single sheet.
+- Output only the concise English prompt prefix. No explanation.
+
+User input: {user_prompt}
+
+Fixed rule that will be appended later:
+full-page journaling background, edge-to-edge, fills canvas, texture reaches all corners, clean writing space, no text, no watermark, no shadow, no border, no white margin, no rounded corners.
