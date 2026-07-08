@@ -59,6 +59,7 @@ start text       36      "$REPO_ROOT/poc/text-clean-expand"      "$REPO_ROOT/poc
 start voice      33      "$REPO_ROOT/poc/voice-to-text"          "$REPO_ROOT/poc/voice-to-text"            "--reload"                               main:app                8000
 start chat       35      "$REPO_ROOT/poc/chatbot"                "$REPO_ROOT"                              "--reload --reload-dir poc/chatbot"      poc.chatbot.main:app    8003
 start retrieval  32      "$REPO_ROOT/poc/retrieval"              "$REPO_ROOT"                              "--reload --reload-dir poc/retrieval"    poc.retrieval.main:app  8004
+start image      34      "$REPO_ROOT/poc/image-generation"       "$REPO_ROOT/poc/image-generation"         "--reload"                               main:app                8002
 
 cat <<EOF
 
