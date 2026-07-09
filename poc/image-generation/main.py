@@ -362,6 +362,30 @@ async def stylize_image(
     }
 
 
+@app.post("/describe")
+async def describe_image(file: UploadFile):
+    """One warm sentence about the photo, for the app's page context --
+    so the journaling chat can "see" what sits on the page."""
+    raw = await file.read()
+
+    def _describe() -> str:
+        from google.genai import types
+        response = _get_client().models.generate_content(
+            model=config.PROMPT_EXPANDER_MODEL,
+            contents=[
+                types.Part.from_bytes(data=raw, mime_type=file.content_type or "image/png"),
+                "Describe this photo in one warm, concrete sentence "
+                "(what is in it, the mood). Answer with the sentence only.",
+            ],
+        )
+        return (response.text or "").strip()
+
+    description = await asyncio.to_thread(_describe)
+    if not description:
+        raise HTTPException(status_code=502, detail="the model returned no description")
+    return {"description": description}
+
+
 @app.post("/border")
 async def border_image(
     file: UploadFile,
