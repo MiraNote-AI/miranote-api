@@ -6,7 +6,21 @@ from poc.chatbot import journal, tools
 def test_journal_tools_drop_docs_but_keep_text_and_quotes():
     names = {t["function"]["name"] for t in journal.journal_tools(tools.TOOLS)}
     assert names.isdisjoint(journal.DOCS_TOOL_NAMES)
-    assert {"polish_text", "expand_text", "find_quote"} <= names
+    assert {"polish_text", "expand_text", "find_quote", "create_note"} <= names
+
+
+def test_create_note_dispatch_is_a_pure_handoff(tmp_path):
+    from poc.chatbot.config import ChatbotConfig
+
+    config = ChatbotConfig(
+        docs_root=tmp_path,
+        model="fake",
+        max_tool_iterations=6,
+        max_history_messages=40,
+        session_ttl_seconds=3600,
+    )
+    result = tools.dispatch(config, "create_note", {"title": "t", "body": "b"})
+    assert result["status"].startswith("draft handed")
 
 
 def test_render_notes_formats_title_date_body():

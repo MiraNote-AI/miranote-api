@@ -16,10 +16,44 @@ DOCS_TOOL_NAMES = {"list_docs", "read_doc", "search_docs", "set_docs_root"}
 MAX_NOTES = 8
 MAX_BODY_CHARS = 600
 
+# Journal-only: the model drafts a page and the APP opens it for the
+# user to shape. The server stores nothing -- the app reads the call's
+# arguments out of tool_trace.
+CREATE_NOTE_TOOL: Dict[str, Any] = {
+    "type": "function",
+    "function": {
+        "name": "create_note",
+        "description": (
+            "Create a draft MiraNote page for the user. Call this when the "
+            "user asks to note something down, save a memory, or make a new "
+            "page. The app opens the draft for the user to review and edit; "
+            "nothing is stored on the server."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "title": {
+                    "type": "string",
+                    "description": "A short, evocative page title.",
+                },
+                "body": {
+                    "type": "string",
+                    "description": (
+                        "A few warm sentences capturing the memory, in the "
+                        "user's language."
+                    ),
+                },
+            },
+            "required": ["title", "body"],
+        },
+    },
+}
+
 
 def journal_tools(all_tools: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """Everything except the docs tools (text transforms, find_quote)."""
-    return [t for t in all_tools if t["function"]["name"] not in DOCS_TOOL_NAMES]
+    """The docs tools stay behind; page drafting joins."""
+    kept = [t for t in all_tools if t["function"]["name"] not in DOCS_TOOL_NAMES]
+    return kept + [CREATE_NOTE_TOOL]
 
 
 def render_notes(notes: List[Dict[str, str]]) -> str:
