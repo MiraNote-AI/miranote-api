@@ -32,7 +32,7 @@ def test_render_notes_formats_title_date_body():
     )
     assert '- "Noodle shop by the bridge" (2026-06-30): warm broth' in block
     assert '- "Untitled"' in block
-    assert block.startswith("[Pages from the user's own MiraNote library")
+    assert block.startswith("[The user's own MiraNote pages")
     assert block.endswith("[End of pages]")
 
 
@@ -53,4 +53,4 @@ def test_compose_user_message_prepends_block():
     composed = journal.compose_user_message(
         "when was it?", [{"title": "Paris", "date": "2026-05-01", "body": "rain"}]
     )
-    assert composed.index("[Pages from") < composed.index("when was it?")
+    assert composed.index("[The user's own MiraNote pages") < composed.index("when was it?")

@@ -58,7 +58,7 @@ def journal_tools(all_tools: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 
 def render_notes(notes: List[Dict[str, str]]) -> str:
     """The context block listing the user's matching pages."""
-    lines = ["[Pages from the user's own MiraNote library that matched this message]"]
+    lines = ["[The user's own MiraNote pages for this conversation -- the first may be the page open in the editor]"]
     for note in notes[:MAX_NOTES]:
         title = (note.get("title") or "Untitled").strip()
         date = (note.get("date") or "").strip()
