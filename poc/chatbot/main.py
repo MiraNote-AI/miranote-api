@@ -125,6 +125,9 @@ async def chat(req: ChatRequest):
         raise HTTPException(status_code=404, detail="unknown session_id")
     except Exception as e:  # noqa: BLE001 -- surface LLM/network errors
         raise HTTPException(status_code=502, detail=f"chat failed: {e}")
+    if not result.reply.strip():
+        # Never hand the app a blank bubble; let it show its retry card.
+        raise HTTPException(status_code=502, detail="the model returned an empty reply")
     return ChatResponse(
         session_id=result.session_id,
         reply=result.reply,

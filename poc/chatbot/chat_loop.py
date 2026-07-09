@@ -35,6 +35,7 @@ def run_turn(
 
     trace: List[Dict[str, Any]] = []
     reply: Optional[str] = None
+    empty_retries = 0
     for _ in range(max_iterations):
         kwargs = {"model": model, "messages": history}
         if tools:
@@ -44,6 +45,13 @@ def run_turn(
         msg = resp.choices[0].message
         if not getattr(msg, "tool_calls", None):
             reply = msg.content or ""
+            if not reply.strip() and empty_retries < 2:
+                # Thinking-mode models occasionally return empty content
+                # (the answer stays in reasoning); ask again, appending
+                # nothing so the transcript stays clean.
+                empty_retries += 1
+                reply = None
+                continue
             history.append({"role": "assistant", "content": reply})
             break
         assistant_entry: Dict[str, Any] = {
