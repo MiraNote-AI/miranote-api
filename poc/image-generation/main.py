@@ -9,6 +9,7 @@ os.environ.setdefault("PYTORCH_ENABLE_MPS_FALLBACK", "1")
 import asyncio
 import base64
 import io
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, UploadFile
@@ -47,15 +48,20 @@ def _call_model(prompt: str, aspect_ratio: str) -> list[bytes]:
             _imagen_unavailable = True
             print(f"[generate] Imagen unavailable, using {config.FALLBACK_IMAGE_MODEL}: {str(error)[:100]}")
     client = _get_client()
-    images: list[bytes] = []
-    for _ in range(config.NUMBER_OF_IMAGES):
+
+    def _one() -> bytes | None:
         response = client.models.generate_content(
             model=config.FALLBACK_IMAGE_MODEL,
             contents=fallback.build_prompt(prompt, aspect_ratio),
         )
         parts = fallback.image_parts(response)
-        if parts:
-            images.append(parts[0])
+        return parts[0] if parts else None
+
+    # The images are independent; generate them concurrently so the whole
+    # request stays comfortably inside client timeouts.
+    with ThreadPoolExecutor(max_workers=config.NUMBER_OF_IMAGES) as pool:
+        results = list(pool.map(lambda _: _one(), range(config.NUMBER_OF_IMAGES)))
+    images = [image for image in results if image]
     if not images:
         raise HTTPException(status_code=502, detail="image generation returned no image")
     return images
