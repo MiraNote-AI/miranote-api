@@ -18,22 +18,47 @@ from rembg import remove, new_session
 
 import config
 from shared.vertex_client import _get_client
-from generate import prompt_expander, generate_presets
+from generate import fallback, prompt_expander, generate_presets
 from cutout import bbox_detector, sam_segmenter, grounding_dino
 from stylize import stylizer, style_presets
 from border import border, border_presets
 
 
+_imagen_unavailable = False
+
+
 def _call_model(prompt: str, aspect_ratio: str) -> list[bytes]:
-    response = _get_client().models.generate_images(
-        model=config.MODEL_ID,
-        prompt=prompt,
-        config={
-            "number_of_images": config.NUMBER_OF_IMAGES,
-            "aspect_ratio": aspect_ratio,
-        },
-    )
-    return [img.image.image_bytes for img in response.generated_images]
+    global _imagen_unavailable
+    if not _imagen_unavailable:
+        try:
+            response = _get_client().models.generate_images(
+                model=config.MODEL_ID,
+                prompt=prompt,
+                config={
+                    "number_of_images": config.NUMBER_OF_IMAGES,
+                    "aspect_ratio": aspect_ratio,
+                },
+            )
+            return [img.image.image_bytes for img in response.generated_images]
+        except Exception as error:
+            if not fallback.is_model_unavailable(error):
+                raise
+            # Imagen is gated per project; remember and stop retrying it.
+            _imagen_unavailable = True
+            print(f"[generate] Imagen unavailable, using {config.FALLBACK_IMAGE_MODEL}: {str(error)[:100]}")
+    client = _get_client()
+    images: list[bytes] = []
+    for _ in range(config.NUMBER_OF_IMAGES):
+        response = client.models.generate_content(
+            model=config.FALLBACK_IMAGE_MODEL,
+            contents=fallback.build_prompt(prompt, aspect_ratio),
+        )
+        parts = fallback.image_parts(response)
+        if parts:
+            images.append(parts[0])
+    if not images:
+        raise HTTPException(status_code=502, detail="image generation returned no image")
+    return images
 
 
 _rembg_session = None
