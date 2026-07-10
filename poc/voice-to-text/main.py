@@ -46,6 +46,30 @@ def get_whisper_model():
                 print("Whisper model loaded.")
     return _whisper_model
 
+
+def _mean_logprob(result: Dict[str, Any]) -> float:
+    """Whisper's own confidence for a decode: the mean of the segments'
+    avg_logprob, worst possible when a decode produced no segments."""
+    segments = result.get("segments") or []
+    scores = [seg["avg_logprob"] for seg in segments if "avg_logprob" in seg]
+    if not scores:
+        return float("-inf")
+    return sum(scores) / len(scores)
+
+
+def _transcribe_picking_language(tmp_path: str) -> Dict[str, Any]:
+    """Closed-set selection behind `lang=auto`: decode the clip as zh and
+    as en, keep whichever Whisper itself scored higher. Open-set detection
+    stays off (it misfires on short clips -- the original reason it was
+    disabled); a two-way choice cannot wander off to a third language."""
+    model = get_whisper_model()
+    candidates = [
+        model.transcribe(tmp_path, language=candidate, verbose=False)
+        for candidate in ("zh", "en")
+    ]
+    return max(candidates, key=_mean_logprob)
+
+
 llm = OpenAI(api_key=LLM_API_KEY, base_url=LLM_BASE_URL) if LLM_API_KEY else None
 
 app = FastAPI(title="MiraNote Voice-to-Text", version="0.1.0")
@@ -109,14 +133,17 @@ async def correct_with_ai(raw_text: str) -> Tuple[Optional[str], str]:
 async def transcribe(
     file: UploadFile = File(..., description="Audio file (mp3, wav, flac, m4a, ogg, webm)"),
     correct: bool = Query(True, description="Apply AI correction after Whisper transcription"),
-    lang: Literal["zh", "en"] = Query(
+    lang: Literal["zh", "en", "auto"] = Query(
         "zh",
         description=(
             "Audio language. `zh` (default) is the right choice for Chinese, "
             "Chinese + English code-switching, or any audio dominated by Mandarin -- "
             "the multilingual Whisper model handles inline English tokens. "
-            "`en` is for pure English audio. We disable Whisper's auto-detect because "
-            "on short or noisy clips it misfires (e.g. classifies Mandarin as Javanese)."
+            "`en` is for pure English audio. `auto` decodes as both and keeps "
+            "whichever Whisper scored higher -- use it when the speaker could be "
+            "in either language (dictation). Whisper's own open-set auto-detect "
+            "stays disabled: on short or noisy clips it misfires (e.g. classifies "
+            "Mandarin as Javanese); a two-way choice cannot wander like that."
         ),
     ),
     with_emotion: bool = Query(
@@ -150,9 +177,12 @@ async def transcribe(
 
     try:
         try:
-            result = await asyncio.to_thread(
-                get_whisper_model().transcribe, tmp_path, language=lang, verbose=False
-            )
+            if lang == "auto":
+                result = await asyncio.to_thread(_transcribe_picking_language, tmp_path)
+            else:
+                result = await asyncio.to_thread(
+                    get_whisper_model().transcribe, tmp_path, language=lang, verbose=False
+                )
         except Exception as e:
             print(f"Whisper/ffmpeg failed on {file.filename!r}: {e}")
             raise HTTPException(
