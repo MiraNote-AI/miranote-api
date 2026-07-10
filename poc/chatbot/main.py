@@ -30,7 +30,12 @@ load_dotenv(Path(__file__).parent / ".env")
 LLM_API_KEY = os.getenv("LLM_API_KEY")
 LLM_BASE_URL = os.getenv("LLM_BASE_URL")
 
-_initial_docs_root = Path(os.getenv("DOCS_ROOT", "./demo_data/docs")).resolve()
+# A relative DOCS_ROOT is anchored to this file's directory, matching how the
+# .env next to it is loaded, so startup works regardless of the process CWD.
+_docs_root_env = Path(os.getenv("DOCS_ROOT", "./demo_data/docs"))
+_initial_docs_root = (
+    _docs_root_env if _docs_root_env.is_absolute() else Path(__file__).parent / _docs_root_env
+).resolve()
 
 if not LLM_API_KEY:
     raise RuntimeError("LLM_API_KEY is required. Set it in .env")
