@@ -14,7 +14,7 @@ small repo footprint.
 ## Use them from the web UI
 
 Start the server (see the parent README), open
-<http://localhost:8000/>, pick the matching language from the
+<http://localhost:8005/>, pick the matching language from the
 **Language** row at the top, switch to the **Upload file** tab, and
 select one of the files in this folder.
 
@@ -23,15 +23,15 @@ select one of the files in this folder.
 ```bash
 # Chinese meeting (default lang=zh)
 curl -s -F file=@demo_data/zh_meeting.m4a \
-     "http://localhost:8000/transcribe" | python3 -m json.tool
+     "http://localhost:8005/transcribe" | python3 -m json.tool
 
 # Mixed Chinese + English (lang=zh handles inline English)
 curl -s -F file=@demo_data/zh_en_mixed.m4a \
-     "http://localhost:8000/transcribe?lang=zh" | python3 -m json.tool
+     "http://localhost:8005/transcribe?lang=zh" | python3 -m json.tool
 
 # Pure English
 curl -s -F file=@demo_data/en_short.m4a \
-     "http://localhost:8000/transcribe?lang=en" | python3 -m json.tool
+     "http://localhost:8005/transcribe?lang=en" | python3 -m json.tool
 ```
 
 ## Regenerating

@@ -78,7 +78,7 @@ download while you are just sanity-checking. The default `medium` is
 ## Step 4: start the server
 
 ```bash
-uvicorn main:app --host 0.0.0.0 --port 8000
+uvicorn main:app --host 0.0.0.0 --port 8005
 ```
 
 The first request triggers the Whisper model download if it has not
@@ -89,15 +89,15 @@ fast.
 ## Step 5: smoke test
 
 Browser:
-- Open <http://localhost:8000/>.
+- Open <http://localhost:8005/>.
 - Try the **Record (mic)** tab. The browser asks for mic permission
   on first click.
 - Try the **Upload file** tab with any short audio clip.
 
 Or via curl:
 ```bash
-curl http://localhost:8000/health
-curl -F "file=@some.m4a" "http://localhost:8000/transcribe?lang=zh"
+curl http://localhost:8005/health
+curl -F "file=@some.m4a" "http://localhost:8005/transcribe?lang=zh"
 ```
 
 `/health` should return immediately. The first `/transcribe` may take
@@ -108,7 +108,7 @@ tens of seconds because of model load.
 - **`FileNotFoundError: ... ffmpeg`** -- ffmpeg is not on `PATH`.
   Re-run the prereqs step.
 - **Mic button does nothing in browser** -- the page must be loaded
-  over `localhost` or HTTPS. `http://<lan-ip>:8000` is rejected by the
+  over `localhost` or HTTPS. `http://<lan-ip>:8005` is rejected by the
   browser as an insecure origin for `MediaRecorder`.
 - **`/transcribe` returns `correction_status: "failed"`** -- the LLM
   call errored. Server stderr has the underlying message; most often
@@ -116,8 +116,9 @@ tens of seconds because of model load.
 - **`/transcribe` returns 422 on `lang`** -- only `zh` and `en` are
   accepted. Use `zh` for Mandarin or Mandarin plus English mixed;
   `en` for pure English.
-- **Port 8000 already in use** -- pass `--port 8001` (or any free
-  port) to `uvicorn`.
+- **Port 8005 already in use** -- pass any free port to `uvicorn`
+  (avoid 8000-8004: 8001-8004 belong to the other POCs, and 8000 is
+  deliberately left free for unrelated local services).
 
 ## Governance checks (only if you edit `MiraNote-AI/.github`)
 

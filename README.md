@@ -6,7 +6,7 @@ capability; the iOS app talks to all of them on localhost.
 | Service | Port | Needs |
 |---|---|---|
 | text-clean-expand (polish / expand / captions) | 8001 | `.env` with `LLM_API_KEY` |
-| voice-to-text (transcription) | 8000 | `.env` with `LLM_API_KEY` |
+| voice-to-text (transcription) | 8005 | `.env` with `LLM_API_KEY` |
 | image-generation (generate / cutout / stylize / describe) | 8002 | `.env` with GCP `PROJECT_ID` + gcloud ADC |
 | chatbot (journal chat, drafts, titles) | 8003 | `.env` with `LLM_API_KEY` |
 | retrieval (quote corpus) | 8004 | `.env` with `LLM_API_KEY` |
@@ -31,7 +31,7 @@ bash start-all.sh    # Ctrl-C stops all; skips any POC missing .venv or .env
 `start-all.sh` looks for `.venv` (dot prefix). Per-POC READMEs cover
 endpoints and options.
 
-## LLM API key (ports 8000 / 8001 / 8003 / 8004)
+## LLM API key (ports 8001 / 8003 / 8004 / 8005)
 
 These four call an OpenAI-compatible chat API. In each `.env`:
 
@@ -80,7 +80,7 @@ Two kinds of dependencies:
 ## Smoke tests
 
 ```bash
-for p in 8000 8001 8002 8003 8004; do curl -s -o /dev/null -w "$p %{http_code}\n" localhost:$p/docs; done
+for p in 8001 8002 8003 8004 8005; do curl -s -o /dev/null -w "$p %{http_code}\n" localhost:$p/docs; done
 poc/chatbot/.venv/bin/python3 -m pytest poc/chatbot/tests -q
 cd poc/image-generation && .venv/bin/python3 -m unittest discover tests
 ```

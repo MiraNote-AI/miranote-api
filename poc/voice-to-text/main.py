@@ -238,7 +238,7 @@ async def health():
 
 
 # Mount static UI at "/" last so explicit API routes above take precedence.
-# Visit http://localhost:8000/ in a browser.
+# Visit http://localhost:8005/ in a browser.
 _STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
 if os.path.isdir(_STATIC_DIR):
     app.mount("/", StaticFiles(directory=_STATIC_DIR, html=True), name="ui")
