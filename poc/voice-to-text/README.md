@@ -116,7 +116,7 @@ LLM_MODEL=Qwen/Qwen2.5-7B-Instruct
 | Query param | Default | Notes |
 |-------------|---------|-------|
 | `correct`   | `true`  | if `false`, skip LLM correction even when `LLM_API_KEY` is set |
-| `lang`      | `zh`    | one of `zh` or `en`. Forces Whisper's language; auto-detect is disabled because on short / noisy clips it misfires (we observed Mandarin classified as Javanese). `zh` is the right choice for Chinese audio **and** for Chinese + English code-switching -- the multilingual model handles inline English. `en` is for pure English audio. Other values return 422. |
+| `lang`      | `zh`    | one of `zh`, `en`, or `auto`. `zh` is the right choice for Chinese audio **and** for Chinese + English code-switching -- the multilingual model handles inline English. `en` is for pure English audio. `auto` decodes as both and keeps the one Whisper scored higher (mean segment `avg_logprob`) -- for callers who cannot know the speaker's language, like app dictation; it costs a second decode. Whisper's open-set auto-detect stays disabled: on short / noisy clips it misfires (we observed Mandarin classified as Javanese), while the two-way pick cannot leave zh/en. Other values return 422. |
 
 Response:
 
