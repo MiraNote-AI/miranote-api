@@ -16,7 +16,7 @@ This is a POC. No auth, no upload size limit, no SLAs. Run locally.
 cd poc/voice-to-text
 pip install -r requirements.txt
 cp .env.example .env             # edit -- see "LLM configuration" below
-uvicorn main:app --host 0.0.0.0 --port 8000
+uvicorn main:app --host 0.0.0.0 --port 8005
 ```
 
 First run downloads the Whisper model (~1.5 GB for `medium`).
@@ -30,7 +30,7 @@ exercises and copy-paste curl commands.
 
 ## Web UI
 
-Once the server is running, open <http://localhost:8000/> in a browser.
+Once the server is running, open <http://localhost:8005/> in a browser.
 A single page is served from `static/index.html` with two modes:
 
 - **Upload file** -- pick any audio file from disk and transcribe it.
@@ -177,11 +177,11 @@ neutral, sad, surprise) plus per-class scores.
 
 ```bash
 # Bundled with transcription
-curl -s -X POST "http://localhost:8000/transcribe?correct=true&with_emotion=true&lang=en" \
+curl -s -X POST "http://localhost:8005/transcribe?correct=true&with_emotion=true&lang=en" \
   -F file=@demo_data/en_short.m4a | python3 -m json.tool
 
 # Standalone
-curl -s -X POST http://localhost:8000/emotion -F file=@demo_data/en_short.m4a | python3 -m json.tool
+curl -s -X POST http://localhost:8005/emotion -F file=@demo_data/en_short.m4a | python3 -m json.tool
 ```
 
 **Response shape (transcribe with emotion):**
