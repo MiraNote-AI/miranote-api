@@ -17,7 +17,7 @@ from pydantic import BaseModel, Field
 from dotenv import load_dotenv
 from openai import OpenAI
 
-from poc.chatbot import tools
+from poc.chatbot import journal, tools
 from poc.chatbot.chat_loop import ChatTurnResult, run_turn
 from poc.chatbot.config import ChatbotConfig
 from poc.chatbot.session import SessionStore
@@ -56,6 +56,8 @@ if LLM_BASE_URL:
 client = OpenAI(**client_kwargs)
 
 SYSTEM_PROMPT = (Path(__file__).parent / "prompts" / "system.txt").read_text(encoding="utf-8")
+JOURNAL_PROMPT = (Path(__file__).parent / "prompts" / "journal.txt").read_text(encoding="utf-8")
+JOURNAL_TOOLS = journal.journal_tools(tools.TOOLS)
 
 sessions = SessionStore(ttl_seconds=config.session_ttl_seconds)
 
@@ -73,9 +75,18 @@ app.add_middleware(
 )
 
 
+class NoteIn(BaseModel):
+    title: str = ""
+    body: str = ""
+    date: str = ""
+
+
 class ChatRequest(BaseModel):
     session_id: Optional[str] = None
     message: str = Field(..., min_length=1, max_length=4000)
+    # Present (even empty) = journal mode: ground the reply in the
+    # user's own pages and withhold the docs tools.
+    notes: Optional[List[NoteIn]] = None
 
 
 class ChatResponse(BaseModel):
@@ -90,24 +101,33 @@ class ConfigRequest(BaseModel):
 
 @app.post("/chat", response_model=ChatResponse)
 async def chat(req: ChatRequest):
+    journal_mode = req.notes is not None
+    message = req.message
+    if journal_mode:
+        message = journal.compose_user_message(
+            req.message, [n.model_dump() for n in req.notes]
+        )
     try:
         result: ChatTurnResult = await asyncio.to_thread(
             run_turn,
             client=client,
             session_store=sessions,
             session_id=req.session_id,
-            user_message=req.message,
+            user_message=message,
             model=config.model,
-            tools=tools.TOOLS,
+            tools=JOURNAL_TOOLS if journal_mode else tools.TOOLS,
             tool_dispatcher=_dispatcher,
             max_iterations=config.max_tool_iterations,
             max_history=config.max_history_messages,
-            system_prompt=SYSTEM_PROMPT,
+            system_prompt=JOURNAL_PROMPT if journal_mode else SYSTEM_PROMPT,
         )
     except KeyError:
         raise HTTPException(status_code=404, detail="unknown session_id")
     except Exception as e:  # noqa: BLE001 -- surface LLM/network errors
         raise HTTPException(status_code=502, detail=f"chat failed: {e}")
+    if not result.reply.strip():
+        # Never hand the app a blank bubble; let it show its retry card.
+        raise HTTPException(status_code=502, detail="the model returned an empty reply")
     return ChatResponse(
         session_id=result.session_id,
         reply=result.reply,

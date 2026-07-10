@@ -184,3 +184,28 @@ def test_thinking_mode_reasoning_content_preserved():
     history = store.get(result.session_id)
     assistant_with_tools = [m for m in history if m.get("role") == "assistant" and m.get("tool_calls")][0]
     assert assistant_with_tools["reasoning_content"] == "I should list the docs first."
+
+
+def test_empty_content_retries_then_lands():
+    scripted = [
+        _resp(_msg(content="")),
+        _resp(_msg(content=None)),
+        _resp(_msg(content="here at last")),
+    ]
+    client = FakeClient(scripted)
+    store = SessionStore(ttl_seconds=60)
+    result = run_turn(
+        client=client,
+        session_store=store,
+        session_id=None,
+        user_message="hi",
+        model="fake-model",
+        tools=[],
+        tool_dispatcher=lambda name, args: {},
+        max_iterations=6,
+        max_history=40,
+        system_prompt="helper",
+    )
+    assert result.reply == "here at last"
+    history = store.get(result.session_id)
+    assert [m["role"] for m in history] == ["system", "user", "assistant"], "empty tries append nothing"

@@ -259,6 +259,11 @@ def dispatch(config: ChatbotConfig, name: str, args: Dict[str, Any]) -> Any:
             return config.text_client.keywords(args["text"], int(args.get("max", 10)))
         if name == "generate_caption":
             return config.text_client.caption(args["text"], args.get("style", "instagram"))
+        if name == "create_note":
+            # Journal mode: the page lives on the user's device. The app
+            # reads title/body from tool_trace; this result just tells
+            # the model the hand-off happened.
+            return {"status": "draft handed to the app for the user to shape"}
         if name == "find_quote":
             lang = args.get("lang")
             return config.retrieval_client.quotes(

@@ -9,6 +9,7 @@ os.environ.setdefault("PYTORCH_ENABLE_MPS_FALLBACK", "1")
 import asyncio
 import base64
 import io
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, UploadFile
@@ -18,22 +19,52 @@ from rembg import remove, new_session
 
 import config
 from shared.vertex_client import _get_client
-from generate import prompt_expander, generate_presets
+from generate import fallback, prompt_expander, generate_presets
 from cutout import bbox_detector, sam_segmenter, grounding_dino
 from stylize import stylizer, style_presets
 from border import border, border_presets
 
 
+_imagen_unavailable = False
+
+
 def _call_model(prompt: str, aspect_ratio: str) -> list[bytes]:
-    response = _get_client().models.generate_images(
-        model=config.MODEL_ID,
-        prompt=prompt,
-        config={
-            "number_of_images": config.NUMBER_OF_IMAGES,
-            "aspect_ratio": aspect_ratio,
-        },
-    )
-    return [img.image.image_bytes for img in response.generated_images]
+    global _imagen_unavailable
+    if not _imagen_unavailable:
+        try:
+            response = _get_client().models.generate_images(
+                model=config.MODEL_ID,
+                prompt=prompt,
+                config={
+                    "number_of_images": config.NUMBER_OF_IMAGES,
+                    "aspect_ratio": aspect_ratio,
+                },
+            )
+            return [img.image.image_bytes for img in response.generated_images]
+        except Exception as error:
+            if not fallback.is_model_unavailable(error):
+                raise
+            # Imagen is gated per project; remember and stop retrying it.
+            _imagen_unavailable = True
+            print(f"[generate] Imagen unavailable, using {config.FALLBACK_IMAGE_MODEL}: {str(error)[:100]}")
+    client = _get_client()
+
+    def _one() -> bytes | None:
+        response = client.models.generate_content(
+            model=config.FALLBACK_IMAGE_MODEL,
+            contents=fallback.build_prompt(prompt, aspect_ratio),
+        )
+        parts = fallback.image_parts(response)
+        return parts[0] if parts else None
+
+    # The images are independent; generate them concurrently so the whole
+    # request stays comfortably inside client timeouts.
+    with ThreadPoolExecutor(max_workers=config.NUMBER_OF_IMAGES) as pool:
+        results = list(pool.map(lambda _: _one(), range(config.NUMBER_OF_IMAGES)))
+    images = [image for image in results if image]
+    if not images:
+        raise HTTPException(status_code=502, detail="image generation returned no image")
+    return images
 
 
 _rembg_session = None
@@ -329,6 +360,30 @@ async def stylize_image(
         "instruction": instruction,
         "temperature": temp,
     }
+
+
+@app.post("/describe")
+async def describe_image(file: UploadFile):
+    """One warm sentence about the photo, for the app's page context --
+    so the journaling chat can "see" what sits on the page."""
+    raw = await file.read()
+
+    def _describe() -> str:
+        from google.genai import types
+        response = _get_client().models.generate_content(
+            model=config.PROMPT_EXPANDER_MODEL,
+            contents=[
+                types.Part.from_bytes(data=raw, mime_type=file.content_type or "image/png"),
+                "Describe this photo in one warm, concrete sentence "
+                "(what is in it, the mood). Answer with the sentence only.",
+            ],
+        )
+        return (response.text or "").strip()
+
+    description = await asyncio.to_thread(_describe)
+    if not description:
+        raise HTTPException(status_code=502, detail="the model returned no description")
+    return {"description": description}
 
 
 @app.post("/border")
