@@ -13,6 +13,7 @@ _PROMPT_DIR = Path(__file__).parent
 _STICKER_SUFFIX = (_PROMPT_DIR / "sticker_suffix.txt").read_text(encoding="utf-8").strip()
 # background_rule.txt intentionally starts with ", " so it appends cleanly.
 _BACKGROUND_RULE = (_PROMPT_DIR / "background_rule.txt").read_text(encoding="utf-8").strip()
+_ART_SUFFIX = (_PROMPT_DIR / "art_suffix.txt").read_text(encoding="utf-8").strip()
 
 
 def build_sticker_prompt(core: str) -> str:
@@ -23,3 +24,8 @@ def build_sticker_prompt(core: str) -> str:
 def build_background_prompt(core: str) -> str:
     """Append the fixed background rule to the (expanded or raw) user prompt."""
     return core + _BACKGROUND_RULE
+
+
+def build_art_prompt(core: str) -> str:
+    """Append the fixed art suffix to the (expanded or raw) user prompt."""
+    return f"{core}, {_ART_SUFFIX}"

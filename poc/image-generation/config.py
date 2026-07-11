@@ -19,6 +19,7 @@ NUMBER_OF_IMAGES = 2
 ASPECT_RATIOS = {
     "sticker":    "1:1",
     "background": "9:16",
+    "art":        "1:1",
 }
 REMOVE_BG = True  # set to False to skip background removal for testing
 

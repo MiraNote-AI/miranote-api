@@ -281,6 +281,13 @@ async def generate_images(req: GenerateRequest):
             prompt_expander.expand_background, req.prompt, config.PROMPT_EXPANDER_MODEL
         ) if req.expand else req.prompt
         prompt = generate_presets.build_background_prompt(core)
+    elif req.command == "art":
+        if not req.prompt:
+            raise HTTPException(status_code=400, detail="prompt is required for art")
+        core = await asyncio.to_thread(
+            prompt_expander.expand_art, req.prompt, config.PROMPT_EXPANDER_MODEL
+        ) if req.expand else req.prompt
+        prompt = generate_presets.build_art_prompt(core)
     else:
         raise HTTPException(status_code=400, detail=f"Unknown command: {req.command}")
 
