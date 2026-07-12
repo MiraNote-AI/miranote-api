@@ -125,3 +125,69 @@ def test_explicit_languages_still_decode_once(voice_client):
     )
     assert r.status_code == 200
     assert r.json()["raw_text"] == "hello world"
+
+
+def test_silence_hallucination_is_dropped(voice_client):
+    # A silent clip decodes to Whisper's stock hallucination with high
+    # no_speech_prob and rotten confidence: the endpoint returns no words.
+    test_client, stub_whisper, _ = voice_client
+    stub_whisper.result = {
+        "text": " Thanks for watching!",
+        "language": "en",
+        "segments": [
+            {
+                "start": 0.0, "end": 2.0, "text": " Thanks for watching!",
+                "no_speech_prob": 0.92, "avg_logprob": -1.6,
+            }
+        ],
+    }
+    files = {"file": ("clip.wav", io.BytesIO(_fake_audio_bytes()), "audio/wav")}
+    r = test_client.post(
+        "/transcribe",
+        files=files,
+        params={"correct": "false", "with_emotion": "false"},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["raw_text"] == ""
+    assert body["segments"] == []
+
+
+def test_mixed_decode_keeps_confident_segments(voice_client):
+    test_client, stub_whisper, _ = voice_client
+    stub_whisper.result = {
+        "text": " real words Thanks for watching!",
+        "language": "en",
+        "segments": [
+            {
+                "start": 0.0, "end": 1.2, "text": " real words",
+                "no_speech_prob": 0.05, "avg_logprob": -0.4,
+            },
+            {
+                "start": 1.2, "end": 3.0, "text": " Thanks for watching!",
+                "no_speech_prob": 0.88, "avg_logprob": -1.4,
+            },
+        ],
+    }
+    files = {"file": ("clip.wav", io.BytesIO(_fake_audio_bytes()), "audio/wav")}
+    r = test_client.post(
+        "/transcribe",
+        files=files,
+        params={"correct": "false", "with_emotion": "false"},
+    )
+    body = r.json()
+    assert body["raw_text"] == "real words"
+    assert len(body["segments"]) == 1
+
+
+def test_clean_decode_passes_through_untouched(voice_client):
+    # Segments without the probability fields (older stubs, clean speech)
+    # are never dropped.
+    test_client, _, _ = voice_client
+    files = {"file": ("clip.wav", io.BytesIO(_fake_audio_bytes()), "audio/wav")}
+    r = test_client.post(
+        "/transcribe",
+        files=files,
+        params={"correct": "false", "with_emotion": "false"},
+    )
+    assert r.json()["raw_text"] == "hello world"
