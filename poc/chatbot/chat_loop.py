@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import unicodedata
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional
 
@@ -13,6 +14,24 @@ class ChatTurnResult:
     session_id: str
     reply: str
     tool_trace: List[Dict[str, Any]] = field(default_factory=list)
+
+
+def drop_unrenderable(text: str) -> str:
+    """Strip characters no client font can draw -- the model occasionally
+    emits private-use or unassigned codepoints (bad tokens), which iOS
+    renders as the LastResort box-with-question-mark glyph. Real emoji and
+    CJK pass through untouched; newlines and tabs survive."""
+    def keep(ch: str) -> bool:
+        if ch == chr(0xFFFD):  # REPLACEMENT CHARACTER
+            return False
+        category = unicodedata.category(ch)
+        if category in ("Co", "Cn", "Cs"):
+            return False
+        if category == "Cc" and ch not in "\n\t":
+            return False
+        return True
+
+    return "".join(ch for ch in text if keep(ch))
 
 
 def run_turn(
