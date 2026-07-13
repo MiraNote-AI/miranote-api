@@ -70,6 +70,28 @@ def _transcribe_picking_language(tmp_path: str) -> Dict[str, Any]:
     return max(candidates, key=_mean_logprob)
 
 
+def drop_no_speech_segments(result: Dict[str, Any]) -> Dict[str, Any]:
+    """Silence reaches Whisper as hallucinated stock phrases ("Thanks for
+    watching!", subtitle credits). Drop segments Whisper itself distrusts
+    -- the reference heuristic: likely non-speech AND low decode
+    confidence -- and rebuild `text` from what remains. An all-dropped
+    decode yields empty text: the honest answer for a silent clip."""
+    segments = result.get("segments") or []
+    kept = [
+        seg for seg in segments
+        if not (
+            seg.get("no_speech_prob", 0.0) > 0.6
+            and seg.get("avg_logprob", 0.0) < -1.0
+        )
+    ]
+    if len(kept) == len(segments):
+        return result
+    filtered = dict(result)
+    filtered["segments"] = kept
+    filtered["text"] = "".join(seg.get("text", "") for seg in kept).strip()
+    return filtered
+
+
 llm = OpenAI(api_key=LLM_API_KEY, base_url=LLM_BASE_URL) if LLM_API_KEY else None
 
 app = FastAPI(title="MiraNote Voice-to-Text", version="0.1.0")
@@ -183,6 +205,7 @@ async def transcribe(
                 result = await asyncio.to_thread(
                     get_whisper_model().transcribe, tmp_path, language=lang, verbose=False
                 )
+            result = drop_no_speech_segments(result)
         except Exception as e:
             print(f"Whisper/ffmpeg failed on {file.filename!r}: {e}")
             raise HTTPException(
