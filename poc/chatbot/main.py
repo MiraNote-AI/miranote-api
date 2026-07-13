@@ -18,7 +18,7 @@ from dotenv import load_dotenv
 from openai import OpenAI
 
 from poc.chatbot import journal, tools
-from poc.chatbot.chat_loop import ChatTurnResult, run_turn
+from poc.chatbot.chat_loop import ChatTurnResult, drop_unrenderable, run_turn
 from poc.chatbot.config import ChatbotConfig
 from poc.chatbot.session import SessionStore
 from poc.chatbot.retrieval_client import RetrievalClient
@@ -135,7 +135,7 @@ async def chat(req: ChatRequest):
         raise HTTPException(status_code=502, detail="the model returned an empty reply")
     return ChatResponse(
         session_id=result.session_id,
-        reply=result.reply,
+        reply=drop_unrenderable(result.reply),
         tool_trace=result.tool_trace,
     )
 

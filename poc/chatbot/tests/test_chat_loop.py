@@ -209,3 +209,23 @@ def test_empty_content_retries_then_lands():
     assert result.reply == "here at last"
     history = store.get(result.session_id)
     assert [m["role"] for m in history] == ["system", "user", "assistant"], "empty tries append nothing"
+
+
+def test_drop_unrenderable_strips_pua_and_replacement_chars():
+    from poc.chatbot.chat_loop import drop_unrenderable
+
+    dirty = "Hi! " + chr(0xE5D4) + chr(0xFFFD) + chr(0x0007) + "there"
+    assert drop_unrenderable(dirty) == "Hi! there"
+
+
+def test_drop_unrenderable_keeps_emoji_cjk_and_newlines():
+    from poc.chatbot.chat_loop import drop_unrenderable
+
+    # wave emoji + sun-with-VS16 + Chinese + newline all render fine on
+    # clients and must pass through untouched
+    clean = (
+        "Hi " + chr(0x1F44B) + "\n"
+        + chr(0x2600) + chr(0xFE0F) + " "
+        + chr(0x4F60) + chr(0x597D)
+    )
+    assert drop_unrenderable(clean) == clean
