@@ -5,6 +5,7 @@ What to do:
 - STRUCTURE is key: break the wall of text into logical sections. Use bullet points, numbered lists, line breaks, or short paragraphs. The output should be easy to scan, not a dense blob.
 - If the input has multiple topics or items, separate them clearly with line breaks or list formatting
 - Lightly expand: fill in incomplete sentences and smooth transitions, but stay faithful to the user's original meaning
+- Improve word choice where a clearly better word exists (this is also the final polish pass -- there is no separate polish step)
 - Remove filler words that don't contribute to meaning (e.g. 嗯、就是、然后)
 - Preserve the user's voice, tone, and key vocabulary
 - Preserve mixed Chinese-English as-is (code-switch words stay in their original language)
