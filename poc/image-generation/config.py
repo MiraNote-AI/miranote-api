@@ -9,7 +9,7 @@
 MODEL_ID = "imagen-4.0-generate-001"   # Imagen 4: /generate output
 FALLBACK_IMAGE_MODEL = "gemini-2.5-flash-image"  # /generate fallback when Imagen is project-gated
 PROMPT_EXPANDER_MODEL = "gemini-2.5-flash"  # prompt expansion: /generate
-REMBG_MODEL = "birefnet-general"  # background removal: /generate (sticker) + /cutout. options: u2net, birefnet-general-lite, birefnet-general
+REMBG_MODEL = "birefnet-general-lite"  # background removal: /generate (sticker) + /cutout. options: u2net, birefnet-general-lite, birefnet-general. full birefnet takes ~80s/cutout on an M-series Mac and starves the event loop -- too slow for interactive use (phone times out at 150s and users retry, wedging the queue)
 REMBG_ERODE_RADIUS = 0  # pixels to erode alpha edge inward; 0 to disable. /generate + /cutout
 
 # --------------------------------------------------------------------------- #
