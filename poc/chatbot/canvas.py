@@ -11,7 +11,7 @@ request but is only spent when the model calls look_at_page.
 from __future__ import annotations
 
 import pathlib
-from typing import Any, Dict, List
+from typing import Any, Callable, Dict, List, Optional
 
 from poc.chatbot import journal
 
@@ -157,3 +157,50 @@ def canvas_tools(all_tools: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return list(journal.journal_tools(all_tools)) + [
         EDIT_PAGE_TOOL, SET_BACKGROUND_TOOL, CLEAR_BACKGROUND_TOOL, LOOK_AT_PAGE_TOOL,
     ]
+
+
+# What look_at_page asks about a whole page. /describe's own default is
+# tuned for photos ("what is in it, the mood"); a page needs a different
+# question entirely.
+LOOK_PROMPT = (
+    "This is a page from a personal journaling app, exactly as the "
+    "person editing it sees it. Describe how the page looks: how the "
+    "pieces are arranged, what draws the eye, what feels crowded or "
+    "empty, and how the colors sit together. If it has photos, say what "
+    "is in them. Be concrete and brief."
+)
+
+
+def build_dispatcher(
+    image_bytes: Optional[bytes],
+    image_client: Any,
+    fallback: Callable[[str, Dict[str, Any]], Any],
+) -> Callable[[str, Dict[str, Any]], Any]:
+    """Tool dispatch for one canvas turn.
+
+    look_at_page is the only canvas tool that does work, and only once
+    per turn -- max_tool_iterations would otherwise let the model spend
+    six vision calls looking at the same picture.
+
+    The rest are pure handoffs: the app reads their arguments out of
+    tool_trace and executes them itself, exactly as with create_note.
+    The server stores nothing about the user's page.
+    """
+    state = {"looked": False}
+
+    def dispatch(name: str, args: Dict[str, Any]) -> Any:
+        if name == "look_at_page":
+            if state["looked"]:
+                return {"status": "already looked at this page this turn"}
+            state["looked"] = True
+            if not image_bytes:
+                return {"status": "could not look at the page"}
+            try:
+                return {"description": image_client.describe(image_bytes, LOOK_PROMPT)}
+            except Exception:  # noqa: BLE001 -- a failed look is not a failed turn
+                return {"status": "could not look at the page"}
+        if name in CANVAS_TOOL_NAMES:
+            return {"status": "handed to the app"}
+        return fallback(name, args)
+
+    return dispatch
