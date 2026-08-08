@@ -10,7 +10,10 @@ request but is only spent when the model calls look_at_page.
 """
 from __future__ import annotations
 
+import pathlib
 from typing import Any, Dict, List
+
+from poc.chatbot import journal
 
 MAX_ELEMENTS = 24
 MAX_SAYS_CHARS = 200
@@ -78,3 +81,79 @@ def render_page(page: Dict[str, Any]) -> str:
         lines.append("({} more elements not listed)".format(omitted))
     lines.extend(footer)
     return "\n".join(lines)
+
+
+CANVAS_PROMPT_PATH = pathlib.Path(__file__).parent / "prompts" / "canvas.txt"
+
+CANVAS_TOOL_NAMES = {"edit_page", "set_background", "clear_background", "look_at_page"}
+
+# Descriptions (with their Chinese trigger phrases) live in prompts/,
+# which is the CJK-allowlisted path; code stays ASCII.
+_DESC_PATH = pathlib.Path(__file__).parent / "prompts" / "tool_descriptions.txt"
+_DESCRIPTIONS: Dict[str, str] = {}
+for _line in _DESC_PATH.read_text(encoding="utf-8").splitlines():
+    _line = _line.strip()
+    if not _line or _line.startswith("#"):
+        continue
+    _name, _, _desc = _line.partition("|")
+    _DESCRIPTIONS[_name.strip()] = _desc.strip()
+
+
+def _tool(name: str, properties: Dict[str, Any], required: List[str]) -> Dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": name,
+            "description": _DESCRIPTIONS[name],
+            "parameters": {
+                "type": "object",
+                "properties": properties,
+                "required": required,
+            },
+        },
+    }
+
+
+_CHANGE_ITEM: Dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "id": {"type": "string", "description": "The element handle from the page block, e.g. t1 or p1."},
+        "x": {"type": "number", "description": "New left edge, in canvas points."},
+        "y": {"type": "number", "description": "New top edge, in canvas points."},
+        "w": {"type": "number", "description": "New width, in canvas points."},
+        "h": {"type": "number", "description": "New height, in canvas points."},
+        "size": {
+            "type": "number", "minimum": 11, "maximum": 48,
+            "description": "New text point size. Text elements only.",
+        },
+        "color": {"type": "string", "description": "New text color, a palette name from the page block."},
+        "layer": {
+            "type": "string", "enum": ["front", "back"],
+            "description": "Bring the element in front of, or behind, the others.",
+        },
+    },
+    "required": ["id"],
+}
+
+EDIT_PAGE_TOOL = _tool(
+    "edit_page",
+    {"changes": {"type": "array", "items": _CHANGE_ITEM, "description": "Every change this turn, together."}},
+    ["changes"],
+)
+
+SET_BACKGROUND_TOOL = _tool(
+    "set_background",
+    {"prompt": {"type": "string", "description": "What the backdrop should show, in a short phrase."}},
+    ["prompt"],
+)
+
+CLEAR_BACKGROUND_TOOL = _tool("clear_background", {}, [])
+
+LOOK_AT_PAGE_TOOL = _tool("look_at_page", {}, [])
+
+
+def canvas_tools(all_tools: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """The journal set plus the page tools. Docs tools stay behind."""
+    return list(journal.journal_tools(all_tools)) + [
+        EDIT_PAGE_TOOL, SET_BACKGROUND_TOOL, CLEAR_BACKGROUND_TOOL, LOOK_AT_PAGE_TOOL,
+    ]

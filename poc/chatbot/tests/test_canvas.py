@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from poc.chatbot import canvas
+from poc.chatbot import canvas, journal, tools
 
 
 def _page(**overrides):
@@ -87,3 +87,41 @@ def test_render_page_truncates_very_long_text():
     page["elements"][0]["says"] = "x" * 1000
     block = canvas.render_page(page)
     assert "x" * (canvas.MAX_SAYS_CHARS + 1) not in block
+
+
+def test_canvas_tools_add_the_page_tools_to_the_journal_set():
+    names = {t["function"]["name"] for t in canvas.canvas_tools(tools.TOOLS)}
+    assert {"edit_page", "set_background", "clear_background", "look_at_page"} <= names
+    # Journal keeps its own; docs tools still stay behind.
+    assert "create_note" in names
+    assert names.isdisjoint(journal.DOCS_TOOL_NAMES)
+
+
+def test_edit_page_accepts_only_the_documented_fields():
+    tool = next(
+        t for t in canvas.canvas_tools(tools.TOOLS)
+        if t["function"]["name"] == "edit_page"
+    )
+    entry = tool["function"]["parameters"]["properties"]["changes"]["items"]
+    assert set(entry["properties"]) == {"id", "x", "y", "w", "h", "size", "color", "layer"}
+    assert entry["required"] == ["id"]
+    assert entry["properties"]["layer"]["enum"] == ["front", "back"]
+    assert entry["properties"]["size"]["minimum"] == 11
+    assert entry["properties"]["size"]["maximum"] == 48
+
+
+def test_look_at_page_takes_no_arguments():
+    tool = next(
+        t for t in canvas.canvas_tools(tools.TOOLS)
+        if t["function"]["name"] == "look_at_page"
+    )
+    assert tool["function"]["parameters"]["properties"] == {}
+
+
+def test_canvas_tool_descriptions_carry_chinese_triggers():
+    tool = next(
+        t for t in canvas.canvas_tools(tools.TOOLS)
+        if t["function"]["name"] == "edit_page"
+    )
+    # The trigger phrases live in prompts/, never in code.
+    assert "挪" in tool["function"]["description"]
