@@ -71,6 +71,26 @@ def _language_correction(ref: str, reply: str) -> Optional[str]:
     )
 
 
+def _messages_for_model(
+    history: List[Dict[str, Any]],
+    transient_prefix: Optional[str],
+    user_index: int,
+) -> List[Dict[str, Any]]:
+    """History as the model should see it this turn.
+
+    The prefix (the page map) is context the model needs on every call
+    but must never persist: it goes stale the moment the page changes,
+    and its element handles are renumbered each turn, so an old t1 may
+    name a different element than the current one.
+    """
+    if not transient_prefix:
+        return history
+    view = list(history)
+    original = view[user_index].get("content", "")
+    view[user_index] = {"role": "user", "content": transient_prefix + "\n\n" + original}
+    return view
+
+
 def run_turn(
     *,
     client: Any,
@@ -83,18 +103,23 @@ def run_turn(
     max_iterations: int,
     max_history: int,
     system_prompt: str,
+    transient_prefix: Optional[str] = None,
     language_ref: Optional[str] = None,
 ) -> ChatTurnResult:
     if session_id is None:
         session_id = session_store.create(seed=[{"role": "system", "content": system_prompt}])
     history = session_store.get(session_id)
+    user_index = len(history)
     history.append({"role": "user", "content": user_message})
 
     trace: List[Dict[str, Any]] = []
     reply: Optional[str] = None
     empty_retries = 0
     for _ in range(max_iterations):
-        kwargs = {"model": model, "messages": history}
+        kwargs = {
+            "model": model,
+            "messages": _messages_for_model(history, transient_prefix, user_index),
+        }
         if tools:
             kwargs["tools"] = tools
             kwargs["tool_choice"] = "auto"

@@ -8,7 +8,27 @@
 # --------------------------------------------------------------------------- #
 MODEL_ID = "imagen-4.0-generate-001"   # Imagen 4: /generate output
 FALLBACK_IMAGE_MODEL = "gemini-2.5-flash-image"  # /generate fallback when Imagen is project-gated
-PROMPT_EXPANDER_MODEL = "gemini-2.5-flash"  # prompt expansion: /generate
+PROMPT_EXPANDER_MODEL = "gemini-2.5-flash"  # prompt expansion: /generate + /describe
+
+# /describe default: one sentence about a photo, for the app's page
+# context. Every ImageRef.summary the app has ever stored was written
+# with this wording, so changing it changes what old pages "say".
+DESCRIBE_PROMPT = (
+    "Describe this photo in one warm, concrete sentence "
+    "(what is in it, the mood). Answer with the sentence only."
+)
+
+
+def describe_question(prompt=None):
+    """What /describe should ask about the image.
+
+    Callers may bring their own question -- canvas mode asks what a
+    whole page looks like rather than what a photo shows. Photo import
+    passes nothing and keeps the default.
+    """
+    return (prompt or "").strip() or DESCRIBE_PROMPT
+
+
 REMBG_MODEL = "birefnet-general-lite"  # background removal: /generate (sticker) + /cutout. options: u2net, birefnet-general-lite, birefnet-general. full birefnet takes ~80s/cutout on an M-series Mac and starves the event loop -- too slow for interactive use (phone times out at 150s and users retry, wedging the queue)
 REMBG_ERODE_RADIUS = 0  # pixels to erode alpha edge inward; 0 to disable. /generate + /cutout
 

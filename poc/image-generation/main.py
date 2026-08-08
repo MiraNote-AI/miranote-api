@@ -384,10 +384,15 @@ async def stylize_image(
 
 
 @app.post("/describe")
-async def describe_image(file: UploadFile):
-    """One warm sentence about the photo, for the app's page context --
-    so the journaling chat can "see" what sits on the page."""
+async def describe_image(file: UploadFile, prompt: str = None):
+    """Vision over one image.
+
+    Default: one warm sentence about the photo, for the app's page
+    context -- so the journaling chat can "see" what sits on the page.
+    Canvas mode passes its own `prompt` to ask what a whole page looks
+    like instead."""
     raw = await file.read()
+    question = config.describe_question(prompt)
 
     def _describe() -> str:
         from google.genai import types
@@ -395,8 +400,7 @@ async def describe_image(file: UploadFile):
             model=config.PROMPT_EXPANDER_MODEL,
             contents=[
                 types.Part.from_bytes(data=raw, mime_type=file.content_type or "image/png"),
-                "Describe this photo in one warm, concrete sentence "
-                "(what is in it, the mood). Answer with the sentence only.",
+                question,
             ],
         )
         return (response.text or "").strip()

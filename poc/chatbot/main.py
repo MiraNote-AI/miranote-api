@@ -7,6 +7,7 @@ allow-all). See README for run instructions.
 from __future__ import annotations
 
 import asyncio
+import base64
 import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -17,9 +18,10 @@ from pydantic import BaseModel, Field
 from dotenv import load_dotenv
 from openai import OpenAI
 
-from poc.chatbot import journal, tools
+from poc.chatbot import canvas, journal, tools
 from poc.chatbot.chat_loop import ChatTurnResult, drop_unrenderable, run_turn
 from poc.chatbot.config import ChatbotConfig
+from poc.chatbot.image_client import ImageClient
 from poc.chatbot.session import SessionStore
 from poc.chatbot.retrieval_client import RetrievalClient
 from poc.chatbot.text_client import TextClient
@@ -44,6 +46,7 @@ if not _initial_docs_root.exists() or not _initial_docs_root.is_dir():
 
 TEXT_API_URL = os.getenv("TEXT_API_URL", "http://localhost:8001")
 RETRIEVAL_API_URL = os.getenv("RETRIEVAL_API_URL", "http://localhost:8004")
+IMAGE_API_URL = os.getenv("IMAGE_API_URL", "http://localhost:8002")
 
 config = ChatbotConfig(
     docs_root=_initial_docs_root,
@@ -62,7 +65,11 @@ client = OpenAI(**client_kwargs)
 
 SYSTEM_PROMPT = (Path(__file__).parent / "prompts" / "system.txt").read_text(encoding="utf-8")
 JOURNAL_PROMPT = (Path(__file__).parent / "prompts" / "journal.txt").read_text(encoding="utf-8")
+CANVAS_PROMPT = canvas.CANVAS_PROMPT_PATH.read_text(encoding="utf-8")
 JOURNAL_TOOLS = journal.journal_tools(tools.TOOLS)
+CANVAS_TOOLS = canvas.canvas_tools(tools.TOOLS)
+
+image_client = ImageClient(IMAGE_API_URL)
 
 sessions = SessionStore(ttl_seconds=config.session_ttl_seconds)
 
@@ -86,12 +93,43 @@ class NoteIn(BaseModel):
     date: str = ""
 
 
+class ElementIn(BaseModel):
+    handle: str
+    kind: str
+    x: float = 0
+    y: float = 0
+    w: float = 0
+    h: float = 0
+    says: str = ""
+    point_size: Optional[float] = None
+    color: Optional[str] = None
+    rotation: Optional[float] = None
+    treatment: Optional[str] = None
+
+
+class PageIn(BaseModel):
+    width: float
+    height: float
+    background: str = ""
+    # Text color names the app will accept; stated so the model picks
+    # from the palette instead of inventing "warm beige".
+    palette: List[str] = []
+    elements: List[ElementIn] = []
+    omitted: int = 0
+    # base64 JPEG of the page as the user sees it. Present on every
+    # canvas turn; spent only if the model calls look_at_page.
+    image: Optional[str] = None
+
+
 class ChatRequest(BaseModel):
     session_id: Optional[str] = None
     message: str = Field(..., min_length=1, max_length=4000)
     # Present (even empty) = journal mode: ground the reply in the
     # user's own pages and withhold the docs tools.
     notes: Optional[List[NoteIn]] = None
+    # Present = canvas mode: the user is editing this page right now.
+    # Wins over notes -- the page in front of them is the context.
+    page: Optional[PageIn] = None
 
 
 class ChatResponse(BaseModel):
@@ -106,12 +144,35 @@ class ConfigRequest(BaseModel):
 
 @app.post("/chat", response_model=ChatResponse)
 async def chat(req: ChatRequest):
+    canvas_mode = req.page is not None
     journal_mode = req.notes is not None
     message = req.message
-    if journal_mode:
+    transient_prefix = None
+    dispatcher = _dispatcher
+    turn_tools = tools.TOOLS
+    prompt = SYSTEM_PROMPT
+
+    if canvas_mode:
+        page = req.page.model_dump()
+        image_b64 = page.pop("image", None)
+        try:
+            image_bytes = base64.b64decode(image_b64) if image_b64 else None
+        except Exception:  # noqa: BLE001 -- a bad image only costs the look
+            image_bytes = None
+        # The map rides along on every call but never enters the
+        # session: stale coordinates and renumbered handles would have
+        # the model confidently edit the wrong element.
+        transient_prefix = canvas.render_page(page)
+        dispatcher = canvas.build_dispatcher(image_bytes, image_client, _dispatcher)
+        turn_tools = CANVAS_TOOLS
+        prompt = CANVAS_PROMPT
+    elif journal_mode:
         message = journal.compose_user_message(
             req.message, [n.model_dump() for n in req.notes]
         )
+        turn_tools = JOURNAL_TOOLS
+        prompt = JOURNAL_PROMPT
+
     try:
         result: ChatTurnResult = await asyncio.to_thread(
             run_turn,
@@ -123,11 +184,12 @@ async def chat(req: ChatRequest):
             # follow what the USER typed, not the notes block
             language_ref=req.message,
             model=config.model,
-            tools=JOURNAL_TOOLS if journal_mode else tools.TOOLS,
-            tool_dispatcher=_dispatcher,
+            tools=turn_tools,
+            tool_dispatcher=dispatcher,
             max_iterations=config.max_tool_iterations,
             max_history=config.max_history_messages,
-            system_prompt=JOURNAL_PROMPT if journal_mode else SYSTEM_PROMPT,
+            system_prompt=prompt,
+            transient_prefix=transient_prefix,
         )
     except KeyError:
         raise HTTPException(status_code=404, detail="unknown session_id")

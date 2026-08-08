@@ -231,6 +231,73 @@ def test_drop_unrenderable_keeps_emoji_cjk_and_newlines():
     assert drop_unrenderable(clean) == clean
 
 
+def _last_user_content(call):
+    """The user message as the model saw it on this call.
+
+    Positional indexing does not work here: the kwargs a fake records
+    hold a REFERENCE to the live history list, which the loop keeps
+    appending to, so [-1] is whatever landed last, not the user turn.
+    """
+    return [m for m in call["messages"] if m.get("role") == "user"][-1]["content"]
+
+
+def test_transient_prefix_reaches_the_model_but_not_the_history():
+    client = FakeClient([_resp(_msg(content="ok"))])
+    store = SessionStore(ttl_seconds=3600)
+    result = run_turn(
+        client=client, session_store=store, session_id=None,
+        user_message="move the title up", model="fake",
+        tools=[], tool_dispatcher=lambda n, a: None,
+        max_iterations=3, max_history=40, system_prompt="sys",
+        transient_prefix="[PAGE MAP]",
+    )
+
+    sent = _last_user_content(client.chat.completions.calls[0])
+    assert sent.startswith("[PAGE MAP]")
+    assert "move the title up" in sent
+
+    stored = store.get(result.session_id)
+    user_messages = [m for m in stored if m.get("role") == "user"]
+    assert user_messages[-1]["content"] == "move the title up"
+    assert all("[PAGE MAP]" not in (m.get("content") or "") for m in stored)
+
+
+def test_transient_prefix_survives_a_tool_round_trip():
+    # The prefix must be on EVERY call in the turn, not just the first:
+    # a turn that calls look_at_page and then answers would otherwise
+    # lose the page map exactly when it needs it.
+    tool_call = SimpleNamespace(
+        id="c1",
+        function=SimpleNamespace(name="look_at_page", arguments="{}"),
+    )
+    client = FakeClient([
+        _resp(_msg(tool_calls=[tool_call])),
+        _resp(_msg(content="it looks calm")),
+    ])
+    store = SessionStore(ttl_seconds=3600)
+    run_turn(
+        client=client, session_store=store, session_id=None,
+        user_message="how does it look", model="fake",
+        tools=[], tool_dispatcher=lambda n, a: {"description": "calm"},
+        max_iterations=3, max_history=40, system_prompt="sys",
+        transient_prefix="[PAGE MAP]",
+    )
+    for call in client.chat.completions.calls:
+        assert any(
+            "[PAGE MAP]" in (m.get("content") or "") for m in call["messages"]
+        )
+
+
+def test_no_transient_prefix_leaves_the_message_untouched():
+    client = FakeClient([_resp(_msg(content="ok"))])
+    store = SessionStore(ttl_seconds=3600)
+    run_turn(
+        client=client, session_store=store, session_id=None,
+        user_message="hello", model="fake", tools=[],
+        tool_dispatcher=lambda n, a: None, max_iterations=3,
+        max_history=40, system_prompt="sys",
+    )
+    assert _last_user_content(client.chat.completions.calls[0]) == "hello"
 def test_wrong_language_reply_gets_one_corrective_rewrite():
     zh = chr(0x6839) + chr(0x636E) + chr(0x4F60) + chr(0x7684)  # "based on your"
     scripted = [
