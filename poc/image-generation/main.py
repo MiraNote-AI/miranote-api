@@ -305,13 +305,27 @@ async def generate_images(req: GenerateRequest):
     return {"command": req.command, "prompt": prompt, "raw_input": req.prompt, "images": encoded, "count": len(encoded)}
 
 
+def _shrink_for_model(raw: bytes, max_side: int = 1536) -> bytes:
+    """Defensively cap input resolution. Clients should downscale, but one
+    oversized upload (a 4320px phone photo made it through once) turns a
+    cutout into minutes of compute and wedges every request queued behind
+    it. Preserves alpha; no-op for images already within the cap."""
+    img = Image.open(io.BytesIO(raw))
+    if max(img.size) <= max_side:
+        return raw
+    img.thumbnail((max_side, max_side), Image.LANCZOS)
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    return buf.getvalue()
+
+
 @app.post("/cutout")
 async def cutout_image(
     file: UploadFile,
     prompt: str = "",
     mode: str = "",
 ):
-    raw = await file.read()
+    raw = _shrink_for_model(await file.read())
 
     if prompt:
         chosen = mode or config.DEFAULT_PROMPT_CUTOUT_MODE
@@ -351,7 +365,7 @@ async def stylize_image(
     prompt: str = "",         # custom style description (used when no/unknown preset)
     temperature: float | None = None,  # 0 = faithful to original; higher = more creative
 ):
-    raw = await file.read()
+    raw = _shrink_for_model(await file.read())
     try:
         instruction = style_presets.build_instruction(style=style, prompt=prompt)
     except ValueError as e:

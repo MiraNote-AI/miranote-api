@@ -180,6 +180,9 @@ async def chat(req: ChatRequest):
             session_store=sessions,
             session_id=req.session_id,
             user_message=message,
+            # journal mode composes notes into the message; language must
+            # follow what the USER typed, not the notes block
+            language_ref=req.message,
             model=config.model,
             tools=turn_tools,
             tool_dispatcher=dispatcher,

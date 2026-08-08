@@ -298,3 +298,48 @@ def test_no_transient_prefix_leaves_the_message_untouched():
         max_history=40, system_prompt="sys",
     )
     assert _last_user_content(client.chat.completions.calls[0]) == "hello"
+def test_wrong_language_reply_gets_one_corrective_rewrite():
+    zh = chr(0x6839) + chr(0x636E) + chr(0x4F60) + chr(0x7684)  # "based on your"
+    scripted = [
+        _resp(_msg(content=zh + " pages...")),
+        _resp(_msg(content="Based on your pages, it was July 12.")),
+    ]
+    client = FakeClient(scripted)
+    store = SessionStore(ttl_seconds=60)
+    result = run_turn(
+        client=client,
+        session_store=store,
+        session_id=None,
+        user_message="composed message with notes",
+        model="fake-model",
+        tools=[],
+        tool_dispatcher=lambda name, args: {},
+        max_iterations=6,
+        max_history=40,
+        system_prompt="helper",
+        language_ref="when did we talk about the sea?",
+    )
+    assert result.reply == "Based on your pages, it was July 12."
+    correction = client.chat.completions.calls[1]["messages"][-1]
+    assert correction["role"] == "user"
+    assert "wrong language" in correction["content"]
+
+
+def test_matching_language_gets_no_rewrite():
+    scripted = [_resp(_msg(content="A fine English reply."))]
+    client = FakeClient(scripted)
+    store = SessionStore(ttl_seconds=60)
+    result = run_turn(
+        client=client,
+        session_store=store,
+        session_id=None,
+        user_message="hello",
+        model="fake-model",
+        tools=[],
+        tool_dispatcher=lambda name, args: {},
+        max_iterations=6,
+        max_history=40,
+        system_prompt="helper",
+    )
+    assert result.reply == "A fine English reply."
+    assert len(client.chat.completions.calls) == 1

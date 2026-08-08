@@ -29,7 +29,7 @@ def describe_question(prompt=None):
     return (prompt or "").strip() or DESCRIBE_PROMPT
 
 
-REMBG_MODEL = "birefnet-general"  # background removal: /generate (sticker) + /cutout. options: u2net, birefnet-general-lite, birefnet-general
+REMBG_MODEL = "birefnet-general-lite"  # background removal: /generate (sticker) + /cutout. options: u2net, birefnet-general-lite, birefnet-general. full birefnet takes ~80s/cutout on an M-series Mac and starves the event loop -- too slow for interactive use (phone times out at 150s and users retry, wedging the queue)
 REMBG_ERODE_RADIUS = 0  # pixels to erode alpha edge inward; 0 to disable. /generate + /cutout
 
 # --------------------------------------------------------------------------- #
