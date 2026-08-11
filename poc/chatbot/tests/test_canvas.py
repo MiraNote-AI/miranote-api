@@ -125,3 +125,31 @@ def test_canvas_tool_descriptions_carry_chinese_triggers():
     )
     # The trigger phrases live in prompts/, never in code.
     assert "挪" in tool["function"]["description"]
+
+
+def test_restyle_photo_joins_the_canvas_tools():
+    names = {t["function"]["name"] for t in canvas.canvas_tools(tools.TOOLS)}
+    assert "restyle_photo" in names
+    assert "restyle_photo" in canvas.CANVAS_TOOL_NAMES
+
+
+def test_restyle_photo_names_an_element_and_an_instruction():
+    tool = next(
+        t for t in canvas.canvas_tools(tools.TOOLS)
+        if t["function"]["name"] == "restyle_photo"
+    )
+    params = tool["function"]["parameters"]
+    assert set(params["properties"]) == {"id", "instruction"}
+    assert params["required"] == ["id", "instruction"]
+
+
+def test_restyle_photo_description_says_it_is_about_looks_not_placement():
+    tool = next(
+        t for t in canvas.canvas_tools(tools.TOOLS)
+        if t["function"]["name"] == "restyle_photo"
+    )
+    described = tool["function"]["description"].lower()
+    # The whole point of the tool: it changes PIXELS. Moving and resizing
+    # belong to edit_page, and confusing the two is the bug class this
+    # canvas work keeps running into.
+    assert "edit_page" in described
