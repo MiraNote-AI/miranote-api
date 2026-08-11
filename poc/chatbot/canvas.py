@@ -85,7 +85,10 @@ def render_page(page: Dict[str, Any]) -> str:
 
 CANVAS_PROMPT_PATH = pathlib.Path(__file__).parent / "prompts" / "canvas.txt"
 
-CANVAS_TOOL_NAMES = {"edit_page", "set_background", "clear_background", "look_at_page"}
+CANVAS_TOOL_NAMES = {
+    "edit_page", "set_background", "clear_background", "look_at_page",
+    "restyle_photo",
+}
 
 # Descriptions (with their Chinese trigger phrases) live in prompts/,
 # which is the CJK-allowlisted path; code stays ASCII.
@@ -151,11 +154,27 @@ CLEAR_BACKGROUND_TOOL = _tool("clear_background", {}, [])
 
 LOOK_AT_PAGE_TOOL = _tool("look_at_page", {}, [])
 
+RESTYLE_PHOTO_TOOL = _tool(
+    "restyle_photo",
+    {
+        "id": {"type": "string", "description": "The photo's handle from the page block, e.g. p1."},
+        "instruction": {
+            "type": "string",
+            "description": (
+                "What the photo should become, as a short phrase -- "
+                "'warmer and softer', 'like a faded film photo'."
+            ),
+        },
+    },
+    ["id", "instruction"],
+)
+
 
 def canvas_tools(all_tools: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """The journal set plus the page tools. Docs tools stay behind."""
     return list(journal.journal_tools(all_tools)) + [
         EDIT_PAGE_TOOL, SET_BACKGROUND_TOOL, CLEAR_BACKGROUND_TOOL, LOOK_AT_PAGE_TOOL,
+        RESTYLE_PHOTO_TOOL,
     ]
 
 

@@ -78,3 +78,9 @@ def test_non_canvas_tools_fall_through_to_the_ordinary_dispatcher():
     dispatch = _dispatcher(b"jpeg", _StubImageClient(), fallback)
     assert dispatch("polish_text", {"text": "hi"}) == {"ok": True}
     assert seen == ["polish_text"]
+
+
+def test_restyle_photo_is_a_pure_handoff():
+    dispatch = _dispatcher(b"jpeg", _StubImageClient())
+    result = dispatch("restyle_photo", {"id": "p1", "instruction": "warmer"})
+    assert "handed" in result["status"]
