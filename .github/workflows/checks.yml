@@ -7,7 +7,10 @@ name: Checks
 on:
   pull_request:
   push:
-    branches: [main]
+    # dev's job is to integrate, so its HEAD gets checked after every
+    # merge -- two independently-green PRs can still break together, and
+    # the promotion PR is the worst place to discover that.
+    branches: [main, dev]
 
 jobs:
   checks:

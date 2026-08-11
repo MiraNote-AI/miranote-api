@@ -7,7 +7,7 @@ source of truth** for engineering rules across all five. It lives in
 
 ## How to propose a change
 
-1. Branch from `main` in `MiraNote-AI/.github`.
+1. Branch from `dev` in `MiraNote-AI/.github` (Rule 9).
 2. Edit `CLAUDE.md`, `CONTRIBUTING.md`, or files under `docs/ai/`.
 3. If you add a rule, follow the procedure below.
 4. Open a PR; the self-check workflow must pass before merge.
@@ -26,7 +26,7 @@ a new rule:
    PYTHONPATH=. python3 -m checks.contributing_format . --mode source
    PYTHONPATH=. python3 -m checks._meta.all_rules_have_checks .
    ```
-4. PR into `MiraNote-AI/.github`.
+4. PR into `dev`; `main` moves only by promotion.
 
 Rule IDs are stable: do not renumber on deletion. Gaps are allowed.
 
@@ -169,3 +169,32 @@ something only to the author at write-time becomes opaque to teammates and
 to the author's future self; mechanical enforcement removes the social cost
 of asking for renames.
 **Enforced by:** `checks/pr_title_format.py`
+
+### Rule 9: Pull requests target `dev`; only a promotion touches `main`
+
+Two long-lived branches in every `MiraNote-AI/*` repo:
+
+- `dev` is the default branch and where day-to-day work lands. Open every
+  pull request against it.
+- `main` is prod. It changes only through a `dev -> main` promotion pull
+  request, merged when the team decides a build is demo-ready.
+
+A pull request whose base is anything other than `dev` is rejected, with
+one exception: base `main` from head `dev`, which is the promotion. There
+is deliberately no hotfix side door -- adding one should be a decision the
+team makes, not something a branch name buys silently.
+
+Note the delay this model introduces: target repos run their checks from
+`MiraNote-AI/.github@main` (see the reusable workflow's tools checkout), so
+a rule added here binds nobody until `.github` itself is promoted. That is
+the intended trade -- a half-finished check on `dev` should not break every
+repo's CI the moment it merges -- but it means "the rule is merged" and
+"the rule is enforced" are two different days.
+
+**Rationale:** the branch model was documented in each repo's README, which
+is where humans browse and nothing enforces. Immediately after the default
+branch moved to `dev`, eleven consecutive pull requests were opened against
+`main` without anything objecting -- by an author who had read the docs.
+A model that only lives in prose is a suggestion; prod is exactly where a
+suggestion is not enough.
+**Enforced by:** `checks/pr_base_branch.py`
