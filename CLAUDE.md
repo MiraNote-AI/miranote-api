@@ -38,6 +38,9 @@ Full text and enforcement details are in [CONTRIBUTING.md](CONTRIBUTING.md).
    whitelisted scopes (`api`/`web`/`ios`/`bot`/`infra`), imperative mood,
    no `#N` / `WIP`/`TODO` markers, <= 72 chars.
 
+9. **Branch model** -- `dev` is the default branch and the base for
+   every PR; `main` is prod and moves only by a `dev -> main` promotion.
+
 ## Quick local commands
 
 ```bash
