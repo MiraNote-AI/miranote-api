@@ -127,6 +127,19 @@ def test_canvas_tool_descriptions_carry_chinese_triggers():
     assert "挪" in tool["function"]["description"]
 
 
+def test_set_background_description_names_modify_and_canvas_asks():
+    tool = next(
+        t for t in canvas.canvas_tools(tools.TOOLS)
+        if t["function"]["name"] == "set_background"
+    )
+    desc = tool["function"]["description"]
+    # "modify the canvas background" must read as this tool, not as a
+    # photo edit or a clarification.
+    assert "modify" in desc
+    assert "canvas" in desc
+    assert "修改" in desc
+
+
 def test_restyle_photo_joins_the_canvas_tools():
     names = {t["function"]["name"] for t in canvas.canvas_tools(tools.TOOLS)}
     assert "restyle_photo" in names
