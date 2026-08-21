@@ -189,6 +189,28 @@ LOOK_PROMPT = (
     "is in them. Be concrete and brief."
 )
 
+# The weak model reads a tool RESULT far more reliably than it reads
+# the system prompt -- and a look with no follow-through is exactly how
+# "tidy up" becomes a chat bubble instead of a change. The look's
+# result ends with the one imperative that matters.
+LOOK_ACTION_NUDGE = (
+    "\n\n[You have now seen the page. If the user asked you to CHANGE it, "
+    "apply the change now in this same turn with the matching tool: "
+    "edit_page with concrete values for every element you move or resize, "
+    "restyle_photo for a photo's look, or set_background for the backdrop. "
+    "If they only asked how it looks, answer that.]"
+)
+
+# The loop-level guard's nudge (chat_loop.ActionGuard): fired when the
+# model looked at the page and then answered in prose instead of acting.
+ACTION_NUDGE = (
+    "You looked at the page but have not changed it. If the user asked "
+    "you to change the page, apply the change now with the matching "
+    "tool -- edit_page for layout, restyle_photo for a photo's look, "
+    "set_background or clear_background for the backdrop. If they only "
+    "asked how the page looks, answer now."
+)
+
 
 def build_dispatcher(
     image_bytes: Optional[bytes],
@@ -215,7 +237,10 @@ def build_dispatcher(
             if not image_bytes:
                 return {"status": "could not look at the page"}
             try:
-                return {"description": image_client.describe(image_bytes, LOOK_PROMPT)}
+                return {
+                    "description": image_client.describe(image_bytes, LOOK_PROMPT)
+                    + LOOK_ACTION_NUDGE
+                }
             except Exception:  # noqa: BLE001 -- a failed look is not a failed turn
                 return {"status": "could not look at the page"}
         if name in CANVAS_TOOL_NAMES:

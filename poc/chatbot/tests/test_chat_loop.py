@@ -5,7 +5,7 @@ import json
 
 import pytest
 
-from poc.chatbot.chat_loop import run_turn, ChatTurnResult
+from poc.chatbot.chat_loop import run_turn, ChatTurnResult, ActionGuard
 from poc.chatbot.session import SessionStore
 
 
@@ -343,3 +343,85 @@ def test_matching_language_gets_no_rewrite():
     )
     assert result.reply == "A fine English reply."
     assert len(client.chat.completions.calls) == 1
+
+
+def _guard(**overrides):
+    defaults = {
+        "look_tool": "look_at_page",
+        "action_tools": ["edit_page", "restyle_photo"],
+        "nudge": "you looked but did not act -- act now",
+    }
+    defaults.update(overrides)
+    return ActionGuard(**defaults)
+
+
+def test_a_look_without_an_action_gets_one_corrective_nudge():
+    scripted = [
+        _resp(_msg(tool_calls=[_tool_call("c1", "look_at_page", {})])),
+        _resp(_msg(content="Tidied up!")),
+        _resp(_msg(tool_calls=[_tool_call("c2", "edit_page", {"changes": [{"id": "t1"}]})])),
+        _resp(_msg(content="Done.")),
+    ]
+    client = FakeClient(scripted)
+    store = SessionStore(ttl_seconds=60)
+    captured = []
+
+    def dispatcher(name, args):
+        captured.append((name, args))
+        return {"status": "ok"}
+
+    result = run_turn(
+        client=client, session_store=store, session_id=None,
+        user_message="tidy this page up", model="fake",
+        tools=[{"type": "function", "function": {"name": "x"}}],
+        tool_dispatcher=dispatcher, max_iterations=6, max_history=40,
+        system_prompt="sys", action_guard=_guard(),
+    )
+    assert result.reply == "Done."
+    assert [name for name, _ in captured] == ["look_at_page", "edit_page"]
+    history = store.get(result.session_id)
+    nudges = [m for m in history if m.get("role") == "user" and "did not act" in m.get("content", "")]
+    assert len(nudges) == 1
+
+
+def test_a_look_without_an_action_that_was_only_a_question_keeps_its_reply():
+    scripted = [
+        _resp(_msg(tool_calls=[_tool_call("c1", "look_at_page", {})])),
+        _resp(_msg(content="It looks calm to me.")),
+        _resp(_msg(content="It looks calm to me.")),
+    ]
+    client = FakeClient(scripted)
+    store = SessionStore(ttl_seconds=60)
+    result = run_turn(
+        client=client, session_store=store, session_id=None,
+        user_message="how does this page look", model="fake",
+        tools=[{"type": "function", "function": {"name": "x"}}],
+        tool_dispatcher=lambda name, args: {"status": "ok"},
+        max_iterations=6, max_history=40,
+        system_prompt="sys", action_guard=_guard(),
+    )
+    assert result.reply == "It looks calm to me."
+    assert len(client.chat.completions.calls) == 3
+
+
+def test_a_change_after_a_look_needs_no_nudge():
+    scripted = [
+        _resp(_msg(tool_calls=[_tool_call("c1", "look_at_page", {})])),
+        _resp(_msg(tool_calls=[_tool_call("c2", "edit_page", {"changes": [{"id": "t1"}]})])),
+        _resp(_msg(content="Rearranged.")),
+    ]
+    client = FakeClient(scripted)
+    store = SessionStore(ttl_seconds=60)
+    result = run_turn(
+        client=client, session_store=store, session_id=None,
+        user_message="tidy this page up", model="fake",
+        tools=[{"type": "function", "function": {"name": "x"}}],
+        tool_dispatcher=lambda name, args: {"status": "ok"},
+        max_iterations=6, max_history=40,
+        system_prompt="sys", action_guard=_guard(),
+    )
+    assert result.reply == "Rearranged."
+    history = store.get(result.session_id)
+    nudges = [m for m in history if m.get("role") == "user" and "did not act" in m.get("content", "")]
+    assert nudges == []
+    assert len(client.chat.completions.calls) == 3
