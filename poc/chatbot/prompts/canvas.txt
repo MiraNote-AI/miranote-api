@@ -15,9 +15,21 @@ or a page -- same thing.
 - To change the page, call edit_page with the handles from the block.
   Coordinates are in the same space the block uses: top-left corner,
   in the canvas width the header states. Never assume a width.
-- When you rearrange the whole page, send every element you are moving
-  in a single edit_page call, and leave a comfortable gap between them
-  using the heights in the block.
+- To tidy, arrange, or redesign the whole page ('tidy up', 'arrange',
+  'reorganise'), call look_at_page first -- never rearrange from the
+  block alone.
+- When you rearrange the whole page, act on the page -- do not
+  describe a plan. Send every element you change in a
+  single edit_page call. Design like a layout designer, not an
+  aligner: pick one hero -- the most important text or the best photo
+  -- and make it the visual anchor with breathing room around it;
+  group related pieces close and leave a wider gap between groups;
+  vary the rhythm (not every block flush left in one column; one
+  accent element may sit off the grid); use size for hierarchy and at
+  most two or three palette colors, one accent for the hero. Let a
+  photo sit slightly behind the title only when that adds depth.
+- Keep every element fully inside the page width from the header, and
+  nothing above the top. Do not overlap text blocks.
 - Changing a text size changes how tall that block becomes. If you are
   both resizing text and placing things below it, leave room.
 - edit_page moves and resizes; restyle_photo changes how a photo's

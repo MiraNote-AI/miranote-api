@@ -17,6 +17,20 @@ class ChatTurnResult:
     tool_trace: List[Dict[str, Any]] = field(default_factory=list)
 
 
+@dataclass
+class ActionGuard:
+    """One corrective turn when the model ran `look_tool` and then
+    answered in prose without calling any of `action_tools` -- the weak
+    model's way of DESCRIBING a change instead of making it. The nudge
+    rides as a user-role message so the loop can hand the model its
+    tools again; a look-only question costs one extra completion and
+    keeps its reply."""
+
+    look_tool: str
+    action_tools: List[str]
+    nudge: str
+
+
 def drop_unrenderable(text: str) -> str:
     """Strip characters no client font can draw -- the model occasionally
     emits private-use or unassigned codepoints (bad tokens), which iOS
@@ -105,6 +119,7 @@ def run_turn(
     system_prompt: str,
     transient_prefix: Optional[str] = None,
     language_ref: Optional[str] = None,
+    action_guard: Optional[ActionGuard] = None,
 ) -> ChatTurnResult:
     if session_id is None:
         session_id = session_store.create(seed=[{"role": "system", "content": system_prompt}])
@@ -115,6 +130,7 @@ def run_turn(
     trace: List[Dict[str, Any]] = []
     reply: Optional[str] = None
     empty_retries = 0
+    nudged = False
     for _ in range(max_iterations):
         kwargs = {
             "model": model,
@@ -132,6 +148,23 @@ def run_turn(
                 # (the answer stays in reasoning); ask again, appending
                 # nothing so the transcript stays clean.
                 empty_retries += 1
+                reply = None
+                continue
+            called = {t["name"] for t in trace}
+            if (
+                action_guard is not None
+                and not nudged
+                and reply.strip()
+                and action_guard.look_tool in called
+                and not (set(action_guard.action_tools) & called)
+            ):
+                # The model LOOKED and then described the change in
+                # prose instead of making it. One corrective turn, with
+                # the tools still on the table; a look-only question
+                # just answers again.
+                nudged = True
+                history.append({"role": "assistant", "content": reply})
+                history.append({"role": "user", "content": action_guard.nudge})
                 reply = None
                 continue
             note = _language_correction(language_ref or user_message, reply)

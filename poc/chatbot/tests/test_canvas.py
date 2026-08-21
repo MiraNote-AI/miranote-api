@@ -166,3 +166,45 @@ def test_restyle_photo_description_says_it_is_about_looks_not_placement():
     # belong to edit_page, and confusing the two is the bug class this
     # canvas work keeps running into.
     assert "edit_page" in described
+
+
+def test_edit_page_description_guides_a_whole_page_redesign():
+    tool = next(
+        t for t in canvas.canvas_tools(tools.TOOLS)
+        if t["function"]["name"] == "edit_page"
+    )
+    desc = tool["function"]["description"]
+    # A whole-page rearrange must look first and use the full reach of
+    # the tool, not just coordinates.
+    assert "look_at_page" in desc
+    assert "not just positions" in desc
+
+
+def test_look_result_pushes_the_model_to_apply_its_decision():
+    class FakeVision:
+        def describe(self, image_bytes, prompt):
+            assert image_bytes == b"jpeg"
+            return "a calm blue page with one photo"
+
+    dispatcher = canvas.build_dispatcher(
+        b"jpeg", FakeVision(), lambda name, args: "fallback"
+    )
+    result = dispatcher("look_at_page", {})
+    assert "a calm blue page" in result["description"]
+    # A look with no follow-through is how "tidy up" becomes a chat
+    # bubble instead of a change -- the result must carry the one
+    # imperative the weak model will actually obey.
+    assert "apply the change now" in result["description"]
+
+
+def test_canvas_prompt_tidies_by_design_not_alignment():
+    prompt = canvas.CANVAS_PROMPT_PATH.read_text(encoding="utf-8")
+    # The tidy guidance: look first, design with a hero and hierarchy,
+    # land everything in one edit_page call.
+    assert "look_at_page first" in prompt
+    assert "hero" in prompt
+    assert "single edit_page call" in prompt
+    # A redesign must land as a tool call -- a prose plan that never
+    # calls edit_page is exactly how a weak model "helps" without
+    # touching the page.
+    assert "act on the page" in prompt

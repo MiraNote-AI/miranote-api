@@ -19,7 +19,7 @@ from dotenv import load_dotenv
 from openai import OpenAI
 
 from poc.chatbot import canvas, journal, tools
-from poc.chatbot.chat_loop import ChatTurnResult, drop_unrenderable, run_turn
+from poc.chatbot.chat_loop import ActionGuard, ChatTurnResult, drop_unrenderable, run_turn
 from poc.chatbot.config import ChatbotConfig
 from poc.chatbot.image_client import ImageClient
 from poc.chatbot.session import SessionStore
@@ -151,6 +151,7 @@ async def chat(req: ChatRequest):
     dispatcher = _dispatcher
     turn_tools = tools.TOOLS
     prompt = SYSTEM_PROMPT
+    action_guard = None
 
     if canvas_mode:
         page = req.page.model_dump()
@@ -166,6 +167,14 @@ async def chat(req: ChatRequest):
         dispatcher = canvas.build_dispatcher(image_bytes, image_client, _dispatcher)
         turn_tools = CANVAS_TOOLS
         prompt = CANVAS_PROMPT
+        # A look with no follow-through is how a weak model "tidies" a
+        # page into a chat bubble; the guard gives it one corrective
+        # turn with the tools still on the table.
+        action_guard = ActionGuard(
+            look_tool="look_at_page",
+            action_tools=sorted(canvas.CANVAS_TOOL_NAMES - {"look_at_page"}),
+            nudge=canvas.ACTION_NUDGE,
+        )
     elif journal_mode:
         message = journal.compose_user_message(
             req.message, [n.model_dump() for n in req.notes]
@@ -190,6 +199,7 @@ async def chat(req: ChatRequest):
             max_history=config.max_history_messages,
             system_prompt=prompt,
             transient_prefix=transient_prefix,
+            action_guard=action_guard,
         )
     except KeyError:
         raise HTTPException(status_code=404, detail="unknown session_id")
