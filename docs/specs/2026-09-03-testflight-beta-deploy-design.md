@@ -3,8 +3,8 @@
 - **Date:** 2026-09-03
 - **Author:** mengjia (Claude-assisted)
 - **Status:** Draft, revised after red-team review
-- **Revision:** v2 (2026-09-04) -- red-team review added rate limiting, a
-  concurrency cap, a load test, and voice-path timeout coverage; see
+- **Revision:** v3 (2026-09-04) -- v2 red-team review; v3 records the
+  measured `/cutout` latency and the prompt query-string quirk; see
   section 15.
 - **Scope:** deployment and distribution only. Backend changes in
   `poc/image-generation/main.py` and `scripts/start_backends.sh`, a new
@@ -288,7 +288,7 @@ reaches a tester in the normal path.
 | --- | --- | --- | --- |
 | `ImageStudio.swift:91,163` request timeout | 180s | 110s | Below the 125s edge ceiling |
 | `MiraCanvasCoordinator.swift:122` `imageTimeout` | 150s | 120s | Above the request timeout, so the transport error surfaces rather than being masked by the coordinator |
-| Voice transcription request timeout | 60s (URLSession default; `LiveVoiceTranscriptionService.swift:47` sets none) | TBD, set after the `/transcribe` measurement (section 13) | Whisper runs on CPU on the Mac; long recordings may exceed 60s even on today's LAN |
+| Voice transcription request timeout | 60s (URLSession default; `LiveVoiceTranscriptionService.swift:47` sets none) | TBD, set after the `/transcribe` measurement (section 13.3) | Whisper runs on CPU on the Mac; long recordings may exceed 60s even on today's LAN |
 
 Today the ordering is inverted (request 180s > coordinator 150s), so the
 coordinator's generic timeout always fires first for image work and the
@@ -445,32 +445,56 @@ deleting the active token: both cut access instantly.
 - Backend (rate limit): requests beyond the per-token limit yield 429,
   and the window counts correctly across a burst.
 
-## 13. Open question
+## 13. Latency: /cutout measured, /transcribe still open
 
-`/cutout` latency has **not** been measured. It runs a heavier pipeline
-than `/generate` -- GroundingDINO plus Gemini bounding-box detection
-concurrently, then SAM-2 segmentation -- and measuring it requires
-downloading the SAM-2 checkpoint and the DINO model plus a billed Gemini
-call, which was not worth doing during design.
+### 13.1 /cutout -- measured 2026-09-04
 
-It is not a blocker: the 110s client timeout from section 7 bounds the
-failure cleanly either way. But **measuring it is the first task of
-implementation**, before the tunnel is exposed, because it is the one
-number that could still force the async-job design that sections 3.3 and
-6 otherwise rule out.
+Measured on this Mac against the live service (`127.0.0.1:8002`) with
+the production default mode `hybrid_sam_prebg_gray`, three runs per case
+after warm-up. All models preload at service startup (rembg,
+GroundingDINO, SAM-2); the ~40s cold start happens once, not per
+request. Both disambiguation paths were exercised: the photos took the
+DINO+Gemini union path (IoU 0.59-0.75) and the small-subject image the
+Gemini-only path.
 
-`/transcribe` latency is unmeasured for the same reason. Whisper runs on
-the Mac's CPU and long recordings could take minutes. The iOS voice
-client calls `client.send` with no timeout
+| Case | Latency (3 runs) | Median |
+| --- | --- | --- |
+| Hybrid cutout, person photo | 30.8s / 32.1s / 36.8s | ~32s |
+| Hybrid cutout, small subject | 17.4s / 23.0s / 24.4s | ~23s |
+| Hybrid cutout, cartoon | 29.1s (one run) | ~29s |
+| Auto (rembg only), person photo | 8.6s / 11.3s / 22.0s | ~11s |
+| Auto (rembg only), cartoon | 7.3s / 8.5s / 8.9s | ~8s |
+
+The worst observed value (36.8s) sits roughly 3x under the 110s client
+budget. With the section 6 semaphore capped at 3 concurrent generations,
+CPU contention is bounded and the worst case stays well inside the 125s
+edge ceiling. One outlier (22.0s auto on a photo that otherwise
+measures 8-11s) appeared immediately after sustained load -- exactly the
+saturation the semaphore exists to prevent. The async-job design is
+therefore ruled out; sections 3.3 and 6 stand as written.
+
+### 13.2 /cutout API quirk: prompt travels in the query string
+
+The `prompt` parameter of `POST /cutout` binds from the query string
+(`?prompt=person`), not from a multipart form field: a form field named
+`prompt` is silently ignored and the request falls back to auto mode.
+The iOS client already sends it correctly. Recorded here so backend
+callers do not rediscover it the hard way.
+
+### 13.3 /transcribe -- still open
+
+Whisper runs on the Mac's CPU and long recordings could take minutes.
+The iOS voice client calls `client.send` with no timeout
 (`LiveVoiceTranscriptionService.swift:47`), so it silently inherits
 URLSession's 60s default -- long recordings time out even on today's
 LAN. Measuring `/transcribe` for a worst-case recording (e.g. 5 minutes)
-is the second implementation task; the result fills in the voice row in
+is the next measurement task; the result fills in the voice row in
 section 7.
 
 ## 14. Implementation order
 
-1. Measure `/cutout` latency locally (section 13).
+1. Measure `/cutout` latency locally -- done 2026-09-04 (section 13.1):
+   worst observed 36.8s, well inside the 110s budget.
 2. Measure `/transcribe` latency; set the voice client timeout
    (sections 7, 13).
 3. Fix the `asyncio.to_thread` omission, add the `/generate` semaphore,
@@ -501,3 +525,7 @@ distribution work begins.
   monitoring, the 90-day build expiry, and the kill switch (section
   11), the signing recommendation and privacy line (section 9), and
   corrected drifted line references (sections 3.3, 7).
+- v3 (2026-09-04): measured `/cutout` latency (section 13.1) and
+  recorded the prompt query-string quirk (section 13.2); `/transcribe`
+  remains open (section 13.3). Implementation step 1 marked done; the
+  async-job redesign is ruled out.
