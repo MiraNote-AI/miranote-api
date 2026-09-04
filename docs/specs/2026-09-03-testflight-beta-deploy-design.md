@@ -3,9 +3,9 @@
 - **Date:** 2026-09-03
 - **Author:** mengjia (Claude-assisted)
 - **Status:** Draft, revised after red-team review
-- **Revision:** v3 (2026-09-04) -- v2 red-team review; v3 records the
-  measured `/cutout` latency and the prompt query-string quirk; see
-  section 15.
+- **Revision:** v4 (2026-09-04) -- v3 records the measured `/cutout`
+  latency; v4 records the measured `/transcribe` latency and fills the
+  voice timeout row; see section 15.
 - **Scope:** deployment and distribution only. Backend changes in
   `poc/image-generation/main.py` and `scripts/start_backends.sh`, a new
   `shared/beta_auth.py`, plus a companion PR in `miranote-ios`
@@ -288,7 +288,7 @@ reaches a tester in the normal path.
 | --- | --- | --- | --- |
 | `ImageStudio.swift:91,163` request timeout | 180s | 110s | Below the 125s edge ceiling |
 | `MiraCanvasCoordinator.swift:122` `imageTimeout` | 150s | 120s | Above the request timeout, so the transport error surfaces rather than being masked by the coordinator |
-| Voice transcription request timeout | 60s (URLSession default; `LiveVoiceTranscriptionService.swift:47` sets none) | TBD, set after the `/transcribe` measurement (section 13.3) | Whisper runs on CPU on the Mac; long recordings may exceed 60s even on today's LAN |
+| Voice transcription request timeout | 60s (URLSession default; `LiveVoiceTranscriptionService.swift:47` sets none) | 110s | Measured worst 84.3s (section 13.3); the 60s default already times out ~1min recordings on today's LAN |
 
 Today the ordering is inverted (request 180s > coordinator 150s), so the
 coordinator's generic timeout always fires first for image work and the
@@ -445,7 +445,7 @@ deleting the active token: both cut access instantly.
 - Backend (rate limit): requests beyond the per-token limit yield 429,
   and the window counts correctly across a burst.
 
-## 13. Latency: /cutout measured, /transcribe still open
+## 13. Latency: /cutout and /transcribe measured
 
 ### 13.1 /cutout -- measured 2026-09-04
 
@@ -481,22 +481,42 @@ The `prompt` parameter of `POST /cutout` binds from the query string
 The iOS client already sends it correctly. Recorded here so backend
 callers do not rediscover it the hard way.
 
-### 13.3 /transcribe -- still open
+### 13.3 /transcribe -- measured 2026-09-04
 
-Whisper runs on the Mac's CPU and long recordings could take minutes.
-The iOS voice client calls `client.send` with no timeout
-(`LiveVoiceTranscriptionService.swift:47`), so it silently inherits
-URLSession's 60s default -- long recordings time out even on today's
-LAN. Measuring `/transcribe` for a worst-case recording (e.g. 5 minutes)
-is the next measurement task; the result fills in the voice row in
-section 7.
+Measured on this Mac against the live service (`127.0.0.1:8005`) with
+the production parameters the iOS client sends (`correct=true`,
+`with_emotion=false`), on synthesized speech files of 10s, 1min, 3min,
+and 5min:
+
+| Recording | Production total | Whisper alone (`correct=false`) |
+| --- | --- | --- |
+| 10s | 12.6s | 0.33s |
+| 1min | 53.7s / 74.4s | 1.7s |
+| 3min | 82.0s / 84.3s | -- |
+| 5min | 73.7s / 82.0s | 16.5s |
+| 5min, `lang=auto` (two decodes) | 82.1s | -- |
+
+The dominant cost is the DeepSeek correction call, a roughly flat ~60s
+per request regardless of recording length; Whisper itself is fast (5min
+of audio transcribes in ~16s). The whisper model loads lazily on the
+first request, adding ~9s to the first call after service start.
+
+Against the budgets: the worst observed value (84.3s) fits inside the
+110s client budget with margin, but the iOS voice client's implicit 60s
+URLSession default already fails ~1min recordings on today's LAN -- the
+explicit 110s timeout in section 7 is required, not optional. Two
+caveats: the ~60s correction cost is fixed, so recordings beyond ~15min
+approach the 110s budget (accepted at beta scale; the long-term fix is
+a correction-specific timeout or a smaller `max_tokens`), and
+`lang=auto` costs no measurable extra time because the two Whisper
+decodes are cheap next to the correction call.
 
 ## 14. Implementation order
 
 1. Measure `/cutout` latency locally -- done 2026-09-04 (section 13.1):
    worst observed 36.8s, well inside the 110s budget.
-2. Measure `/transcribe` latency; set the voice client timeout
-   (sections 7, 13).
+2. Measure `/transcribe` latency -- done 2026-09-04 (section 13.3):
+   worst observed 84.3s; the voice row in section 7 is filled in.
 3. Fix the `asyncio.to_thread` omission, add the `/generate` semaphore,
    and add the concurrency regression and load tests (sections 6, 12).
 4. Add `shared/beta_auth.py` with rate limiting, wire `PYTHONPATH`,
@@ -526,6 +546,8 @@ distribution work begins.
   11), the signing recommendation and privacy line (section 9), and
   corrected drifted line references (sections 3.3, 7).
 - v3 (2026-09-04): measured `/cutout` latency (section 13.1) and
-  recorded the prompt query-string quirk (section 13.2); `/transcribe`
-  remains open (section 13.3). Implementation step 1 marked done; the
-  async-job redesign is ruled out.
+  recorded the prompt query-string quirk (section 13.2). Implementation
+  step 1 marked done; the async-job redesign is ruled out.
+- v4 (2026-09-04): measured `/transcribe` latency (section 13.3) and
+  filled the voice timeout row in section 7 (110s). Implementation
+  step 2 marked done; both measurement tasks are closed.
