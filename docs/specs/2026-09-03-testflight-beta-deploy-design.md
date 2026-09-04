@@ -2,7 +2,10 @@
 
 - **Date:** 2026-09-03
 - **Author:** mengjia (Claude-assisted)
-- **Status:** Draft, awaiting implementation plan
+- **Status:** Draft, revised after red-team review
+- **Revision:** v2 (2026-09-04) -- red-team review added rate limiting, a
+  concurrency cap, a load test, and voice-path timeout coverage; see
+  section 15.
 - **Scope:** deployment and distribution only. Backend changes in
   `poc/image-generation/main.py` and `scripts/start_backends.sh`, a new
   `shared/beta_auth.py`, plus a companion PR in `miranote-ios`
@@ -86,7 +89,7 @@ for every request in this design.
 ### 3.3 Measured latency: a normal request is nowhere near the ceiling
 
 Measured on this Mac against the configured model
-(`REMBG_MODEL = "birefnet-general-lite"`, `config.py:12`), 1024x1024
+(`REMBG_MODEL = "birefnet-general-lite"`, `config.py:32`), 1024x1024
 input, three consecutive runs after warm-up:
 
 | Step | Time |
@@ -94,13 +97,13 @@ input, three consecutive runs after warm-up:
 | Session/model load (once, at service startup) | 2.2s |
 | `remove()` per image | 4.60s / 6.07s / 6.16s |
 
-With `NUMBER_OF_IMAGES = 2` (`config.py:18`), a sticker `/generate`
+With `NUMBER_OF_IMAGES = 2` (`config.py:38`), a sticker `/generate`
 decomposes as roughly: prompt expansion ~2s, two images generated
 concurrently ~10-20s, two background removals ~10-12s. **Typical total
 25-40s**, comfortably inside 125s.
 
 The existing 180s client timeout is therefore a defensive ceiling, not
-the normal path. The team already tuned this once: `config.py:12`
+the normal path. The team already tuned this once: `config.py:32`
 records that the full `birefnet` model took ~80s per cutout and
 "starves the event loop -- too slow for interactive use (phone times out
 at 150s and users retry, wedging the queue)". The lite model was chosen
@@ -189,6 +192,11 @@ mapping layer with nothing to show for it.
 Four CNAMEs are created by `cloudflared tunnel route dns`. TLS
 terminates at Cloudflare; no certificate is handled on the Mac.
 
+The credentials file (`~/.cloudflared/<tunnel-id>.json`) is the only
+recoverable state of the tunnel: if it is lost, the tunnel must be
+deleted, recreated, and its four CNAMEs re-pointed. Back it up to a
+password manager when the tunnel is created.
+
 ### 4.3 Two independent lifecycles
 
 The tunnel and the backends are managed separately and must not be
@@ -202,7 +210,10 @@ coupled:
 The consequence is a specific, expected failure mode: tunnel up but
 backends down yields **502**, and that must be a legible message rather
 than a raw status code (section 8.3). New `scripts/start_tunnel.sh` and
-`scripts/stop_tunnel.sh` mirror the existing pair.
+`scripts/stop_tunnel.sh` mirror the existing pair; `start_tunnel.sh`
+also starts `caffeinate`, because a sleeping Mac takes the tunnel down
+with it (section 8.3) and the tunnel must answer even when no backend
+is up.
 
 ## 5. Backend auth layer
 
@@ -225,6 +236,14 @@ the working directory and the repository root stay on `sys.path`
 `/health` is explicitly exempt from auth. All four services expose it
 and `start_backends.sh` polls it for readiness; requiring a token there
 would break the startup check for no benefit.
+
+`beta_auth.py` also carries a per-token rate limit: an in-memory sliding
+window, e.g. 30 requests per minute per token, returning 429 when
+exceeded. The limit is deliberately cheap rather than precise. A token
+can be extracted from the IPA (section 11), and without a limit an
+extracted token spends DeepSeek and Vertex credits at full speed or
+saturates the Mac's CPU. The limit doubles as protection against retry
+storms (section 7).
 
 ## 6. Concurrency defect in `/generate`
 
@@ -250,6 +269,16 @@ Fix: wrap both calls in `asyncio.to_thread`, matching the file's own
 established pattern. Blocking becomes CPU contention across the thread
 pool instead of serialisation on the event loop.
 
+The fix removes serialisation but not saturation: ten concurrent
+generations still queue roughly 120s of CPU work, and on an 8-core Mac
+oversubscribed threads slow down every request, each of which may then
+miss the 110s client budget. `/generate` therefore also gets an
+`asyncio.Semaphore` (initial value 3), acquired at the top of the
+handler and released in `finally`. Requests beyond the cap wait in the
+event loop instead of fighting for cores, which bounds the worst case
+and caps concurrent calls to the Vertex image API. Section 12 makes the
+cap prove itself with a load test.
+
 ## 7. Timeout budget
 
 The client is made to give up **before** Cloudflare does, so a 524 never
@@ -258,7 +287,8 @@ reaches a tester in the normal path.
 | Setting | Current | New | Rationale |
 | --- | --- | --- | --- |
 | `ImageStudio.swift:91,163` request timeout | 180s | 110s | Below the 125s edge ceiling |
-| `MiraCanvasCoordinator.swift:110` `imageTimeout` | 150s | 120s | Above the request timeout, so the transport error surfaces rather than being masked by the coordinator |
+| `MiraCanvasCoordinator.swift:122` `imageTimeout` | 150s | 120s | Above the request timeout, so the transport error surfaces rather than being masked by the coordinator |
+| Voice transcription request timeout | 60s (URLSession default; `LiveVoiceTranscriptionService.swift:47` sets none) | TBD, set after the `/transcribe` measurement (section 13) | Whisper runs on CPU on the Mac; long recordings may exceed 60s even on today's LAN |
 
 Today the ordering is inverted (request 180s > coordinator 150s), so the
 coordinator's generic timeout always fires first for image work and the
@@ -267,6 +297,11 @@ real transport error is lost. The new ordering fixes that as well.
 A tester now sees a clean `.timedOut` with a sensible message after
 110s, instead of watching a spinner for 125s and receiving an
 unexplained edge error.
+
+On timeout the app does **not** auto-retry. The `config.py:32` comment
+records that timed-out users retry and wedge the queue; with ten
+testers a retry storm multiplies load on an already-saturated Mac. The
+error message invites one manual retry instead.
 
 ## 8. iOS changes
 
@@ -286,7 +321,8 @@ for outbound traffic. `ImageStudio` and `LiveVoiceTranscriptionService`
 build their own multipart `URLRequest`s but both hand them to
 `client.send`, so injecting `Authorization` in `send` covers every call
 site. The token is supplied through an xcconfig-injected Info.plist key
-and read by `MiraNoteConfig`; it is not committed.
+and read by `MiraNoteConfig`; neither the token nor the xcconfig file
+that carries it is committed (the file is untracked/gitignored).
 
 ### 8.3 Error mapping
 
@@ -297,7 +333,7 @@ them as "the app is broken" and triage is guesswork.
 | Condition | Meaning | Remedy |
 | --- | --- | --- |
 | 502 | Tunnel up, backends not running | Run `start_backends.sh` on the Mac |
-| 530 (Cloudflare 1033) | `cloudflared` itself is down | Restart the tunnel service |
+| 530 (Cloudflare 1033) | `cloudflared` is down, or the Mac is asleep | Restart the tunnel service; check the Mac is awake and plugged in |
 | 401 | Token rotated; build carries the old one | Ship a new TestFlight build |
 | `.timedOut` | Image work exceeded the budget | Retry |
 
@@ -328,6 +364,12 @@ plain HTTP against loopback. Device traffic is now HTTPS, so:
   2. Have the Account Holder export a distribution certificate (`.p12`)
      and provisioning profile, then configure signing manually with
      automatic signing turned off.
+- Option 1 is strongly preferred: hand-managed `.p12` signing is fragile
+  across Xcode version changes.
+- The TestFlight "What to Test" description must include one line stating
+  that photos and recordings are processed by third-party AI services
+  (Google, DeepSeek); testers should not assume everything stays on the
+  Mac.
 - The App Store Connect app name is globally unique. "MiraNote" may be
   taken; this is only discoverable when the app record is created, so a
   fallback name should be agreed in advance.
@@ -360,16 +402,30 @@ Two costs are inherent to this design and are accepted deliberately.
 
 **The Mac is a single point of failure.** It must stay awake, powered,
 and online. The existing `caffeinate` in `start_backends.sh` only covers
-the period while the backends run. If the Mac sleeps, loses network, or
-reboots, every tester is down at once. This is tolerable for ten
-internal testers and is the main reason this design is labelled a
-first-pass rather than a durable deployment.
+the period while the backends run, and `start_tunnel.sh` adds its own
+(section 4.3); the Mac still must stay plugged in and unsleeping for the
+whole beta window. If the Mac sleeps, loses network, or reboots, every
+tester is down at once. This is tolerable for ten internal testers and
+is the main reason this design is labelled a first-pass rather than a
+durable deployment.
 
 **A token compiled into the app can be extracted.** Anyone with the IPA
 can pull it and call the backends directly, spending DeepSeek and Vertex
-credits. Accepted at internal-beta scale, with two mitigations: a
-**budget alert on the Vertex project is required, not optional**, and
-the multi-token design in section 5 keeps rotation cheap.
+credits. Accepted at internal-beta scale, with three mitigations: a
+**budget alert on the Vertex project is required, not optional**, the
+multi-token design in section 5 keeps rotation cheap, and the per-token
+rate limit in section 5 bounds how fast an extracted token can burn.
+
+**Nobody is watching.** Backend crashes and post-reboot failures are
+currently discovered by tester complaints. Add a free uptime monitor
+(e.g. UptimeRobot) pinging the four `/health` endpoints through the
+tunnel every 5 minutes with phone alerts. Zero code, five minutes of
+setup.
+
+**Internal builds expire after 90 days.** TestFlight refuses to launch
+an expired build, so re-upload at least every ~60 days (a calendar
+reminder, not CI). The kill switch for abuse is `stop_tunnel.sh` plus
+deleting the active token: both cut access instantly.
 
 ## 12. Testing strategy
 
@@ -383,6 +439,11 @@ the multi-token design in section 5 keeps rotation cheap.
   three paths (`postJSON`, and the two multipart builders).
 - End to end: `curl https://<service>.beta.<domain>/health` for all
   four hosts.
+- Backend (load): ten concurrent sticker `/generate` requests, p95
+  latency < 110s and no request over 125s. This is the test that proves
+  the section 6 semaphore; run it before and after the fix.
+- Backend (rate limit): requests beyond the per-token limit yield 429,
+  and the window counts correctly across a burst.
 
 ## 13. Open question
 
@@ -398,22 +459,45 @@ implementation**, before the tunnel is exposed, because it is the one
 number that could still force the async-job design that sections 3.3 and
 6 otherwise rule out.
 
+`/transcribe` latency is unmeasured for the same reason. Whisper runs on
+the Mac's CPU and long recordings could take minutes. The iOS voice
+client calls `client.send` with no timeout
+(`LiveVoiceTranscriptionService.swift:47`), so it silently inherits
+URLSession's 60s default -- long recordings time out even on today's
+LAN. Measuring `/transcribe` for a worst-case recording (e.g. 5 minutes)
+is the second implementation task; the result fills in the voice row in
+section 7.
+
 ## 14. Implementation order
 
 1. Measure `/cutout` latency locally (section 13).
-2. Fix the `asyncio.to_thread` omission and add the concurrency
-   regression test (section 6).
-3. Add `shared/beta_auth.py`, wire `PYTHONPATH`, exempt `/health`,
-   add tests (section 5).
-4. Register the domain; create and route the named tunnel; install it as
-   a service (section 4).
-5. iOS: endpoint config, auth header, timeout budget, error messages,
-   ATS cleanup (sections 7-8).
-6. Generate the placeholder icon; switch the version keys to build
+2. Measure `/transcribe` latency; set the voice client timeout
+   (sections 7, 13).
+3. Fix the `asyncio.to_thread` omission, add the `/generate` semaphore,
+   and add the concurrency regression and load tests (sections 6, 12).
+4. Add `shared/beta_auth.py` with rate limiting, wire `PYTHONPATH`,
+   exempt `/health`, add tests (sections 5, 12).
+5. Register the domain; create and route the named tunnel; install it as
+   a service; back up the credentials file (section 4).
+6. iOS: endpoint config, auth header, timeout budget, no auto-retry,
+   error messages, ATS cleanup (sections 7-8).
+7. Generate the placeholder icon; switch the version keys to build
    settings (section 10).
-7. Arrange signing access; create the App Store Connect record; upload
+8. Arrange signing access; create the App Store Connect record; upload
    the first build (section 9).
-8. Add internal testers and distribute.
+9. Add internal testers, configure uptime monitoring, and distribute
+   (sections 11-12).
 
-Steps 2 and 3 are backend-only and mergeable before any of the
+Steps 3 and 4 are backend-only and mergeable before any of the
 distribution work begins.
+
+## 15. Revision history
+
+- v1 (2026-09-03): initial draft.
+- v2 (2026-09-04): red-team review. Added per-token rate limiting
+  (section 5), the `/generate` concurrency cap and load test (sections
+  6, 12), voice-path timeout coverage (sections 7, 13), tunnel
+  keep-awake and credentials backup (sections 4.2-4.3), uptime
+  monitoring, the 90-day build expiry, and the kill switch (section
+  11), the signing recommendation and privacy line (section 9), and
+  corrected drifted line references (sections 3.3, 7).
