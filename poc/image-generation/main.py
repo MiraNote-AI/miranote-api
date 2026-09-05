@@ -47,6 +47,18 @@ def _generate_gate():
     return _generate_semaphore
 
 
+# Deliberately not the provider's own wording: "RESOURCE_EXHAUSTED" tells a
+# tester nothing. Deliberately not a retry either -- config.py:32 records that
+# users who retry wedge the queue, and section 7 of the deploy spec rules out
+# automatic retries on a saturated host.
+QUOTA_DETAIL = "image generation is busy right now; wait a moment and try again"
+
+
+def _quota_exhausted(model: str, error: Exception) -> HTTPException:
+    print(f"[generate] quota exhausted on {model}: {str(error)[:120]}")
+    return HTTPException(status_code=503, detail=QUOTA_DETAIL)
+
+
 def _call_model(prompt: str, aspect_ratio: str) -> list[bytes]:
     global _imagen_unavailable
     if not _imagen_unavailable:
@@ -61,6 +73,12 @@ def _call_model(prompt: str, aspect_ratio: str) -> list[bytes]:
             )
             return [img.image.image_bytes for img in response.generated_images]
         except Exception as error:
+            # Tested before the gated-model check on purpose. A quota
+            # rejection is transient, and _imagen_unavailable is never reset,
+            # so letting it through that path would strand every later request
+            # on the fallback model until the process restarts.
+            if fallback.is_rate_limited(error):
+                raise _quota_exhausted(config.MODEL_ID, error)
             if not fallback.is_model_unavailable(error):
                 raise
             # Imagen is gated per project; remember and stop retrying it.
@@ -78,8 +96,16 @@ def _call_model(prompt: str, aspect_ratio: str) -> list[bytes]:
 
     # The images are independent; generate them concurrently so the whole
     # request stays comfortably inside client timeouts.
-    with ThreadPoolExecutor(max_workers=config.NUMBER_OF_IMAGES) as pool:
-        results = list(pool.map(lambda _: _one(), range(config.NUMBER_OF_IMAGES)))
+    try:
+        with ThreadPoolExecutor(max_workers=config.NUMBER_OF_IMAGES) as pool:
+            results = list(pool.map(lambda _: _one(), range(config.NUMBER_OF_IMAGES)))
+    except Exception as error:
+        # The path that actually failed under load: Imagen gated on the
+        # project, so every request lands here and the fallback's own quota is
+        # what runs out.
+        if fallback.is_rate_limited(error):
+            raise _quota_exhausted(config.FALLBACK_IMAGE_MODEL, error)
+        raise
     images = [image for image in results if image]
     if not images:
         raise HTTPException(status_code=502, detail="image generation returned no image")
