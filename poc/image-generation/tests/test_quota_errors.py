@@ -8,6 +8,7 @@ distinguishable, it does not latch, and it does not retry.
 
 from __future__ import annotations
 
+import asyncio
 import unittest
 from unittest import mock
 
@@ -131,6 +132,57 @@ class QuotaOverTheWireTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(response.status_code, 503)
         self.assertNotIn("RESOURCE_EXHAUSTED", response.text)
+
+    async def test_a_quota_failure_releases_the_concurrency_slot(self):
+        """The two changes that met in this file must not wedge each other.
+
+        The concurrency cap is held for the whole handler, and a quota
+        rejection raises out of _call_model on a worker thread. If that path
+        failed to release, the first few quota errors would exhaust the cap
+        and /generate would hang for the life of the process -- a far worse
+        failure than the 500 this branch set out to fix.
+        """
+        main._imagen_unavailable = False
+        main._generate_semaphore = None
+        self.addCleanup(setattr, main, "_imagen_unavailable", False)
+        self.addCleanup(setattr, main, "_generate_semaphore", None)
+
+        stub = mock.Mock()
+        stub.models.generate_images.side_effect = Exception(RATE_LIMITED)
+        attempts = main.GENERATE_CONCURRENCY + 2
+
+        with mock.patch.object(main, "_get_client", return_value=stub):
+            async with httpx.AsyncClient(
+                transport=httpx.ASGITransport(app=main.app), base_url="http://probe"
+            ) as client:
+                for attempt in range(attempts):
+                    try:
+                        # Bounded on purpose: a leaked slot shows up as a
+                        # permanent hang, and a hanging test tells CI nothing
+                        # except that the runner timed out.
+                        response = await asyncio.wait_for(
+                            client.post(
+                                "/generate",
+                                json={
+                                    "command": "sticker",
+                                    "prompt": "a cat",
+                                    "expand": False,
+                                },
+                            ),
+                            timeout=10.0,
+                        )
+                    except asyncio.TimeoutError:
+                        self.fail(
+                            "request {} blocked forever; earlier quota failures "
+                            "never released their concurrency slots".format(attempt)
+                        )
+                    self.assertEqual(response.status_code, 503)
+
+        self.assertEqual(
+            main._generate_semaphore._value,
+            main.GENERATE_CONCURRENCY,
+            "quota failures leaked concurrency slots",
+        )
 
 
 if __name__ == "__main__":

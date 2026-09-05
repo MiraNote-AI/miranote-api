@@ -28,6 +28,25 @@ from border import border, border_presets
 _imagen_unavailable = False
 
 
+# Concurrent sticker generations are capped so ten testers cannot queue enough
+# CPU work to push a single request past Cloudflare's 125s edge timeout.
+GENERATE_CONCURRENCY = 3
+_generate_semaphore = None
+
+
+def _generate_gate():
+    """The /generate concurrency cap.
+
+    Built on first use rather than at import time: on Python 3.9 an
+    asyncio.Semaphore binds to whatever loop exists when it is constructed,
+    which at import time is not the loop the app ends up serving on.
+    """
+    global _generate_semaphore
+    if _generate_semaphore is None:
+        _generate_semaphore = asyncio.Semaphore(GENERATE_CONCURRENCY)
+    return _generate_semaphore
+
+
 # Deliberately not the provider's own wording: "RESOURCE_EXHAUSTED" tells a
 # tester nothing. Deliberately not a retry either -- config.py:32 records that
 # users who retry wedge the queue, and section 7 of the deploy spec rules out
@@ -293,6 +312,11 @@ class GenerateRequest(BaseModel):
 
 @app.post("/generate")
 async def generate_images(req: GenerateRequest):
+    async with _generate_gate():
+        return await _generate(req)
+
+
+async def _generate(req: GenerateRequest):
     if req.command == "sticker":
         if not req.prompt:
             raise HTTPException(status_code=400, detail="prompt is required for sticker")
@@ -323,9 +347,15 @@ async def generate_images(req: GenerateRequest):
     remove_bg = config.REMOVE_BG and req.command == "sticker"
     encoded = []
     for raw in images:
-        processed = remove(raw, session=_rembg_session) if remove_bg else raw
+        processed = (
+            await asyncio.to_thread(remove, raw, session=_rembg_session)
+            if remove_bg
+            else raw
+        )
         if remove_bg and config.REMBG_ERODE_RADIUS > 0:
-            processed = _erode_alpha(processed, config.REMBG_ERODE_RADIUS)
+            processed = await asyncio.to_thread(
+                _erode_alpha, processed, config.REMBG_ERODE_RADIUS
+            )
         encoded.append(base64.b64encode(processed).decode())
 
     return {"command": req.command, "prompt": prompt, "raw_input": req.prompt, "images": encoded, "count": len(encoded)}
