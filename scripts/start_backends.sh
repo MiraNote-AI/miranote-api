@@ -12,6 +12,12 @@ API_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 LOGS="$API_ROOT/logs/beta"
 mkdir -p "$LOGS"
 
+# The four POCs have independent venvs and no package in common, so the repo
+# root goes on sys.path for all of them. PYTHONPATH rather than --app-dir:
+# uvicorn inserts app_dir at sys.path[0] *instead of* the working directory,
+# so passing it would break the three services launched as "main:app".
+export PYTHONPATH="$API_ROOT${PYTHONPATH:+:$PYTHONPATH}"
+
 # name : working dir (under poc/) : uvicorn app spec : port
 SERVICES=(
   "text:text-clean-expand:main:app:8001"
