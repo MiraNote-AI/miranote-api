@@ -9,6 +9,13 @@ TUNNEL_CONFIG="$HOME/.cloudflared/miranote.yml"
 API_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 PIDFILE="$API_ROOT/logs/beta/tunnel.pid"
 
+if launchctl print "gui/$(id -u)/ai.miranote.beta-tunnel" >/dev/null 2>&1; then
+  echo "the launchd service owns this tunnel -- this script will not stop it"
+  echo "   stop for now: launchctl bootout gui/$(id -u)/ai.miranote.beta-tunnel"
+  echo "   remove:       scripts/uninstall_tunnel_service.sh"
+  exit 0
+fi
+
 if [ ! -f "$PIDFILE" ]; then
   echo "no pid file -- nothing to stop"
   exit 0
