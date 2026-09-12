@@ -259,6 +259,38 @@ class BetaAuthTests(unittest.TestCase):
             200,
         )
 
+    def test_the_default_limiter_honours_the_configured_limit(self):
+        """Changing RATE_LIMIT_REQUESTS must actually change behaviour.
+
+        Every other limiter test injects its own limit, so nothing here
+        exercised the module-level instance. A value hardcoded inside
+        TokenRateLimiter would leave the constant decorative and make raising
+        it silently do nothing.
+        """
+        limiter = beta_auth.TokenRateLimiter(clock=self.clock)
+        allowed = 0
+        while limiter.allow("alpha-token"):
+            allowed += 1
+            if allowed > beta_auth.RATE_LIMIT_REQUESTS * 2:
+                self.fail("the default limiter never refused a request")
+        self.assertEqual(allowed, beta_auth.RATE_LIMIT_REQUESTS)
+
+    def test_the_limit_leaves_room_for_a_shared_token(self):
+        """TestFlight ships one binary, so every tester shares this budget.
+
+        Ten testers holding a conversation is the load this has to absorb;
+        /chat is one request per message. The expensive endpoint does not rely
+        on this limit -- /generate is bounded by its own semaphore -- so the
+        headroom costs little.
+        """
+        testers = 10
+        messages_per_minute_each = 6
+        self.assertGreaterEqual(
+            beta_auth.RATE_LIMIT_REQUESTS,
+            testers * messages_per_minute_each,
+            "ten testers on one token would be throttled while behaving normally",
+        )
+
     def test_rejection_names_the_scheme(self):
         response = self._work()
         self.assertEqual(response.headers.get("WWW-Authenticate"), "Bearer")
