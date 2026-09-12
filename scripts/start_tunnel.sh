@@ -30,6 +30,17 @@ running_pid() {
   echo "$pid"
 }
 
+# The launchd job and this script can both start the same tunnel, and two
+# cloudflared processes serving one tunnel is confusing rather than loudly
+# broken. Whichever owns it, the other stands down.
+if launchctl print "gui/$(id -u)/ai.miranote.beta-tunnel" >/dev/null 2>&1; then
+  echo "the launchd service owns this tunnel -- not starting a second one"
+  echo "   log:     $LOGS/tunnel-service.log"
+  echo "   restart: launchctl kickstart -k gui/$(id -u)/ai.miranote.beta-tunnel"
+  echo "   remove:  scripts/uninstall_tunnel_service.sh"
+  exit 0
+fi
+
 if pid="$(running_pid)"; then
   echo "already running: pid $pid"
   echo "   log: $LOGS/tunnel.log"

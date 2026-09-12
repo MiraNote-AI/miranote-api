@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Template. install_tunnel_service.sh substitutes __CLOUDFLARED__, __CONFIG__
+  and __LOGS__ and writes the result into ~/Library/LaunchAgents.
+
+  A LaunchAgent, not a LaunchDaemon: the credentials live in the user's home,
+  and on a FileVault Mac nothing reaches the network before someone unlocks it
+  anyway, so running at login rather than at boot costs nothing real and needs
+  no root.
+
+  caffeinate wraps cloudflared rather than running beside it, so the keep-awake
+  lasts exactly as long as the tunnel and cannot outlive it. A sleeping Mac
+  takes the tunnel down, and the tunnel has to answer even when no backend is
+  up.
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>ai.miranote.beta-tunnel</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/bin/caffeinate</string>
+        <string>-s</string>
+        <string>__CLOUDFLARED__</string>
+        <string>--no-autoupdate</string>
+        <string>--config</string>
+        <string>__CONFIG__</string>
+        <string>tunnel</string>
+        <string>run</string>
+        <string>miranote-beta</string>
+    </array>
+
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+
+    <key>StandardOutPath</key>
+    <string>__LOGS__/tunnel-service.log</string>
+    <key>StandardErrorPath</key>
+    <string>__LOGS__/tunnel-service.log</string>
+
+    <key>ProcessType</key>
+    <string>Background</string>
+</dict>
+</plist>
