@@ -50,6 +50,11 @@ def stub_emotion():
 @pytest.fixture
 def voice_client(stub_whisper, stub_emotion, monkeypatch):
     """FastAPI TestClient with Whisper and emotion both stubbed."""
+    # The services require a beta token on every request except /health, so the
+    # client carries one. Without it these tests would exercise the gate rather
+    # than the endpoint they are about. The gate's own behaviour, including
+    # rejection, is covered in tests/test_beta_auth.py and test_beta_gate.py.
+    os.environ["BETA_TOKENS"] = "test-token"
     os.environ.setdefault("LLM_API_KEY", "fake")
     os.environ.setdefault("WHISPER_MODEL", "tiny")
 
@@ -74,4 +79,7 @@ def voice_client(stub_whisper, stub_emotion, monkeypatch):
         monkeypatch.setattr(main, "analyze_emotion", stub_emotion, raising=False)
 
     from fastapi.testclient import TestClient
-    return TestClient(main.app), stub_whisper, stub_emotion
+    client = TestClient(
+        main.app, headers={"Authorization": "Bearer test-token"}
+    )
+    return client, stub_whisper, stub_emotion

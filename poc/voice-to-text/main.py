@@ -14,6 +14,8 @@ from fastapi import FastAPI, UploadFile, File, Query, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
+
+import beta_auth
 from openai import OpenAI
 from emotion import analyze_emotion
 
@@ -95,6 +97,13 @@ def drop_no_speech_segments(result: Dict[str, Any]) -> Dict[str, Any]:
 llm = OpenAI(api_key=LLM_API_KEY, base_url=LLM_BASE_URL) if LLM_API_KEY else None
 
 app = FastAPI(title="MiraNote Voice-to-Text", version="0.1.0")
+
+# Reachable from the public internet through the Cloudflare tunnel, so every
+# request needs a beta token. Installed before CORSMiddleware on purpose: the
+# most recently added middleware is the outermost, and CORS must stay outside
+# the gate to answer a browser preflight, which carries no Authorization
+# header.
+beta_auth.install(app)
 
 # POC default is permissive so the unified local UI can call across ports.
 # Set CORS_ALLOW_ORIGIN (comma-separated) to scope this in any real

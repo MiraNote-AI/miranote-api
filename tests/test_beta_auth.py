@@ -11,7 +11,12 @@ import os
 import unittest
 from unittest import mock
 
-from fastapi import Depends, FastAPI
+import pathlib
+import tempfile
+
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from fastapi.testclient import TestClient
 
 import beta_auth
@@ -30,8 +35,8 @@ class _Clock:
         self.now += seconds
 
 
-def _build_app():
-    app = FastAPI(dependencies=[Depends(beta_auth.require_beta_token)])
+def _build_app(static_dir=None):
+    app = FastAPI()
 
     @app.get("/health")
     async def health():
@@ -40,6 +45,13 @@ def _build_app():
     @app.post("/work")
     async def work():
         return {"done": True}
+
+    beta_auth.install(app)
+
+    # Mounted after the gate on purpose: two of the four services mount a UI,
+    # and voice-to-text mounts at "/" where it catches every unrouted path.
+    if static_dir is not None:
+        app.mount("/", StaticFiles(directory=static_dir, html=True), name="ui")
 
     return app
 
@@ -160,6 +172,91 @@ class BetaAuthTests(unittest.TestCase):
             self._work("alpha-token").status_code,
             429,
             "the two requests from 11s ago must still occupy the window",
+        )
+
+    def test_mounted_files_are_gated_too(self):
+        """The reason this is middleware and not a route dependency.
+
+        A mounted sub-application does not inherit FastAPI(dependencies=[...]):
+        measured, the route answers 401 while the mounted file answers 200 and
+        serves its contents. voice-to-text mounts at "/" with html=True, so a
+        dependency would leave every unrouted path public.
+        """
+        directory = tempfile.mkdtemp()
+        pathlib.Path(directory, "index.html").write_text("<h1>ui</h1>")
+        client = TestClient(_build_app(static_dir=directory))
+
+        for path in ("/index.html", "/"):
+            with self.subTest(path=path):
+                anonymous = client.get(path)
+                self.assertEqual(anonymous.status_code, 401)
+                self.assertNotIn("<h1>ui</h1>", anonymous.text)
+
+        allowed = client.get(
+            "/index.html", headers={"Authorization": "Bearer alpha-token"}
+        )
+        self.assertEqual(allowed.status_code, 200)
+        self.assertIn("<h1>ui</h1>", allowed.text)
+
+    def test_a_rejection_is_never_a_server_error(self):
+        """Raising HTTPException inside middleware yields 500, not the status.
+
+        Measured: the middleware runs outside the exception handlers, so a
+        raise turns every rejection into a server error. The gate must return
+        a response rather than raise one.
+        """
+        self.assertEqual(self._work().status_code, 401)
+        self.assertEqual(self._work("not-a-real-token").status_code, 401)
+        for _ in range(3):
+            self._work("alpha-token")
+        self.assertEqual(self._work("alpha-token").status_code, 429)
+
+    def test_installing_reports_how_many_tokens_are_live(self):
+        with mock.patch("builtins.print") as printed:
+            beta_auth.install(FastAPI())
+        said = " ".join(str(c) for c in printed.call_args_list)
+        self.assertIn("2", said, "did not report the token count")
+        self.assertNotIn("alpha-token", said, "printed a token value")
+
+    def test_installing_without_tokens_warns_loudly(self):
+        with mock.patch.dict(os.environ, {"BETA_TOKENS": ""}):
+            with mock.patch("builtins.print") as printed:
+                beta_auth.install(FastAPI())
+        said = " ".join(str(c) for c in printed.call_args_list).upper()
+        self.assertIn("WARNING", said, "an empty token list must be announced")
+
+    def test_cors_preflight_survives_the_gate(self):
+        """install() must run before CORSMiddleware is added.
+
+        Starlette makes the most recently added middleware outermost. With the
+        gate outside CORS it sees the browser preflight first, and a preflight
+        carries no Authorization header, so it is rejected with 401 and every
+        cross-origin caller breaks. Measured both ways: gate-outside gives 401
+        on OPTIONS, CORS-outside gives 200.
+        """
+        preflight = {
+            "Origin": "https://example.com",
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "content-type",
+        }
+
+        correct = FastAPI()
+
+        @correct.post("/work")
+        async def work_ok():
+            return {"done": True}
+
+        beta_auth.install(correct)
+        correct.add_middleware(
+            CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"]
+        )
+
+        client = TestClient(correct)
+        self.assertEqual(client.options("/work", headers=preflight).status_code, 200)
+        self.assertEqual(client.post("/work").status_code, 401)
+        self.assertEqual(
+            client.post("/work", headers={"Authorization": "Bearer alpha-token"}).status_code,
+            200,
         )
 
     def test_rejection_names_the_scheme(self):

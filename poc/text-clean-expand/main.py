@@ -18,6 +18,8 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 from dotenv import load_dotenv
+
+import beta_auth
 from openai import OpenAI
 
 load_dotenv()
@@ -35,6 +37,14 @@ if LLM_BASE_URL:
 client = OpenAI(**client_kwargs)
 
 app = FastAPI(title="MiraNote Text Clean & Expand", version="0.1.0")
+
+# Reachable from the public internet through the Cloudflare tunnel, so every
+# request needs a beta token. Installed before CORSMiddleware on purpose: the
+# most recently added middleware is the outermost, and CORS must stay outside
+# the gate to answer a browser preflight, which carries no Authorization
+# header.
+beta_auth.install(app)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
