@@ -15,6 +15,10 @@ env/
 # Environment variables
 .env
 
+# Runtime state written by scripts/start_backends.sh and start_tunnel.sh
+# (service logs and pid files -- never source)
+logs/
+
 # IDE
 .vscode/
 .idea/
