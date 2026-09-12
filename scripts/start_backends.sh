@@ -1,9 +1,12 @@
 #!/bin/bash
-# Start all four POC backends for the phone beta, bound to 0.0.0.0 so
-# real devices on the same Wi-Fi can reach them (127.0.0.1 -- the uvicorn
-# default -- accepts connections from this Mac only). Keeps the Mac awake
-# while they run. Companion: stop_backends.sh; phone-side steps live in
-# miranote-ios/docs/RUN_ON_YOUR_PHONE.md.
+# Start all four POC backends for the beta, bound to loopback. Keeps the Mac
+# awake while they run. Companion: stop_backends.sh.
+#
+# Loopback is deliberate and is the whole security posture of this deployment:
+# the Cloudflare tunnel is the only way in, and the tunnel reaches the services
+# over localhost. Binding 0.0.0.0 would put four services that spend API
+# credits on every Wi-Fi the Mac ever joins, with no gate in front of them.
+# The tunnel itself is started separately by scripts/start_tunnel.sh.
 #
 # Usage: scripts/start_backends.sh
 set -u
@@ -53,10 +56,10 @@ for spec in "${SERVICES[@]}"; do
   if [ "$name" = "chat" ]; then
     # chatbot imports as a package from the repo root
     nohup .venv/bin/uvicorn --app-dir "$API_ROOT" "$app" \
-      --host 0.0.0.0 --port "$port" >"$LOGS/$name.log" 2>&1 &
+      --host 127.0.0.1 --port "$port" >"$LOGS/$name.log" 2>&1 &
   else
     nohup .venv/bin/uvicorn "$app" \
-      --host 0.0.0.0 --port "$port" >"$LOGS/$name.log" 2>&1 &
+      --host 127.0.0.1 --port "$port" >"$LOGS/$name.log" 2>&1 &
   fi
   echo "$!" >"$LOGS/$name.pid"
   echo "   $name: pid $! -> :$port"
@@ -83,15 +86,22 @@ for spec in "${SERVICES[@]}"; do
     fi
     sleep 3
   done
-  # Verify the 0.0.0.0 binding from the network side, not just loopback.
+  # Prove the binding is loopback-only by checking from the LAN address, where
+  # the answer must be silence. A reachable service here is the bug, not the
+  # unreachable one.
   if [ -n "$LAN_IP" ] && curl -s -m 3 -o /dev/null "http://$LAN_IP:$port/health"; then
-    echo "   $name: healthy (reachable at $LAN_IP:$port)"
+    echo "   $name: healthy BUT ALSO REACHABLE AT $LAN_IP:$port -- it is not"
+    echo "      bound to loopback; stop it before starting the tunnel"
   else
-    echo "   $name: healthy on loopback but NOT via LAN -- check macOS firewall"
+    echo "   $name: healthy on loopback only"
   fi
 done
 
 echo "== done"
-echo "   Phones on this Wi-Fi connect to: $(scutil --get LocalHostName 2>/dev/null || hostname).local"
-echo "   (fallback if mDNS is blocked: $LAN_IP)"
+echo "   Testers reach these through the tunnel, not over Wi-Fi:"
+echo "      https://beta-text.miranote.app    -> :8001"
+echo "      https://beta-image.miranote.app   -> :8002"
+echo "      https://beta-chat.miranote.app    -> :8003"
+echo "      https://beta-voice.miranote.app   -> :8005"
+echo "   Tunnel: scripts/start_tunnel.sh (separate lifecycle, start it too)"
 echo "   Stop everything: scripts/stop_backends.sh"

@@ -52,6 +52,12 @@ def client(fake_llm):
     from fastapi.testclient import TestClient
     from pydantic import BaseModel
 
+    # The services require a beta token on every request except /health, so the
+    # client carries one. Without it these tests would exercise the gate rather
+    # than the endpoint they are about. The gate's own behaviour, including
+    # rejection, is covered in tests/test_beta_auth.py and test_beta_gate.py.
+    os.environ["BETA_TOKENS"] = "test-token"
+
     main_path = Path(__file__).parent.parent / "main.py"
     spec = importlib.util.spec_from_file_location("text_clean_expand_main", main_path)
     main = importlib.util.module_from_spec(spec)
@@ -68,4 +74,7 @@ def client(fake_llm):
                 attr.model_rebuild()
             except Exception:
                 pass
-    return TestClient(main.app), fake_llm
+    return (
+        TestClient(main.app, headers={"Authorization": "Bearer test-token"}),
+        fake_llm,
+    )

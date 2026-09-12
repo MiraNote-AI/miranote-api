@@ -17,6 +17,8 @@ from PIL import Image, ImageFilter
 from pydantic import BaseModel
 from rembg import remove, new_session
 
+import beta_auth
+
 import config
 from shared.vertex_client import _get_client
 from generate import fallback, prompt_expander, generate_presets
@@ -276,6 +278,13 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="MiraNote Image Generation", version="0.1.0", lifespan=lifespan)
+
+# Reachable from the public internet through the Cloudflare tunnel, so every
+# request needs a beta token. Installed before CORSMiddleware on purpose: the
+# most recently added middleware is the outermost, and CORS must stay outside
+# the gate to answer a browser preflight, which carries no Authorization
+# header.
+beta_auth.install(app)
 
 
 class GenerateRequest(BaseModel):

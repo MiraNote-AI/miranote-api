@@ -32,7 +32,7 @@ from collections import deque
 from typing import Callable, Deque, Dict, List, Optional
 
 from dotenv import load_dotenv
-from fastapi import HTTPException, Request
+from fastapi.responses import JSONResponse
 
 # Loaded by absolute path, not by search. Each service runs with its own POC
 # directory as the working directory, and a bare load_dotenv() from there does
@@ -106,20 +106,60 @@ def _bearer_token(header: Optional[str]) -> Optional[str]:
     return header[len(_BEARER_PREFIX) :].strip() or None
 
 
-def require_beta_token(request: Request) -> Optional[str]:
-    """FastAPI dependency: reject anything without a live, unexhausted token."""
-    if request.url.path in EXEMPT_PATHS:
+def _denial(path: str, authorization: Optional[str]):
+    """The gate. Returns the response to send back, or None to let through."""
+    if path in EXEMPT_PATHS:
         return None
 
-    token = _bearer_token(request.headers.get("Authorization"))
+    token = _bearer_token(authorization)
     if token is None or token not in beta_tokens():
-        raise HTTPException(
+        return JSONResponse(
+            {"detail": "missing or invalid beta token"},
             status_code=401,
-            detail="missing or invalid beta token",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
     if not _limiter.allow(token):
-        raise HTTPException(status_code=429, detail="beta rate limit exceeded")
+        return JSONResponse({"detail": "beta rate limit exceeded"}, status_code=429)
 
-    return token
+    return None
+
+
+def install(app) -> None:
+    """Require a beta token for everything this app serves.
+
+    Middleware rather than a route dependency, and not as a matter of taste.
+    A mounted sub-application does not inherit FastAPI(dependencies=[...]):
+    measured, the route answers 401 while the mounted file answers 200 and
+    hands over its contents. voice-to-text mounts StaticFiles at "/" with
+    html=True, which catches every unrouted path, so a dependency would leave
+    it open to anyone who finds the hostname.
+
+    The gate returns a response instead of raising HTTPException for a related
+    reason: middleware runs outside the exception handlers, so a raise turns
+    every rejection into a 500.
+
+    Call this BEFORE adding CORSMiddleware. Starlette makes the most recently
+    added middleware the outermost, and CORS has to stay outside the gate so
+    it can answer a browser preflight, which carries no Authorization header
+    and would otherwise be rejected with 401.
+    """
+
+    @app.middleware("http")
+    async def _beta_gate(request, call_next):
+        denial = _denial(request.url.path, request.headers.get("Authorization"))
+        if denial is not None:
+            return denial
+        return await call_next(request)
+
+    # Announced at startup because the failure it guards against is otherwise
+    # silent: with no tokens configured every request is rejected and nothing
+    # says why.
+    tokens = beta_tokens()
+    if tokens:
+        print("[beta_auth] gate active, {} token(s) configured".format(len(tokens)))
+    else:
+        print(
+            "[beta_auth] WARNING: BETA_TOKENS is empty -- every request except "
+            "{} will be rejected with 401".format(sorted(EXEMPT_PATHS))
+        )

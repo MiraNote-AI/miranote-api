@@ -13,6 +13,7 @@ loop" and "runs on a worker thread" observable without generating images.
 from __future__ import annotations
 
 import asyncio
+import os
 import threading
 import time
 import unittest
@@ -67,8 +68,14 @@ class GenerateConcurrencyTests(unittest.IsolatedAsyncioTestCase):
         main._generate_semaphore = None
 
     def _client(self):
+        # The service now requires a beta token on every request except
+        # /health. Rejection behaviour lives in tests/test_beta_auth.py; these
+        # tests are about concurrency, so they authenticate.
+        os.environ["BETA_TOKENS"] = "test-token"
         return httpx.AsyncClient(
-            transport=httpx.ASGITransport(app=main.app), base_url="http://probe"
+            transport=httpx.ASGITransport(app=main.app),
+            base_url="http://probe",
+            headers={"Authorization": "Bearer test-token"},
         )
 
     async def test_generate_does_not_stall_concurrent_health_checks(self):
