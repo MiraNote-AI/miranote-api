@@ -43,7 +43,16 @@ from fastapi.responses import JSONResponse
 load_dotenv(pathlib.Path(__file__).with_name(".env"))
 
 TOKEN_ENV_VAR = "BETA_TOKENS"
-RATE_LIMIT_REQUESTS = 30
+# Shared by every tester, not per person: TestFlight ships one binary, so one
+# token goes to all of them. Ten testers holding a conversation is the load
+# this absorbs, at one request per chat message.
+#
+# Raising it costs little, because it was never what protected the expensive
+# path. /generate is capped at three concurrent by its own semaphore and each
+# takes roughly 30s, so at most about six a minute complete whatever this says.
+# What this limit actually restricts is chat and the text endpoints, which are
+# the cheap ones. It still bounds an extracted token, which is its purpose.
+RATE_LIMIT_REQUESTS = 120
 RATE_LIMIT_WINDOW_SECONDS = 60
 
 # /health is exempt because all four services expose it and
