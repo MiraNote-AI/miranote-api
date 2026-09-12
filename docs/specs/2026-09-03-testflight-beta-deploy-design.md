@@ -3,15 +3,24 @@
 - **Date:** 2026-09-03
 - **Author:** mengjia (Claude-assisted)
 - **Status:** Draft, revised after red-team review
-- **Revision:** v4 (2026-09-04) -- v3 records the measured `/cutout`
-  latency; v4 records the measured `/transcribe` latency and fills the
-  voice timeout row; see section 15.
-- **Scope:** deployment and distribution only. Backend changes in
-  `poc/image-generation/main.py` and `scripts/start_backends.sh`, a new
-  `shared/beta_auth.py`, plus a companion PR in `miranote-ios`
-  (`MiraNoteConfig.swift`, `HTTPClient.swift`, `ImageStudio.swift`,
-  `MiraCanvasCoordinator.swift`, `project.yml`, `App/Info.plist`, and a
-  new asset catalog). No product features change.
+- **Revision:** v5 (2026-09-12) -- corrects four statements the
+  implementation disproved and records what the machine actually looks
+  like; see section 15.
+- **Scope:** hosting and the client changes that talk to it. Backend
+  changes in `poc/image-generation/main.py`, all four POC `main.py`
+  files and `scripts/start_backends.sh`, new `beta_auth.py` and tunnel
+  scripts, plus a companion PR in `miranote-ios` (`MiraNoteConfig.swift`,
+  `HTTPClient.swift`, `ImageStudio.swift`,
+  `MiraCanvasCoordinator.swift`, `App/Info.plist`). No product features
+  change.
+- **Ownership:** TestFlight distribution is **not owned by this team**.
+  Sections 9 and 10, and the build-expiry note in section 11, describe
+  work that now belongs to whoever runs distribution: signing, the App
+  Store Connect record, the app icon, version keys, tester management
+  and re-uploads. They are kept here because the constraints in them
+  were researched and still hold, notably section 3.4 on what an
+  Individual account can and cannot do. Everything else -- hosting, the
+  tunnel, auth, timeouts and error mapping -- is this team's.
 - **Reference:** supersedes the LAN-only beta path documented in
   `miranote-ios/docs/RUN_ON_YOUR_PHONE.md` (from api #37 / ios #40).
   That path requires phone and Mac on the same Wi-Fi and re-signing
@@ -156,8 +165,35 @@ Cloudflare zone directly, skipping a nameserver migration. Recommend a
 `.ai`). The bundle identifier `ai.miranote.app` does not need a matching
 domain; Apple does not verify it.
 
-All beta hosts live under a `beta` second level. `<domain>` below stands
-in for the registered name.
+The registered domain is `miranote.app`.
+
+**Beta hosts are one level deep**: `beta-text`, `beta-image`,
+`beta-chat` and `beta-voice` under `miranote.app`. The natural shape --
+`text.beta.miranote.app` -- does not work, and the reason is a hard one.
+Cloudflare's free Universal SSL signs a certificate covering the apex
+and a single-label wildcard, and nothing else:
+
+```
+$ echo | openssl s_client -connect tlstest.miranote.app:443 ... | openssl x509 -ext subjectAltName
+X509v3 Subject Alternative Name:
+    DNS:miranote.app, DNS:*.miranote.app
+```
+
+`*.miranote.app` does not match `text.beta.miranote.app`, so the edge
+refuses the handshake before any request is made. Measured side by side
+against the same tunnel and zone:
+
+| Hostname | Result |
+| --- | --- |
+| `tlstest.miranote.app` (one label) | HTTP 404, `ssl_verify=0` |
+| `text.beta.miranote.app` (two labels) | HTTP 000, `ssl_verify=1` |
+
+A multi-label wildcard needs the paid Advanced Certificate Manager. The
+flat form is free and costs nothing but a hyphen, and it leaves the
+unprefixed names (`text.miranote.app`) available for production later.
+
+The hostname is compiled into shipped TestFlight builds, so changing it
+after distribution starts costs every tester a new build.
 
 ### 4.2 Tunnel
 
@@ -167,20 +203,41 @@ every restart, which is fatal for a hostname compiled into a shipped
 TestFlight build.
 
 ```yaml
-# ~/.cloudflared/config.yml
-tunnel: miranote-beta
-credentials-file: ~/.cloudflared/<tunnel-id>.json
+# ~/.cloudflared/miranote.yml   (NOT config.yml -- see below)
+tunnel: <tunnel-id>
+credentials-file: /Users/<user>/.cloudflared/<tunnel-id>.json
 ingress:
-  - hostname: text.beta.<domain>
-    service: http://localhost:8001
-  - hostname: image.beta.<domain>
-    service: http://localhost:8002
-  - hostname: chat.beta.<domain>
-    service: http://localhost:8003
-  - hostname: voice.beta.<domain>
-    service: http://localhost:8005
+  - hostname: beta-text.miranote.app
+    service: http://127.0.0.1:8001
+  - hostname: beta-image.miranote.app
+    service: http://127.0.0.1:8002
+  - hostname: beta-chat.miranote.app
+    service: http://127.0.0.1:8003
+  - hostname: beta-voice.miranote.app
+    service: http://127.0.0.1:8005
   - service: http_status:404
 ```
+
+The origin is `127.0.0.1`, not `localhost`. `localhost` also resolves to
+`::1`, and a service bound only to IPv4 answers an IPv6 connection with
+502. The other tunnel on this machine carries the same workaround in its
+own config, having hit it first.
+
+**This machine runs two unrelated tunnels, from two different Cloudflare
+accounts.** DASGPT (`dasgpt.stream`) owns the default
+`~/.cloudflared/config.yml`; MiraNote uses `~/.cloudflared/miranote.yml`.
+Three consequences, all measured:
+
+- Every MiraNote cloudflared command must pass `--config` explicitly.
+  Loading the default config while naming this tunnel fails with
+  `Tunnel not found`; the same command with `--config` succeeds, and so
+  does the default config when the tunnel is named by UUID instead.
+- Management commands select the account with `--origincert` /
+  `TUNNEL_ORIGIN_CERT`, pointing at that account's saved certificate.
+  Swapping `cert.pem` by hand, which is what was happening before, is
+  unnecessary and is what made the state confusing.
+- Running a tunnel needs no certificate at all, only the credentials
+  file, so the two tunnels run side by side without interfering.
 
 Hostname-per-service is chosen over a single host with path prefixes
 because it keeps every existing route (`/chat`, `/generate`,
@@ -189,8 +246,9 @@ editing URL construction in all four iOS service classes and adding
 either a FastAPI `root_path` or a tunnel-side rewrite -- an extra
 mapping layer with nothing to show for it.
 
-Four CNAMEs are created by `cloudflared tunnel route dns`. TLS
-terminates at Cloudflare; no certificate is handled on the Mac.
+Four CNAMEs are created by `cloudflared tunnel route dns`, and they must
+stay proxied. TLS terminates at Cloudflare; no certificate is handled on
+the Mac.
 
 The credentials file (`~/.cloudflared/<tunnel-id>.json`) is the only
 recoverable state of the tunnel: if it is lost, the tunnel must be
@@ -202,9 +260,13 @@ password manager when the tunnel is created.
 The tunnel and the backends are managed separately and must not be
 coupled:
 
-- **Tunnel:** installed as a launchd service (`cloudflared service
-  install`) so it survives reboot and restarts on crash. Testers open
-  the app at unpredictable times.
+- **Tunnel:** started by `scripts/start_tunnel.sh`, which also holds a
+  `caffeinate` tied to the tunnel process. Testers open the app at
+  unpredictable times, so it must also survive reboot -- but
+  `cloudflared service install` cannot provide that here. It installs a
+  single machine-wide service wrapped around the default config, which
+  belongs to the other tunnel. A per-tunnel launchd plist is required
+  instead, and is still outstanding.
 - **Backends:** stay on the existing manual `scripts/start_backends.sh`.
 
 The consequence is a specific, expected failure mode: tunnel up but
@@ -217,21 +279,55 @@ is up.
 
 ## 5. Backend auth layer
 
-New `shared/beta_auth.py` at the repository root: a FastAPI dependency
-that validates `Authorization: Bearer <token>` against `BETA_TOKENS`,
-read from the environment with the `load_dotenv()` pattern the POCs
-already use.
+New `beta_auth.py` at the repository root, validating
+`Authorization: Bearer <token>` against `BETA_TOKENS`.
+
+**Not `shared/beta_auth.py`.** `poc/image-generation` already owns a
+local package named `shared`, and a POC's working directory sorts ahead
+of `PYTHONPATH` on `sys.path`, so from that service `import shared`
+resolves to its own package and `shared.beta_auth` raises
+`ModuleNotFoundError`. Image generation is exactly one of the four
+services that needs the gate, and the only one where the original plan
+would have failed.
+
+**Installed as middleware, not as a FastAPI dependency.** A mounted
+sub-application does not inherit `FastAPI(dependencies=[...])`:
+measured, a route answers 401 while a mounted file answers 200 and
+serves its contents. `voice-to-text` mounts `StaticFiles` at `/` with
+`html=True`, which catches every path no route matched, and
+`text-clean-expand` mounts at `/static`. A dependency would have left
+both served publicly.
+
+Two mechanics follow from that choice and are easy to get wrong:
+
+- The gate returns a response rather than raising `HTTPException`.
+  Middleware runs outside the exception handlers, so a raise produces
+  500 instead of the intended status.
+- `install(app)` runs **before** `CORSMiddleware` is added. Starlette
+  makes the most recently added middleware outermost, and a browser
+  preflight carries no `Authorization` header, so a gate outside CORS
+  rejects every preflight with 401.
+
+`BETA_TOKENS` is read from a repository-root `.env` loaded by absolute
+path. A bare `load_dotenv()` from a POC working directory does not reach
+the repository root -- measured -- so the alternative was copying the
+shared token into all four POC `.env` files.
 
 `BETA_TOKENS` is **comma-separated and accepts several valid tokens at
 once**. Rotation is otherwise all-or-nothing: every tester is cut off
 the instant the token changes. With a list, a new token is added first,
 builds go out, and the old one is removed afterwards.
 
-The four POCs have independent virtualenvs and no shared package. They
-are given access to `shared/` by exporting `PYTHONPATH="$API_ROOT"` in
+The four POCs have independent virtualenvs and no package in common.
+They reach `beta_auth` through `PYTHONPATH="$API_ROOT"` exported in
 `scripts/start_backends.sh`, leaving `--app-dir` at its default so both
 the working directory and the repository root stay on `sys.path`
 (section 3.5).
+
+With no token configured nothing is accepted, and `install()` says so at
+startup. Fail-open is not an option once the tunnel is public, and a
+service that rejects everything with nothing in the log to explain it is
+the worse of the two silent failures.
 
 `/health` is explicitly exempt from auth. All four services expose it
 and `start_backends.sh` polls it for readiness; requiring a token there
@@ -310,9 +406,20 @@ error message invites one manual retry instead.
 `MiraNoteConfig.Backend` (`MiraNoteConfig.swift:14-41`, device host at `:22`) is the single
 source of every service URL, as its own comment states. The device
 branch changes from the Bonjour host `Mengs-MacBook-Pro-2099.local` to
-the HTTPS subdomains; `base(port:)` becomes `base(subdomain:)`. The
-simulator branch keeps `http://localhost:<port>`. No caller changes,
-because no path changes.
+the HTTPS hosts; `base(port:)` becomes `base(host:)`. The simulator
+branch keeps `http://localhost:<port>`. No caller changes, because no
+path changes.
+
+| Service | Device | Simulator |
+| --- | --- | --- |
+| text | `https://beta-text.miranote.app` | `http://localhost:8001` |
+| image | `https://beta-image.miranote.app` | `http://localhost:8002` |
+| chat | `https://beta-chat.miranote.app` | `http://localhost:8003` |
+| voice | `https://beta-voice.miranote.app` | `http://localhost:8005` |
+
+The simulator path needs the token too: `HTTPClient.send` injects the
+header on every request, and the backends now require it on loopback as
+well.
 
 ### 8.2 Auth header
 
@@ -326,16 +433,23 @@ that carries it is committed (the file is untracked/gitignored).
 
 ### 8.3 Error mapping
 
-Four failure modes are now distinguishable and each needs its own
+Six failure modes are now distinguishable and each needs its own
 message. Without this, ten non-technical testers report every one of
 them as "the app is broken" and triage is guesswork.
 
 | Condition | Meaning | Remedy |
 | --- | --- | --- |
 | 502 | Tunnel up, backends not running | Run `start_backends.sh` on the Mac |
-| 530 (Cloudflare 1033) | `cloudflared` is down, or the Mac is asleep | Restart the tunnel service; check the Mac is awake and plugged in |
-| 401 | Token rotated; build carries the old one | Ship a new TestFlight build |
-| `.timedOut` | Image work exceeded the budget | Retry |
+| 530 (Cloudflare 1033) | `cloudflared` is down, or the Mac is asleep | Restart the tunnel; check the Mac is awake and plugged in |
+| 401 | No token, or the build carries a rotated one | Ship a build with the current token |
+| 429 | This build's token is over its per-minute budget | Wait a minute; it clears on its own |
+| 503 | The image provider is out of quota | Wait and try again; not the app's fault and not fixable from the phone |
+| `.timedOut` | Image work exceeded the budget | Retry once, manually |
+
+429 and 503 are easy to confuse and have different causes: 429 is our
+own rate limit, counted per token, and 503 is the upstream image
+provider refusing us. The remedy is the same, but the second is not
+something rotating a token or restarting anything will fix.
 
 `BackendError` already models `.server(status:detail:)` and `.timedOut`;
 this is a change to `errorDescription`, not to the error type.
@@ -352,6 +466,13 @@ plain HTTP against loopback. Device traffic is now HTTPS, so:
   not re-asked on every upload.
 
 ## 9. Signing and App Store Connect
+
+> **Not owned by this team.** Distribution moved elsewhere. This section
+> is kept because the constraints in it were researched and still hold --
+> section 3.4 in particular, on why adding an App Store Connect user does
+> not grant the ability to build and upload. Hand it to whoever runs
+> distribution rather than treating it as a task list here.
+
 
 - `project.yml:15` `DEVELOPMENT_TEAM` changes from `FBY8RBCZ9M`
   (Mengjia's free personal team) to the shared account's Team ID.
@@ -377,6 +498,11 @@ plain HTTP against loopback. Device traffic is now HTTPS, so:
   the setup at this stage.
 
 ## 10. App icon and versioning
+
+> **Not owned by this team.** Both items exist only to satisfy an App
+> Store Connect upload: a 1024x1024 icon is a hard blocker for uploading,
+> and TestFlight requires a strictly increasing build number.
+
 
 The project has no asset catalog at all -- `App/Resources` contains only
 fonts. App Store Connect rejects uploads without a 1024x1024 icon, so
@@ -424,8 +550,13 @@ setup.
 
 **Internal builds expire after 90 days.** TestFlight refuses to launch
 an expired build, so re-upload at least every ~60 days (a calendar
-reminder, not CI). The kill switch for abuse is `stop_tunnel.sh` plus
-deleting the active token: both cut access instantly.
+reminder, not CI). That re-upload belongs to whoever owns distribution,
+not to this team.
+
+The kill switch for abuse stays here and is ours: `stop_tunnel.sh` plus
+removing the active token from `BETA_TOKENS`. Either cuts access
+instantly, and the token list being plural means one tester's build can
+be cut off without cutting off the rest.
 
 ## 12. Testing strategy
 
@@ -437,11 +568,24 @@ deleting the active token: both cut access instantly.
 - iOS: the existing `URLProtocol` stub used by `HTTPClient` tests gains
   an assertion that `Authorization` is set on requests built by all
   three paths (`postJSON`, and the two multipart builders).
-- End to end: `curl https://<service>.beta.<domain>/health` for all
-  four hosts.
+- End to end: `curl https://beta-<service>.miranote.app/health` for all
+  four hosts, plus one authenticated and one unauthenticated call to a
+  real route on each, and one call to a mounted path on the two
+  services that mount a UI.
 - Backend (load): ten concurrent sticker `/generate` requests, p95
   latency < 110s and no request over 125s. This is the test that proves
-  the section 6 semaphore; run it before and after the fix.
+  the section 6 semaphore.
+
+  **Run 2026-09-11 and it did not produce that proof.** Three requests
+  succeeded and seven were rejected by the image provider with
+  `429 RESOURCE_EXHAUSTED`, so there is no p95 over ten completed
+  generations. What the run did establish is that the cap is not the
+  binding constraint at this scale: provider quota is reached first, the
+  three that completed took 33.9s, 34.2s and 49.4s against a 110s
+  budget, and `/health` answered 65 of 65 probes with a worst case of
+  25ms throughout. The semaphore value of 3 remains unvalidated and must
+  be re-measured once quota is resolved (api #53). That run is also what
+  produced the 503 mapping in section 8.3.
 - Backend (rate limit): requests beyond the per-token limit yield 429,
   and the window counts correctly across a burst.
 
@@ -513,27 +657,33 @@ decodes are cheap next to the correction call.
 
 ## 14. Implementation order
 
-1. Measure `/cutout` latency locally -- done 2026-09-04 (section 13.1):
+1. Measure `/cutout` latency -- **done** 2026-09-04 (section 13.1):
    worst observed 36.8s, well inside the 110s budget.
-2. Measure `/transcribe` latency -- done 2026-09-04 (section 13.3):
+2. Measure `/transcribe` latency -- **done** 2026-09-04 (section 13.3):
    worst observed 84.3s; the voice row in section 7 is filled in.
-3. Fix the `asyncio.to_thread` omission, add the `/generate` semaphore,
-   and add the concurrency regression and load tests (sections 6, 12).
-4. Add `shared/beta_auth.py` with rate limiting, wire `PYTHONPATH`,
-   exempt `/health`, add tests (sections 5, 12).
-5. Register the domain; create and route the named tunnel; install it as
-   a service; back up the credentials file (section 4).
+3. Fix the `asyncio.to_thread` omission, add the `/generate` semaphore
+   and the concurrency tests -- **done** (api #51).
+4. Add `beta_auth` with rate limiting, wire `PYTHONPATH`, exempt
+   `/health` -- **done** (api #52), and install it on all four services
+   while switching the bind to loopback -- **done** (api #58).
+5. Register the domain, create and route the named tunnel, script its
+   lifecycle -- **done** (api #56). The four hostnames resolve, TLS
+   terminates, and an unauthenticated request is refused. **Outstanding:
+   a per-tunnel launchd plist**, without which a reboot takes the beta
+   down until someone runs the script by hand (section 4.3).
 6. iOS: endpoint config, auth header, timeout budget, no auto-retry,
-   error messages, ATS cleanup (sections 7-8).
-7. Generate the placeholder icon; switch the version keys to build
-   settings (section 10).
-8. Arrange signing access; create the App Store Connect record; upload
-   the first build (section 9).
-9. Add internal testers, configure uptime monitoring, and distribute
-   (sections 11-12).
+   error messages, ATS cleanup (sections 7-8). **Next.**
+7. Placeholder icon and version keys -- **not owned by this team**
+   (section 10).
+8. Signing, App Store Connect record, first upload -- **not owned by
+   this team** (section 9).
+9. Internal testers and distribution -- **not owned by this team**.
+   Uptime monitoring of the four `/health` endpoints stays with us
+   (section 11).
 
-Steps 3 and 4 are backend-only and mergeable before any of the
-distribution work begins.
+Unplanned but done along the way: quota rejections from the image
+provider now map to 503 rather than a bare 500 (api #54, section 8.3),
+found by running the section 12 load test.
 
 ## 15. Revision history
 
@@ -551,3 +701,25 @@ distribution work begins.
 - v4 (2026-09-04): measured `/transcribe` latency (section 13.3) and
   filled the voice timeout row in section 7 (110s). Implementation
   step 2 marked done; both measurement tasks are closed.
+- v5 (2026-09-12): corrects four statements the implementation
+  disproved, each forced by a measurement rather than a preference.
+  Beta hostnames are one label deep (`beta-text.miranote.app`) because
+  free Universal SSL does not cover a second label and the two-level
+  form fails the TLS handshake outright (section 4.1). The auth module
+  is a top-level `beta_auth`, not `shared/beta_auth`, because
+  `poc/image-generation` owns a local package named `shared` that
+  shadows the repository root from its own working directory -- and it
+  is one of the four services that needs the gate (section 5). The gate
+  is middleware rather than a route dependency, because a dependency
+  does not reach mounted sub-applications and `voice-to-text` mounts at
+  `/` (section 5). Tunnel ingress points at `127.0.0.1`, not
+  `localhost`, which also resolves to `::1` (section 4.2).
+
+  Added: this machine runs two tunnels from two Cloudflare accounts,
+  which makes `--config` mandatory and `cloudflared service install`
+  unusable (sections 4.2-4.3); 429 and 503 rows in the error mapping
+  table (section 8.3); the concrete endpoint table for the iOS work
+  (section 8.1). Marked sections 9 and 10 and the build-expiry note as
+  owned outside this team; the kill switch stays here. Implementation
+  steps 3, 4 and most of 5 are done; a per-tunnel launchd plist is the
+  one piece of step 5 still outstanding.
