@@ -9,6 +9,7 @@ distinguishable, it does not latch, and it does not retry.
 from __future__ import annotations
 
 import asyncio
+import os
 import unittest
 from unittest import mock
 
@@ -18,6 +19,11 @@ from fastapi import HTTPException
 import config
 import main
 from tests.test_fallback import MODEL_GATED, RATE_LIMITED
+
+# The service requires a beta token on every request except /health. These
+# tests are about quota handling, so they authenticate and leave the gate's
+# own behaviour to tests/test_beta_auth.py and tests/test_beta_gate.py.
+os.environ["BETA_TOKENS"] = "test-token"
 
 
 class QuotaExhaustionTests(unittest.TestCase):
@@ -123,7 +129,9 @@ class QuotaOverTheWireTests(unittest.IsolatedAsyncioTestCase):
 
         with mock.patch.object(main, "_get_client", return_value=stub):
             async with httpx.AsyncClient(
-                transport=httpx.ASGITransport(app=main.app), base_url="http://probe"
+                transport=httpx.ASGITransport(app=main.app),
+                base_url="http://probe",
+                headers={"Authorization": "Bearer test-token"},
             ) as client:
                 response = await client.post(
                     "/generate",
@@ -153,7 +161,9 @@ class QuotaOverTheWireTests(unittest.IsolatedAsyncioTestCase):
 
         with mock.patch.object(main, "_get_client", return_value=stub):
             async with httpx.AsyncClient(
-                transport=httpx.ASGITransport(app=main.app), base_url="http://probe"
+                transport=httpx.ASGITransport(app=main.app),
+                base_url="http://probe",
+                headers={"Authorization": "Bearer test-token"},
             ) as client:
                 for attempt in range(attempts):
                     try:
