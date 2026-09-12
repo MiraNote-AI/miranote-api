@@ -15,6 +15,17 @@ def is_model_unavailable(error: Exception) -> bool:
     return "NOT_FOUND" in text or "404" in text
 
 
+def is_rate_limited(error: Exception) -> bool:
+    """Vertex signals an exhausted quota with a 429.
+
+    Kept separate from is_model_unavailable because the two need opposite
+    handling: a gated model is permanent for the process, a throttled one
+    recovers on its own.
+    """
+    text = str(error)
+    return "RESOURCE_EXHAUSTED" in text or "429" in text
+
+
 def build_prompt(prompt: str, aspect_ratio: str) -> str:
     return (
         f"Generate one image. {prompt}\n"
