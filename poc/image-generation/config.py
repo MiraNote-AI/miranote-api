@@ -6,8 +6,13 @@
 # --------------------------------------------------------------------------- #
 # Shared across pipelines
 # --------------------------------------------------------------------------- #
-MODEL_ID = "imagen-4.0-generate-001"   # Imagen 4: /generate output
-FALLBACK_IMAGE_MODEL = "gemini-2.5-flash-image"  # /generate fallback when Imagen is project-gated
+# /generate output. Imagen 4 sat here until 2026-09-14 and never once served a
+# request: it is enabled per project on Vertex and was enabled on neither the
+# personal project nor the team one, so every process paid a 404 on its first
+# request and silently downgraded to this model anyway. Same model as
+# STYLE_MODEL and BORDER_MODEL, so /generate, /stylize and /border now share
+# one quota rather than two.
+MODEL_ID = "gemini-2.5-flash-image"
 PROMPT_EXPANDER_MODEL = "gemini-2.5-flash"  # prompt expansion: /generate + /describe
 
 # /describe default: one sentence about a photo, for the app's page
