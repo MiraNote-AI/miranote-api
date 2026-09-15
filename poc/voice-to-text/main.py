@@ -98,10 +98,65 @@ def drop_no_speech_segments(result: Dict[str, Any]) -> Dict[str, Any]:
 
 llm = OpenAI(api_key=LLM_API_KEY, base_url=LLM_BASE_URL) if LLM_API_KEY else None
 
+# What the startup probe found. Reported by /health so a misconfigured provider
+# is visible without reading the log -- the failure mode that hid #73 for weeks
+# was that a rejected key looked exactly like a working one from outside.
+LLM_UNCONFIGURED = "unconfigured"   # no LLM_API_KEY; correction deliberately off
+LLM_OK = "ok"                       # the provider answered
+LLM_UNREACHABLE = "unreachable"     # configured, and it did not
+_llm_status = LLM_UNCONFIGURED
+
+
+def _redact(text: str) -> str:
+    """Never let the key out, whatever the provider echoed back at us."""
+    if LLM_API_KEY:
+        text = text.replace(LLM_API_KEY, "<LLM_API_KEY>")
+    return text
+
+
+def _check_llm() -> None:
+    """Ask the provider one cheap question so a misconfiguration surfaces now.
+
+    A real round-trip rather than a key-shape check: the shapes are only a
+    heuristic, and what matters is whether this key works against this base URL
+    for this model -- the exact triple that was wrong in #73.
+
+    Never raises. A broken corrector is a degraded service, not a dead one:
+    raw Whisper output is still worth serving, so this reports and returns.
+    """
+    global _llm_status
+    if llm is None:
+        _llm_status = LLM_UNCONFIGURED
+        print("[voice] LLM correction is off: no LLM_API_KEY set. "
+              "/transcribe will return raw Whisper output.")
+        return
+    try:
+        llm.chat.completions.create(
+            model=LLM_MODEL,
+            messages=[{"role": "user", "content": "ping"}],
+            max_tokens=1,
+        )
+    except Exception as error:
+        _llm_status = LLM_UNREACHABLE
+        print("[voice] LLM CORRECTION IS NOT WORKING. Every transcript will be "
+              "raw Whisper output, and /transcribe will still answer 200.")
+        print(f"[voice]   model={LLM_MODEL} base_url={LLM_BASE_URL}")
+        print(f"[voice]   provider said: {_redact(str(error))[:300]}")
+        print("[voice]   LLM_API_KEY, LLM_BASE_URL and LLM_MODEL must all "
+              "belong to the same provider.")
+        return
+    _llm_status = LLM_OK
+    print(f"[voice] LLM correction ready: {LLM_MODEL} at {LLM_BASE_URL}")
+
 def _preload_models() -> None:
-    """Load Whisper and the emotion classifier. Blocking, called from startup."""
+    """Load Whisper and the emotion classifier, and probe the corrector.
+
+    Blocking, called from startup. The LLM probe goes last so a slow or dead
+    provider cannot delay the models the endpoint actually needs.
+    """
     get_whisper_model()
     emotion.preload()
+    _check_llm()
 
 
 @asynccontextmanager
@@ -320,6 +375,7 @@ async def health():
         "status": "ok",
         "whisper_model": WHISPER_MODEL,
         "llm_model": LLM_MODEL if llm else None,
+        "llm": _llm_status,
     }
 
 

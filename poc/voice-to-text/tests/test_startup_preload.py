@@ -27,8 +27,17 @@ def loaded_main(monkeypatch):
 
     calls = {"whisper": 0, "emotion": 0}
 
+    import dotenv
     import whisper
     import emotion as emotion_module
+
+    # Startup probes the correction provider (see test_llm_startup_check.py).
+    # Without these two lines this fixture reaches the real provider over the
+    # network once per test: load_dotenv() restores whatever key the developer
+    # has configured, and _check_llm() then spends it. These tests are about
+    # model preloading and must not depend on a network or a third party.
+    monkeypatch.setattr(dotenv, "load_dotenv", lambda *a, **k: False)
+    os.environ.pop("LLM_API_KEY", None)
 
     # emotion caches its pipeline in a module global that outlives a re-import
     # of main.py, so without this the second test in the file sees a warm cache
