@@ -64,6 +64,12 @@ QUOTA_DETAIL = "image generation is busy right now; wait a moment and try again"
 REFUSED_DETAIL = "the image model would not draw that one; try describing it differently"
 EMPTY_DETAIL = "no picture came back that time; try again"
 
+# One extra attempt when the model answers with nothing and did not refuse.
+# Not a general retry policy: quota rejections are never retried (section 7 of
+# the deploy spec, and a 429 means the budget is already gone), and refusals are
+# not retried because the second answer is the first one again.
+EMPTY_RESPONSE_RETRIES = 1
+
 
 def _quota_exhausted(model: str, error: Exception) -> HTTPException:
     print(f"[generate] quota exhausted on {model}: {str(error)[:120]}")
@@ -75,17 +81,29 @@ def _call_model(prompt: str, aspect_ratio: str) -> list[bytes]:
 
     def _one() -> tuple[bytes | None, bool]:
         """(image, refused). Refused is carried alongside because an empty
-        answer is only a failure once every call has come back empty."""
-        response = client.models.generate_content(
-            model=config.MODEL_ID,
-            contents=fallback.build_prompt(prompt, aspect_ratio),
-        )
-        parts = fallback.image_parts(response)
-        if parts:
-            return parts[0], False
-        print(f"[generate] empty response from {config.MODEL_ID}: "
-              f"{fallback.empty_reason(response)}")
-        return None, fallback.is_safety_refusal(response)
+        answer is only a failure once every call has come back empty.
+
+        A blank gets one more attempt; a refusal gets none. Vertex allows two
+        image calls a minute per model, so the second call is expensive enough
+        that it is only worth spending where it can succeed: NO_IMAGE and the
+        other ordinary endings can produce a picture on a second try, while a
+        refusal buys another refusal (#78). Bounded at one extra attempt --
+        NUMBER_OF_IMAGES = 1 left a single blank with nothing to hide behind,
+        and the point is to cover that, not to grind against the quota.
+        """
+        for attempt in range(1 + EMPTY_RESPONSE_RETRIES):
+            response = client.models.generate_content(
+                model=config.MODEL_ID,
+                contents=fallback.build_prompt(prompt, aspect_ratio),
+            )
+            parts = fallback.image_parts(response)
+            if parts:
+                return parts[0], False
+            print(f"[generate] empty response from {config.MODEL_ID} "
+                  f"(attempt {attempt + 1}): {fallback.empty_reason(response)}")
+            if fallback.is_safety_refusal(response):
+                return None, True
+        return None, False
 
     # The images are independent; generate them concurrently so the whole
     # request stays comfortably inside client timeouts.
