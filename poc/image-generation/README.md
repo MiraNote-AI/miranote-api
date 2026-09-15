@@ -17,8 +17,9 @@ It exposes four image pipelines behind one app:
 ## Prerequisites
 
 - **Python 3.13**
-- A **Google Cloud project** with the **Vertex AI API** enabled, and access to
-  Imagen 4 and Gemini image models in your region (default `us-central1`).
+- A **Google Cloud project** with the **Vertex AI API** enabled and access to
+  the Gemini image models. `/generate` runs on `gemini-3.1-flash-lite-image`,
+  which is served only from the `global` endpoint.
 - **Application Default Credentials (ADC)** configured locally:
   ```bash
   gcloud auth application-default login
@@ -41,7 +42,7 @@ cp .env.example .env      # then edit .env
 
 ```
 PROJECT_ID=your-gcp-project-id
-LOCATION=us-central1
+LOCATION=global
 ```
 
 > `.env` is git-ignored — never commit your real project id.

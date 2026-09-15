@@ -1,9 +1,9 @@
-"""Nano Banana fallback for /generate.
+"""Prompt building and error classification for /generate.
 
-Imagen access is gated per GCP project; when Vertex answers 404 for the
-configured Imagen model, /generate falls back to a Gemini image model
-(``gemini-2.5-flash-image``) via ``generate_content``. This module keeps
-the fallback's pure parts import-light so they are unit-testable without
+Named for the Nano Banana fallback it used to implement: /generate once
+led with Imagen and dropped to a Gemini image model on a 404. There is no
+fallback any more -- ``config.MODEL_ID`` is called directly -- but the pure
+helpers kept here are still what lets the call path be unit-tested without
 torch or a live client.
 """
 from __future__ import annotations
