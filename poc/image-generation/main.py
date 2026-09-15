@@ -51,6 +51,13 @@ def _generate_gate():
 # users who retry wedge the queue, and section 7 of the deploy spec rules out
 # automatic retries on a saturated host.
 QUOTA_DETAIL = "image generation is busy right now; wait a moment and try again"
+# The two ways a response can carry no image. Kept apart because the advice
+# differs: a refusal will not succeed on a retry of the same prompt, an empty
+# answer usually will. Neither repeats the provider's own words --
+# "PROHIBITED_CONTENT" tells a tester nothing. The reason goes to the log,
+# where it is useful.
+REFUSED_DETAIL = "the image model would not draw that one; try describing it differently"
+EMPTY_DETAIL = "no picture came back that time; try again"
 
 
 def _quota_exhausted(model: str, error: Exception) -> HTTPException:
@@ -61,13 +68,19 @@ def _quota_exhausted(model: str, error: Exception) -> HTTPException:
 def _call_model(prompt: str, aspect_ratio: str) -> list[bytes]:
     client = _get_client()
 
-    def _one() -> bytes | None:
+    def _one() -> tuple[bytes | None, bool]:
+        """(image, refused). Refused is carried alongside because an empty
+        answer is only a failure once every call has come back empty."""
         response = client.models.generate_content(
             model=config.MODEL_ID,
             contents=fallback.build_prompt(prompt, aspect_ratio),
         )
         parts = fallback.image_parts(response)
-        return parts[0] if parts else None
+        if parts:
+            return parts[0], False
+        print(f"[generate] empty response from {config.MODEL_ID}: "
+              f"{fallback.empty_reason(response)}")
+        return None, fallback.is_safety_refusal(response)
 
     # The images are independent; generate them concurrently so the whole
     # request stays comfortably inside client timeouts.
@@ -78,9 +91,11 @@ def _call_model(prompt: str, aspect_ratio: str) -> list[bytes]:
         if fallback.is_rate_limited(error):
             raise _quota_exhausted(config.MODEL_ID, error)
         raise
-    images = [image for image in results if image]
+    images = [image for image, _ in results if image]
     if not images:
-        raise HTTPException(status_code=502, detail="image generation returned no image")
+        if any(refused for _, refused in results):
+            raise HTTPException(status_code=502, detail=REFUSED_DETAIL)
+        raise HTTPException(status_code=502, detail=EMPTY_DETAIL)
     return images
 
 
