@@ -6,6 +6,7 @@ Whisper transcription + optional LLM correction (any OpenAI-compatible provider)
 import os
 import tempfile
 import asyncio
+from contextlib import asynccontextmanager
 from threading import Lock
 from typing import Any, Dict, Literal, Optional, Tuple
 
@@ -17,6 +18,7 @@ from dotenv import load_dotenv
 
 import beta_auth
 from openai import OpenAI
+import emotion
 from emotion import analyze_emotion
 
 load_dotenv()
@@ -96,7 +98,29 @@ def drop_no_speech_segments(result: Dict[str, Any]) -> Dict[str, Any]:
 
 llm = OpenAI(api_key=LLM_API_KEY, base_url=LLM_BASE_URL) if LLM_API_KEY else None
 
-app = FastAPI(title="MiraNote Voice-to-Text", version="0.1.0")
+def _preload_models() -> None:
+    """Load Whisper and the emotion classifier. Blocking, called from startup."""
+    get_whisper_model()
+    emotion.preload()
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Pay for the model weights before the service accepts any traffic.
+
+    Measured 2026-09-15 through the tunnel: with both loaded inside the first
+    request, that request took 63.4s for a 10s clip while every later one took
+    6.6s. The app gives up at 110s, so a cold call carrying a longer recording
+    could exceed it -- and /health answered "ok" throughout the minute the
+    service could not yet serve. Loading here makes healthy mean ready.
+
+    start_backends.sh already allows 300s per service for exactly this.
+    """
+    await asyncio.to_thread(_preload_models)
+    yield
+
+
+app = FastAPI(title="MiraNote Voice-to-Text", version="0.1.0", lifespan=lifespan)
 
 # Reachable from the public internet through the Cloudflare tunnel, so every
 # request needs a beta token. Installed before CORSMiddleware on purpose: the

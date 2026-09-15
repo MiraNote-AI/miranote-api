@@ -7,7 +7,8 @@ Default model: hughlan1214/Speech_Emotion_Recognition_wav2vec2-large-xlsr-53_240
 - Cross-lingual claim (Chinese, French) is empirical from the model author,
   not a benchmark; treat confidence as advisory on non-English audio.
 
-Model lazily loads on first analyze_emotion() call. ~1.3 GB download to
+The service calls preload() at startup; the lazy path in _get_pipeline()
+remains for direct users of this module. ~1.3 GB download to
 ~/.cache/huggingface/ on first use. Subsequent calls reuse the cached
 in-memory pipeline.
 """
@@ -27,14 +28,30 @@ _MODEL = os.getenv(
 )
 
 
+def _build_pipeline():
+    """Construct the pipeline. Separated from the cache so startup preloading
+    and the lazy path share one construction site, and so tests can count
+    loads without downloading 1.3 GB of weights."""
+    return transformers.pipeline("audio-classification", model=_MODEL)
+
+
 def _get_pipeline():
     """Lazy-load and cache the HuggingFace audio-classification pipeline."""
     global _PIPELINE
     if _PIPELINE is None:
         with _LOCK:
             if _PIPELINE is None:
-                _PIPELINE = transformers.pipeline("audio-classification", model=_MODEL)
+                _PIPELINE = _build_pipeline()
     return _PIPELINE
+
+
+def preload() -> None:
+    """Load the classifier now rather than inside the first request.
+
+    Idempotent: it goes through the same cache as analyze_emotion, so calling
+    it at startup means the lazy path is already satisfied afterwards.
+    """
+    _get_pipeline()
 
 
 def analyze_emotion(audio_path: str) -> Dict[str, Any]:
