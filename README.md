@@ -53,13 +53,13 @@ Two kinds of dependencies:
 
    ```bash
    gcloud auth application-default login   # once per machine
-   # .env: PROJECT_ID=<your-gcp-project>, LOCATION=us-central1
+   # .env: PROJECT_ID=<your-gcp-project>, LOCATION=global
    ```
 
-   If the project has no Imagen access (Vertex answers 404 for every
-   `imagen-*` model -- true for `oxeai-dev`), `/generate` automatically
-   falls back to `gemini-2.5-flash-image` (Nano Banana). Nothing to
-   configure; the server logs the switch once.
+   `/generate` calls `gemini-3.1-flash-lite-image` directly -- there is no
+   fallback chain any more. That model is served only from the `global`
+   endpoint, so `LOCATION` must be `global`; a regional value makes Vertex
+   answer 404 for it.
 
 2. **Local models (downloaded automatically)** -- background removal
    and cutout run on-device. On FIRST startup the service downloads,

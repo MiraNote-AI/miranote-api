@@ -6,13 +6,22 @@
 # --------------------------------------------------------------------------- #
 # Shared across pipelines
 # --------------------------------------------------------------------------- #
-# /generate output. Imagen 4 sat here until 2026-09-14 and never once served a
-# request: it is enabled per project on Vertex and was enabled on neither the
-# personal project nor the team one, so every process paid a 404 on its first
-# request and silently downgraded to this model anyway. Same model as
-# STYLE_MODEL and BORDER_MODEL, so /generate, /stylize and /border now share
-# one quota rather than two.
-MODEL_ID = "gemini-2.5-flash-image"
+# /generate output. Two predecessors sat here: Imagen 4 until 2026-09-14, which
+# is enabled per project on Vertex and was enabled on none of ours, so every
+# process paid a 404 on its first request; then gemini-2.5-flash-image until
+# 2026-09-15, which answered but ignored the aspect ratio in the prompt and
+# returned 1024x1024 for every command, making each "background" a square.
+# This model honors it (9:16 measured as 768x1376) and returns a ~90 KB JPEG
+# rather than a ~900 KB PNG, which is most of the wall clock on a phone.
+#
+# It answers only on the global endpoint: us-central1 returns 404 NOT_FOUND for
+# it, so LOCATION must be "global" (see .env.example). Every other model named
+# in this file was verified to answer there too.
+#
+# Deliberately NOT the same id as STYLE_MODEL / BORDER_MODEL. Vertex meters
+# image generation as 1/min/{project}/{base_model}, so keeping /generate on its
+# own model gives it a quota bucket that /stylize and /border cannot drain.
+MODEL_ID = "gemini-3.1-flash-lite-image"
 PROMPT_EXPANDER_MODEL = "gemini-2.5-flash"  # prompt expansion: /generate + /describe
 
 # /describe default: one sentence about a photo, for the app's page
