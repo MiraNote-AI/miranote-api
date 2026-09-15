@@ -28,7 +28,12 @@ from border import border, border_presets
 
 
 # Concurrent sticker generations are capped so ten testers cannot queue enough
-# CPU work to push a single request past Cloudflare's 125s edge timeout.
+# CPU work to push a single request past Cloudflare's 125s edge timeout. That is
+# the only thing this bounds. It is NOT a quota control and cannot be one: the
+# Vertex image limit is a rate (2/min/{project}/{base_model}) while a semaphore
+# bounds simultaneity, so any value here still permits far more than 2 calls in
+# a minute. What keeps /generate inside the quota is NUMBER_OF_IMAGES = 1, which
+# makes one request cost one call instead of two at once (api #69).
 GENERATE_CONCURRENCY = 3
 _generate_semaphore = None
 

@@ -49,7 +49,15 @@ REMBG_ERODE_RADIUS = 0  # pixels to erode alpha edge inward; 0 to disable. /gene
 # --------------------------------------------------------------------------- #
 # /generate  (sticker & background image generation)
 # --------------------------------------------------------------------------- #
-NUMBER_OF_IMAGES = 2
+# One image per request, not two. Vertex meters image generation at
+# 1/min/{project}/{base_model} with an effective limit of 2 (api #69), and the
+# two calls were dispatched concurrently, so a single /generate needed the whole
+# minute's budget banked at the same instant and failed outright against a
+# partially refilled bucket -- measured as five consecutive 503s at 45s spacing
+# with no other traffic, while a lone call succeeded in 3.6s immediately after.
+# The app's picker renders whatever count comes back, so this turns "pick one of
+# two" into "keep it or discard it" rather than breaking anything.
+NUMBER_OF_IMAGES = 1
 ASPECT_RATIOS = {
     "sticker":    "1:1",
     "background": "9:16",
