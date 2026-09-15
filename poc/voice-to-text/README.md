@@ -66,7 +66,14 @@ Three env vars control the LLM:
 ### Provider examples
 
 Any provider that speaks the OpenAI chat-completions protocol works.
-Copy-paste one of the following into your `.env`:
+Copy-paste one of the following into your `.env`.
+
+All three values belong to one provider and must be changed together. A key
+from one provider against another's base URL is rejected, and the rejection is
+invisible from the outside: `/transcribe` still answers 200, with
+`correction_status: "failed"` and `corrected_text: null`. The beta ran that way
+until 2026-09-15 (issue #73). Confirm a change with one real request and check
+`correction_status` before trusting it.
 
 **Gemini (default)**
 ```bash
@@ -75,11 +82,12 @@ LLM_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai
 LLM_MODEL=gemini-2.5-flash
 ```
 
-**DeepSeek**
+**DeepSeek** (model ids confirmed against `GET /v1/models` on 2026-09-15:
+`deepseek-flash`, `deepseek-v4-pro`)
 ```bash
 LLM_API_KEY=sk-...
 LLM_BASE_URL=https://api.deepseek.com/v1
-LLM_MODEL=deepseek-v4-flash
+LLM_MODEL=deepseek-flash
 ```
 
 **Moonshot**
@@ -145,7 +153,7 @@ or raw_text`. Clients that care whether the LLM ran should check
 **`GET /health`**
 
 ```json
-{"status": "ok", "whisper_model": "medium", "llm_model": "deepseek-v4-flash"}
+{"status": "ok", "whisper_model": "medium", "llm_model": "deepseek-flash"}
 ```
 
 `llm_model` is `null` when no LLM key is configured.

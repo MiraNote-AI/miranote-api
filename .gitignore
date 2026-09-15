@@ -12,8 +12,13 @@ venv/
 .venv/
 env/
 
-# Environment variables
+# Environment variables. The wildcard covers sibling copies a person makes
+# while switching providers (.env.bak, .env.local, .env.deepseek) -- one of
+# those was committed by accident once, carrying a live API key. .env.example
+# is the one file here that must stay tracked.
 .env
+.env.*
+!.env.example
 
 # Runtime state written by scripts/start_backends.sh and start_tunnel.sh
 # (service logs and pid files -- never source)
