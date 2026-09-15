@@ -17,8 +17,9 @@ import httpx
 from fastapi import HTTPException
 
 import config
+import config
 import main
-from tests.test_fallback import MODEL_GATED, RATE_LIMITED
+from tests.test_fallback import RATE_LIMITED
 
 # The service requires a beta token on every request except /health. These
 # tests are about quota handling, so they authenticate and leave the gate's
@@ -27,28 +28,13 @@ os.environ["BETA_TOKENS"] = "test-token"
 
 
 class QuotaExhaustionTests(unittest.TestCase):
-    def setUp(self):
-        main._imagen_unavailable = False
-        self.addCleanup(setattr, main, "_imagen_unavailable", False)
-
     def _client_raising(self, text):
         client = mock.Mock()
-        client.models.generate_images.side_effect = Exception(text)
         client.models.generate_content.side_effect = Exception(text)
         return client
 
-    def test_primary_model_quota_is_not_a_500(self):
+    def test_quota_is_not_a_500(self):
         client = self._client_raising(RATE_LIMITED)
-        with mock.patch.object(main, "_get_client", return_value=client):
-            with self.assertRaises(HTTPException) as caught:
-                main._call_model("a cat", "1:1")
-        self.assertEqual(caught.exception.status_code, 503)
-
-    def test_fallback_model_quota_is_not_a_500(self):
-        """The path that actually failed under load: Imagen gated, fallback throttled."""
-        client = mock.Mock()
-        client.models.generate_images.side_effect = Exception(MODEL_GATED)
-        client.models.generate_content.side_effect = Exception(RATE_LIMITED)
         with mock.patch.object(main, "_get_client", return_value=client):
             with self.assertRaises(HTTPException) as caught:
                 main._call_model("a cat", "1:1")
@@ -66,43 +52,21 @@ class QuotaExhaustionTests(unittest.TestCase):
             "detail does not tell the tester what to do: " + repr(caught.exception.detail),
         )
 
-    def test_quota_does_not_disable_the_primary_model(self):
-        """A gated model latches for the process; a throttled one must not.
-
-        _imagen_unavailable is never reset, so latching on a transient quota
-        error would send every later request to the fallback until restart --
-        including requests made after quota recovered.
-        """
-        client = self._client_raising(RATE_LIMITED)
-        with mock.patch.object(main, "_get_client", return_value=client):
-            with self.assertRaises(HTTPException):
-                main._call_model("a cat", "1:1")
-        self.assertFalse(
-            main._imagen_unavailable,
-            "a quota error latched the primary model off for the whole process",
-        )
-
     def test_quota_is_not_retried(self):
         """Section 7 of the deploy spec rules out automatic retry."""
         client = self._client_raising(RATE_LIMITED)
         with mock.patch.object(main, "_get_client", return_value=client):
             with self.assertRaises(HTTPException):
                 main._call_model("a cat", "1:1")
-        self.assertEqual(
-            client.models.generate_images.call_count,
-            1,
-            "the primary model was called more than once",
+        # At most one call per image, never more. An exact count would pin
+        # ThreadPoolExecutor's short-circuit behaviour on the first raised
+        # result rather than the property being asserted, which is that a
+        # quota rejection is not retried.
+        self.assertLessEqual(
+            client.models.generate_content.call_count,
+            config.NUMBER_OF_IMAGES,
+            "the image model was called more times than there are images",
         )
-
-    def test_a_gated_model_still_latches(self):
-        """The existing 404 behaviour must survive this change."""
-        client = mock.Mock()
-        client.models.generate_images.side_effect = Exception(MODEL_GATED)
-        client.models.generate_content.side_effect = Exception("500 INTERNAL")
-        with mock.patch.object(main, "_get_client", return_value=client):
-            with self.assertRaises(Exception):
-                main._call_model("a cat", "1:1")
-        self.assertTrue(main._imagen_unavailable)
 
     def test_an_unrelated_failure_still_propagates(self):
         client = self._client_raising("500 INTERNAL")
@@ -121,11 +85,9 @@ class QuotaOverTheWireTests(unittest.IsolatedAsyncioTestCase):
     """
 
     async def test_generate_answers_503_rather_than_500(self):
-        main._imagen_unavailable = False
-        self.addCleanup(setattr, main, "_imagen_unavailable", False)
 
         stub = mock.Mock()
-        stub.models.generate_images.side_effect = Exception(RATE_LIMITED)
+        stub.models.generate_content.side_effect = Exception(RATE_LIMITED)
 
         with mock.patch.object(main, "_get_client", return_value=stub):
             async with httpx.AsyncClient(
@@ -150,13 +112,11 @@ class QuotaOverTheWireTests(unittest.IsolatedAsyncioTestCase):
         and /generate would hang for the life of the process -- a far worse
         failure than the 500 this branch set out to fix.
         """
-        main._imagen_unavailable = False
         main._generate_semaphore = None
-        self.addCleanup(setattr, main, "_imagen_unavailable", False)
         self.addCleanup(setattr, main, "_generate_semaphore", None)
 
         stub = mock.Mock()
-        stub.models.generate_images.side_effect = Exception(RATE_LIMITED)
+        stub.models.generate_content.side_effect = Exception(RATE_LIMITED)
         attempts = main.GENERATE_CONCURRENCY + 2
 
         with mock.patch.object(main, "_get_client", return_value=stub):

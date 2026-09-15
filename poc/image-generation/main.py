@@ -27,9 +27,6 @@ from stylize import stylizer, style_presets
 from border import border, border_presets
 
 
-_imagen_unavailable = False
-
-
 # Concurrent sticker generations are capped so ten testers cannot queue enough
 # CPU work to push a single request past Cloudflare's 125s edge timeout.
 GENERATE_CONCURRENCY = 3
@@ -50,7 +47,7 @@ def _generate_gate():
 
 
 # Deliberately not the provider's own wording: "RESOURCE_EXHAUSTED" tells a
-# tester nothing. Deliberately not a retry either -- config.py:32 records that
+# tester nothing. Deliberately not a retry either -- config.py records that
 # users who retry wedge the queue, and section 7 of the deploy spec rules out
 # automatic retries on a saturated host.
 QUOTA_DETAIL = "image generation is busy right now; wait a moment and try again"
@@ -62,35 +59,11 @@ def _quota_exhausted(model: str, error: Exception) -> HTTPException:
 
 
 def _call_model(prompt: str, aspect_ratio: str) -> list[bytes]:
-    global _imagen_unavailable
-    if not _imagen_unavailable:
-        try:
-            response = _get_client().models.generate_images(
-                model=config.MODEL_ID,
-                prompt=prompt,
-                config={
-                    "number_of_images": config.NUMBER_OF_IMAGES,
-                    "aspect_ratio": aspect_ratio,
-                },
-            )
-            return [img.image.image_bytes for img in response.generated_images]
-        except Exception as error:
-            # Tested before the gated-model check on purpose. A quota
-            # rejection is transient, and _imagen_unavailable is never reset,
-            # so letting it through that path would strand every later request
-            # on the fallback model until the process restarts.
-            if fallback.is_rate_limited(error):
-                raise _quota_exhausted(config.MODEL_ID, error)
-            if not fallback.is_model_unavailable(error):
-                raise
-            # Imagen is gated per project; remember and stop retrying it.
-            _imagen_unavailable = True
-            print(f"[generate] Imagen unavailable, using {config.FALLBACK_IMAGE_MODEL}: {str(error)[:100]}")
     client = _get_client()
 
     def _one() -> bytes | None:
         response = client.models.generate_content(
-            model=config.FALLBACK_IMAGE_MODEL,
+            model=config.MODEL_ID,
             contents=fallback.build_prompt(prompt, aspect_ratio),
         )
         parts = fallback.image_parts(response)
@@ -102,11 +75,8 @@ def _call_model(prompt: str, aspect_ratio: str) -> list[bytes]:
         with ThreadPoolExecutor(max_workers=config.NUMBER_OF_IMAGES) as pool:
             results = list(pool.map(lambda _: _one(), range(config.NUMBER_OF_IMAGES)))
     except Exception as error:
-        # The path that actually failed under load: Imagen gated on the
-        # project, so every request lands here and the fallback's own quota is
-        # what runs out.
         if fallback.is_rate_limited(error):
-            raise _quota_exhausted(config.FALLBACK_IMAGE_MODEL, error)
+            raise _quota_exhausted(config.MODEL_ID, error)
         raise
     images = [image for image in results if image]
     if not images:
