@@ -76,8 +76,31 @@ def _quota_exhausted(model: str, error: Exception) -> HTTPException:
     return HTTPException(status_code=503, detail=QUOTA_DETAIL)
 
 
-def _call_model(prompt: str, aspect_ratio: str) -> list[bytes]:
+def _call_model(prompt: str, aspect_ratio: str, reprompt=None) -> list[bytes]:
+    """Generate NUMBER_OF_IMAGES images.
+
+    `reprompt`, when given, produces a fresh prompt for a retry. /generate
+    passes the expander so the second attempt does not send the string that
+    just drew a blank; it passes None when the caller asked for no expansion,
+    because then there is nothing to vary.
+    """
     client = _get_client()
+
+    def _next_prompt(previous: str) -> str:
+        """A fresh prompt for the retry, or the previous one if that fails.
+
+        The expander is a network call. Losing it must not also lose the
+        retry, which is the expensive half -- an image call out of a bucket
+        holding two a minute.
+        """
+        if reprompt is None:
+            return previous
+        try:
+            return reprompt()
+        except Exception as error:
+            print(f"[generate] re-expansion failed, retrying with the same "
+                  f"prompt: {str(error)[:120]}")
+            return previous
 
     def _one() -> tuple[bytes | None, bool]:
         """(image, refused). Refused is carried alongside because an empty
@@ -91,10 +114,13 @@ def _call_model(prompt: str, aspect_ratio: str) -> list[bytes]:
         NUMBER_OF_IMAGES = 1 left a single blank with nothing to hide behind,
         and the point is to cover that, not to grind against the quota.
         """
+        current = prompt
         for attempt in range(1 + EMPTY_RESPONSE_RETRIES):
+            if attempt:
+                current = _next_prompt(current)
             response = client.models.generate_content(
                 model=config.MODEL_ID,
-                contents=fallback.build_prompt(prompt, aspect_ratio),
+                contents=fallback.build_prompt(current, aspect_ratio),
             )
             parts = fallback.image_parts(response)
             if parts:
@@ -333,33 +359,47 @@ async def generate_images(req: GenerateRequest):
         return await _generate(req)
 
 
-async def _generate(req: GenerateRequest):
-    if req.command == "sticker":
-        if not req.prompt:
-            raise HTTPException(status_code=400, detail="prompt is required for sticker")
-        core = await asyncio.to_thread(
-            prompt_expander.expand, req.prompt, config.PROMPT_EXPANDER_MODEL
-        ) if req.expand else req.prompt
-        prompt = generate_presets.build_sticker_prompt(core)
-    elif req.command == "background":
-        if not req.prompt:
-            raise HTTPException(status_code=400, detail="prompt is required for background")
-        core = await asyncio.to_thread(
-            prompt_expander.expand_background, req.prompt, config.PROMPT_EXPANDER_MODEL
-        ) if req.expand else req.prompt
-        prompt = generate_presets.build_background_prompt(core)
-    elif req.command == "art":
-        if not req.prompt:
-            raise HTTPException(status_code=400, detail="prompt is required for art")
-        core = await asyncio.to_thread(
-            prompt_expander.expand_art, req.prompt, config.PROMPT_EXPANDER_MODEL
-        ) if req.expand else req.prompt
-        prompt = generate_presets.build_art_prompt(core)
-    else:
-        raise HTTPException(status_code=400, detail=f"Unknown command: {req.command}")
+# command -> (prompt_expander attribute, generate_presets attribute). Held as
+# names and resolved when called, not captured at import, so the retry path
+# below can build a prompt as many times as it needs -- and so patching either
+# module reaches the handler.
+_COMMANDS = {
+    "sticker":    ("expand",            "build_sticker_prompt"),
+    "background": ("expand_background", "build_background_prompt"),
+    "art":        ("expand_art",        "build_art_prompt"),
+}
 
+
+async def _generate(req: GenerateRequest):
+    spec = _COMMANDS.get(req.command)
+    if spec is None:
+        raise HTTPException(status_code=400, detail=f"Unknown command: {req.command}")
+    if not req.prompt:
+        raise HTTPException(
+            status_code=400, detail=f"prompt is required for {req.command}"
+        )
+    expander_name, builder_name = spec
+
+    def _fresh_prompt() -> str:
+        """Expand and dress the user's words. Called once normally, and once
+        more if the first attempt draws a blank -- expansion is not
+        deterministic, so the retry gets a different string to send. It runs on
+        a text model, metered separately from the 2/min image quota, so varying
+        the prompt costs nothing that was scarce (#80)."""
+        core = (
+            getattr(prompt_expander, expander_name)(
+                req.prompt, config.PROMPT_EXPANDER_MODEL
+            )
+            if req.expand
+            else req.prompt
+        )
+        return getattr(generate_presets, builder_name)(core)
+
+    prompt = await asyncio.to_thread(_fresh_prompt)
     ratio = config.ASPECT_RATIOS.get(req.command, "1:1")
-    images = await asyncio.to_thread(_call_model, prompt, ratio)
+    # Nothing to vary when the caller asked for no expansion.
+    reprompt = _fresh_prompt if req.expand else None
+    images = await asyncio.to_thread(_call_model, prompt, ratio, reprompt)
 
     remove_bg = config.REMOVE_BG and req.command == "sticker"
     encoded = []
