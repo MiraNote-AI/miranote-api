@@ -94,3 +94,58 @@ def test_a_request_after_startup_does_not_load_again(loaded_main):
         main.get_whisper_model()
         main.get_whisper_model()
     assert calls["whisper"] == 1
+
+
+@pytest.fixture
+def yanyi_loaded_main(monkeypatch):
+    """Same as loaded_main, but with the YanYi engine selected."""
+    monkeypatch.setenv("TRANSCRIBE_ENGINE", "yanyi")
+    monkeypatch.setenv("YANYI_API_KEY", "test-key")
+    monkeypatch.setenv("BETA_TOKENS", "test-token")
+    monkeypatch.setenv("WHISPER_MODEL", "tiny")
+
+    calls = {"whisper": 0, "emotion": 0}
+
+    import dotenv
+    import whisper
+    import emotion as emotion_module
+
+    monkeypatch.setattr(dotenv, "load_dotenv", lambda *a, **k: False)
+    os.environ.pop("LLM_API_KEY", None)
+    emotion_module._PIPELINE = None
+
+    monkeypatch.setattr(
+        whisper, "load_model",
+        lambda name: calls.__setitem__("whisper", calls["whisper"] + 1) or object(),
+    )
+    monkeypatch.setattr(
+        emotion_module, "_build_pipeline",
+        lambda: calls.__setitem__("emotion", calls["emotion"] + 1) or (lambda path: {}),
+        raising=False,
+    )
+
+    sys.modules.pop("voice_to_text_main", None)
+    spec = importlib.util.spec_from_file_location(
+        "voice_to_text_main", Path(__file__).parent.parent / "main.py"
+    )
+    main = importlib.util.module_from_spec(spec)
+    sys.modules["voice_to_text_main"] = main
+    spec.loader.exec_module(main)
+    return main, calls
+
+
+def test_the_yanyi_engine_does_not_load_whisper(yanyi_loaded_main):
+    """Whisper's weights are the cost this engine switch exists to stop paying.
+    Preloading them anyway would leave the memory on the host either way."""
+    main, calls = yanyi_loaded_main
+    with TestClient(main.app):
+        pass
+    assert calls["whisper"] == 0, "Whisper was preloaded despite TRANSCRIBE_ENGINE=yanyi"
+
+
+def test_the_yanyi_engine_still_loads_the_emotion_classifier(yanyi_loaded_main):
+    """Emotion is local and runs on both engines, so it still has to be ready."""
+    main, calls = yanyi_loaded_main
+    with TestClient(main.app):
+        pass
+    assert calls["emotion"] == 1

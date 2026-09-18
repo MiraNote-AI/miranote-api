@@ -18,6 +18,7 @@ from dotenv import load_dotenv
 
 import beta_auth
 from openai import OpenAI
+from yanyi_client import YanYiError, health as yanyi_health, transcribe as yanyi_transcribe
 import emotion
 from emotion import analyze_emotion
 
@@ -25,6 +26,37 @@ load_dotenv()
 
 # ---------- Config ----------
 WHISPER_MODEL = os.getenv("WHISPER_MODEL", "medium")
+
+# Which engine answers /transcribe. "whisper" runs the local model; "yanyi"
+# calls the hosted YanYi API. Deliberately a restart-time choice rather than a
+# per-request one: the two engines have different operational costs, and the
+# point of selecting one is that the other stops being paid for.
+TRANSCRIBE_ENGINE = os.getenv("TRANSCRIBE_ENGINE", "whisper").strip().lower()
+ENGINES = ("whisper", "yanyi")
+if TRANSCRIBE_ENGINE not in ENGINES:
+    raise ValueError(
+        f"TRANSCRIBE_ENGINE must be one of {ENGINES}, got {TRANSCRIBE_ENGINE!r}. "
+        "Refusing to start rather than quietly serving the other engine."
+    )
+YANYI_API_URL = os.getenv("YANYI_API_URL", "https://shujv.synology.me/v1/transcribe")
+YANYI_API_KEY = os.getenv("YANYI_API_KEY", "")
+YANYI_MODE = os.getenv("YANYI_MODE", "medium")
+# The iOS client gives up at 110s and Cloudflare's free plan at 125s. A YanYi
+# timeout above either fires after the caller has stopped listening, so this
+# sits below both. Measured round trips are 1.4s to 6.4s, so it is generous.
+YANYI_TIMEOUT = float(os.getenv("YANYI_TIMEOUT", "90"))
+if TRANSCRIBE_ENGINE == "yanyi" and not YANYI_API_KEY:
+    raise ValueError(
+        "TRANSCRIBE_ENGINE=yanyi needs YANYI_API_KEY. Without it every "
+        "transcription would fail with 401 one caller at a time."
+    )
+
+# What the startup probe found, reported by /health next to the LLM status.
+YANYI_UNCONFIGURED = "unconfigured"   # a different engine is selected
+YANYI_OK = "ok"                       # YanYi answered its health check
+YANYI_UNREACHABLE = "unreachable"     # it did not
+_yanyi_status = YANYI_UNCONFIGURED
+
 LLM_API_KEY = os.getenv("LLM_API_KEY")
 LLM_BASE_URL = os.getenv("LLM_BASE_URL")
 LLM_MODEL = os.getenv("LLM_MODEL", "gemini-2.5-flash")
@@ -148,14 +180,44 @@ def _check_llm() -> None:
     _llm_status = LLM_OK
     print(f"[voice] LLM correction ready: {LLM_MODEL} at {LLM_BASE_URL}")
 
-def _preload_models() -> None:
-    """Load Whisper and the emotion classifier, and probe the corrector.
 
-    Blocking, called from startup. The LLM probe goes last so a slow or dead
-    provider cannot delay the models the endpoint actually needs.
+def _check_yanyi() -> None:
+    """Ask YanYi whether it is up, so a dead dependency is visible in /health.
+
+    Never raises: a blip at startup must not leave a dead process, and the
+    engine may recover by the first real request. What it must not do is stay
+    invisible -- that is what let a broken corrector run unnoticed for weeks
+    (#73).
     """
-    get_whisper_model()
+    global _yanyi_status
+    if TRANSCRIBE_ENGINE != "yanyi":
+        _yanyi_status = YANYI_UNCONFIGURED
+        return
+    try:
+        yanyi_health(api_url=YANYI_API_URL)
+    except Exception as error:  # noqa: BLE001 -- degraded, not dead
+        _yanyi_status = YANYI_UNREACHABLE
+        print("[voice] YANYI IS NOT ANSWERING. Every /transcribe call will fail "
+              "until it recovers or TRANSCRIBE_ENGINE is set back to whisper.")
+        print(f"[voice]   url={YANYI_API_URL} error={str(error)[:200]}")
+        return
+    _yanyi_status = YANYI_OK
+    print(f"[voice] YanYi ready at {YANYI_API_URL} (mode={YANYI_MODE})")
+
+
+def _preload_models() -> None:
+    """Load what this engine needs, then probe the services it depends on.
+
+    Blocking, called from startup. Whisper loads only when it is the selected
+    engine. The probes go last so a slow or dead third party cannot delay the
+    models the endpoint actually needs.
+    """
+    # Whisper's weights are the cost TRANSCRIBE_ENGINE=yanyi exists to avoid.
+    # Preloading them on that path would leave the memory on the host anyway.
+    if TRANSCRIBE_ENGINE == "whisper":
+        get_whisper_model()
     emotion.preload()
+    _check_yanyi()
     _check_llm()
 
 
@@ -239,6 +301,30 @@ async def correct_with_ai(raw_text: str) -> Tuple[Optional[str], str]:
     return None, "failed"
 
 
+async def _transcribe_with_yanyi(tmp_path: str, filename: Optional[str]) -> Dict[str, Any]:
+    """Call YanYi off the event loop and return its decoded body.
+
+    A YanYi failure is answered with YanYi's own status and a readable reason.
+    Collapsing these into a 500 is what makes an exhausted budget look like a
+    server bug; the request id is logged so a support question can quote it.
+    """
+    try:
+        return await asyncio.to_thread(
+            yanyi_transcribe,
+            tmp_path,
+            api_url=YANYI_API_URL,
+            api_key=YANYI_API_KEY,
+            mode=YANYI_MODE,
+            timeout=YANYI_TIMEOUT,
+        )
+    except YanYiError as error:
+        print(
+            f"[voice] YanYi failed on {filename!r}: "
+            f"status={error.status} code={error.code} detail={error.detail}"
+        )
+        raise HTTPException(status_code=error.status, detail=error.detail)
+
+
 @app.post("/transcribe")
 async def transcribe(
     file: UploadFile = File(..., description="Audio file (mp3, wav, flac, m4a, ogg, webm)"),
@@ -264,7 +350,11 @@ async def transcribe(
     """
     Voice-to-text endpoint.
     - Accepts audio file upload
-    - Returns Whisper transcription + optional AI-corrected version
+    - Returns the transcript from whichever engine TRANSCRIBE_ENGINE selects,
+      named in the `engine` field
+    - Whisper adds the detected language, per-segment timings, and an optional
+      AI-corrected version; `correct` and `lang` apply to that engine only,
+      since YanYi takes neither and returns a finished transcript
     """
     raw_bytes = await file.read()
     print(f"/transcribe: filename={file.filename!r} size={len(raw_bytes)} bytes")
@@ -286,38 +376,53 @@ async def transcribe(
         tmp_path = tmp.name
 
     try:
-        try:
-            if lang == "auto":
-                result = await asyncio.to_thread(_transcribe_picking_language, tmp_path)
-            else:
-                result = await asyncio.to_thread(
-                    get_whisper_model().transcribe, tmp_path, language=lang, verbose=False
-                )
-            result = drop_no_speech_segments(result)
-        except Exception as e:
-            print(f"Whisper/ffmpeg failed on {file.filename!r}: {e}")
-            raise HTTPException(
-                status_code=422,
-                detail=(
-                    f"Could not decode audio ({type(e).__name__}). "
-                    "Check that the file is a real audio recording in a supported format. See server logs for details."
-                ),
-            )
-        raw_text = result["text"]
-        language = result.get("language", "unknown")
-        segments = [
-            {
-                "start": round(seg["start"], 2),
-                "end": round(seg["end"], 2),
-                "text": seg["text"].strip(),
-            }
-            for seg in result.get("segments", [])
-        ]
-
         corrected_text: Optional[str] = None
         correction_status = "skipped"
-        if correct and raw_text.strip():
-            corrected_text, correction_status = await correct_with_ai(raw_text)
+        truncated: Optional[bool] = None
+
+        if TRANSCRIBE_ENGINE == "yanyi":
+            engine = "yanyi"
+            payload = await _transcribe_with_yanyi(tmp_path, file.filename)
+            raw_text = payload.get("text") or ""
+            truncated = payload.get("truncated")
+            # YanYi returns a finished transcript and no timings. It reports
+            # no language, and running the LLM corrector on top would trade
+            # the whole reason for choosing it -- a measured 1.4s round trip
+            # against a corrector whose worst case is about 60s.
+            language = "unknown"
+            segments: list = []
+        else:
+            engine = "whisper"
+            try:
+                if lang == "auto":
+                    result = await asyncio.to_thread(_transcribe_picking_language, tmp_path)
+                else:
+                    result = await asyncio.to_thread(
+                        get_whisper_model().transcribe, tmp_path, language=lang, verbose=False
+                    )
+                result = drop_no_speech_segments(result)
+            except Exception as e:
+                print(f"Whisper/ffmpeg failed on {file.filename!r}: {e}")
+                raise HTTPException(
+                    status_code=422,
+                    detail=(
+                        f"Could not decode audio ({type(e).__name__}). "
+                        "Check that the file is a real audio recording in a supported format. See server logs for details."
+                    ),
+                )
+            raw_text = result["text"]
+            language = result.get("language", "unknown")
+            segments = [
+                {
+                    "start": round(seg["start"], 2),
+                    "end": round(seg["end"], 2),
+                    "text": seg["text"].strip(),
+                }
+                for seg in result.get("segments", [])
+            ]
+
+            if correct and raw_text.strip():
+                corrected_text, correction_status = await correct_with_ai(raw_text)
 
         emotion_result: Optional[Dict[str, Any]] = None
         emotion_status = "skipped"
@@ -330,8 +435,10 @@ async def transcribe(
                 emotion_status = "failed"
 
         return {
+            "engine": engine,
             "language": language,
             "raw_text": raw_text,
+            "truncated": truncated,
             "corrected_text": corrected_text,
             "correction_status": correction_status,
             "segments": segments,
@@ -373,6 +480,8 @@ async def emotion_endpoint(
 async def health():
     return {
         "status": "ok",
+        "engine": TRANSCRIBE_ENGINE,
+        "yanyi": _yanyi_status,
         "whisper_model": WHISPER_MODEL,
         "llm_model": LLM_MODEL if llm else None,
         "llm": _llm_status,
