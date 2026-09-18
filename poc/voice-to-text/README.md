@@ -47,6 +47,57 @@ badge, and the Whisper segments. There's a checkbox to toggle the
 The UI is plain HTML + vanilla JS (no build step, no CDN dependencies)
 so it works offline once the page is loaded.
 
+## Transcription engine
+
+`/transcribe` is served by one of two engines, chosen at startup with
+`TRANSCRIBE_ENGINE`:
+
+| | `whisper` (default) | `yanyi` |
+|---|---|---|
+| Runs on | this host, local model | the hosted YanYi API |
+| Latency | 6.6s warm for a 10s clip; up to ~84s with correction | 1.4s measured for a 17.7s clip |
+| Startup | loads ~2 GB of weights before serving | loads nothing |
+| Size limit | none | 2 MB per request |
+| LLM correction | optional, see below | never runs |
+| Returns | language, segments, emotion | text and emotion only |
+
+The choice is deliberately per-deployment rather than per-request: the reason
+to select one engine is that the other stops costing anything. Switching means
+editing `.env` and restarting.
+
+Both engines answer with the same response shape, so no client changes when the
+engine does. On the YanYi path `language` is `"unknown"`, `segments` is empty,
+and `corrected_text` is `null` with `correction_status` `"skipped"` -- running
+a corrector whose worst case is about 60s on top of a 1.4s transcript would
+give back the whole reason for the switch. Two fields are additive: `engine`
+names the engine that answered, and `truncated` carries YanYi's own report that
+it clipped a long recording.
+
+### Using YanYi
+
+```bash
+TRANSCRIBE_ENGINE=yanyi
+YANYI_API_URL=https://shujv.synology.me/v1/transcribe
+YANYI_API_KEY=<partner key>
+YANYI_MODE=medium
+```
+
+The service refuses to start on an unknown `TRANSCRIBE_ENGINE`, and on
+`yanyi` with no key -- a misconfiguration that still answered 200 is what hid
+issue #73 for weeks. `GET /health` reports `engine` and `yanyi:
+ok|unreachable|unconfigured`, probed once at startup.
+
+Recordings are re-encoded to 16 kHz mono 32 kbps before upload, which is what
+YanYi's own recorder produces. This matters because YanYi refuses a body over
+2 MB while the iOS recorder writes 44.1 kHz AAC with no length cap; at 32 kbps
+that ceiling holds roughly eight minutes of speech. `ffmpeg` must be on PATH
+(it already is -- Whisper needs it too); `FFMPEG_BIN` overrides the binary.
+
+The key is a **partner** key: it authorises `/v1/transcribe` and nothing else,
+so the `/v1/user/*` quota endpoints answer `token_invalid`. There is no way to
+read remaining budget from here; an exhausted account first shows up as a 402
+with detail `budget_exhausted`.
+
 ## LLM configuration
 
 Post-correction is **optional**. Without an LLM key, `/transcribe`

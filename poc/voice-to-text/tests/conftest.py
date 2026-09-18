@@ -37,6 +37,25 @@ class _EmotionStub:
         return self.result
 
 
+def load_voice_main():
+    """Import main.py fresh under a stable module name.
+
+    A fresh load is what lets a test set environment variables first and have
+    the module read them at import time, the way the real process does.
+    """
+    main_path = Path(__file__).parent.parent / "main.py"
+
+    # Clear any cached import so monkeypatching takes effect on fresh load
+    if "voice_to_text_main" in sys.modules:
+        del sys.modules["voice_to_text_main"]
+
+    spec = importlib.util.spec_from_file_location("voice_to_text_main", main_path)
+    main = importlib.util.module_from_spec(spec)
+    sys.modules["voice_to_text_main"] = main
+    spec.loader.exec_module(main)
+    return main
+
+
 @pytest.fixture
 def stub_whisper():
     return _WhisperStub()
@@ -57,17 +76,12 @@ def voice_client(stub_whisper, stub_emotion, monkeypatch):
     os.environ["BETA_TOKENS"] = "test-token"
     os.environ.setdefault("LLM_API_KEY", "fake")
     os.environ.setdefault("WHISPER_MODEL", "tiny")
+    # Pinned, not inherited. main.py calls load_dotenv(), so without this a
+    # deployment .env that selects the YanYi engine silently redirects every
+    # test in this file to a different code path.
+    monkeypatch.setenv("TRANSCRIBE_ENGINE", "whisper")
 
-    main_path = Path(__file__).parent.parent / "main.py"
-
-    # Clear any cached import so monkeypatching takes effect on fresh load
-    if "voice_to_text_main" in sys.modules:
-        del sys.modules["voice_to_text_main"]
-
-    spec = importlib.util.spec_from_file_location("voice_to_text_main", main_path)
-    main = importlib.util.module_from_spec(spec)
-    sys.modules["voice_to_text_main"] = main
-    spec.loader.exec_module(main)
+    main = load_voice_main()
 
     # Inject Whisper stub by replacing get_whisper_model
     monkeypatch.setattr(main, "get_whisper_model", lambda: stub_whisper)
