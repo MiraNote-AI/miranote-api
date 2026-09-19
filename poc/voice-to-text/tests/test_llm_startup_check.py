@@ -25,11 +25,13 @@ from fastapi.testclient import TestClient
 REAL_KEY = "sk-0123456789abcdef0123456789abcdef"
 
 
-def _load_main(monkeypatch, *, api_key, probe):
+def _load_main(monkeypatch, *, api_key, probe, model="example-model"):
     """main.py imported fresh with the heavy loaders and the LLM stubbed.
 
     `probe` is called in place of the provider round-trip: return to pass,
-    raise to fail.
+    raise to fail. The kwargs it was called with are recorded on
+    `main._probe_calls`, because what the probe sends is part of what it
+    tests -- see the enable_thinking cases at the bottom of this file.
     """
     os.environ["BETA_TOKENS"] = "test-token"
     os.environ["WHISPER_MODEL"] = "tiny"
@@ -38,7 +40,7 @@ def _load_main(monkeypatch, *, api_key, probe):
     else:
         os.environ["LLM_API_KEY"] = api_key
     os.environ["LLM_BASE_URL"] = "https://api.example.com/v1"
-    os.environ["LLM_MODEL"] = "example-model"
+    os.environ["LLM_MODEL"] = model
 
     import dotenv
     import whisper
@@ -62,9 +64,12 @@ def _load_main(monkeypatch, *, api_key, probe):
     sys.modules["voice_to_text_main"] = main
     spec.loader.exec_module(main)
 
+    calls = []
+    main._probe_calls = calls
     if main.llm is not None:
         class _Completions:
             def create(self, **kwargs):
+                calls.append(kwargs)
                 return probe()
 
         class _Chat:
@@ -152,3 +157,36 @@ def test_an_unconfigured_provider_makes_no_call(unconfigured, capsys):
     with TestClient(unconfigured.app):
         pass
     assert "unreachable" not in capsys.readouterr().out
+
+
+def test_the_probe_sends_what_the_real_correction_sends(monkeypatch):
+    """The probe must carry the same provider options a correction carries.
+
+    Qwen3-series models on DashScope reason by default, and some reject a
+    non-streaming request outright when thinking is on. A probe that omitted
+    enable_thinking would fail against the model /transcribe then corrects
+    with successfully -- reporting a working corrector as broken, which is
+    the inverse of the bug this file exists for and just as misleading.
+    """
+    main = _load_main(
+        monkeypatch, api_key=REAL_KEY, probe=lambda: "pong",
+        model="qwen3.5-flash",
+    )
+    with TestClient(main.app) as client:
+        assert client.get("/health").json()["llm"] == "ok"
+
+    assert len(main._probe_calls) == 1, "startup probed exactly once"
+    assert main._probe_calls[0].get("extra_body") == {"enable_thinking": False}
+
+
+def test_a_non_qwen_probe_carries_no_qwen_option(monkeypatch):
+    """enable_thinking is a DashScope option; other providers reject unknown
+    fields, so it must not be sent to them."""
+    main = _load_main(
+        monkeypatch, api_key=REAL_KEY, probe=lambda: "pong",
+        model="gemini-2.5-flash",
+    )
+    with TestClient(main.app) as client:
+        assert client.get("/health").json()["llm"] == "ok"
+
+    assert "extra_body" not in main._probe_calls[0]
