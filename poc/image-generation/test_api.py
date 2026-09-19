@@ -208,13 +208,14 @@ test_generate_background("生成复古陈旧的背景", "bg_vintage")
 # /cutout  --  background removal + subject cutout.
 # Sub-modes: auto (no prompt) | prompt-guided.
 # ==========================================================================
-# -- auto: no prompt -> full-image rembg background removal.
+# -- auto: no prompt -> full-image background removal (Apple Vision).
 #    Also writes test_output/2cut.png, the transparent input the /border tests use. --
 test_cutout("demo_data/2.jpeg", prefix="2cut")
 # test_cutout("test_input/1.jpeg", prefix="1cut")
-# -- prompt-guided: default mode hybrid_sam_prebg_gray (rembg -> gray bg ->
-#    hybrid_sam_union). Omit mode= for the default; pass mode="hybrid_sam_union"
-#    to compare the no-prebg path. --
+# -- prompt-guided: default mode hybrid_sam_prebg_vision (Vision matte -> gray
+#    bg -> hybrid_sam_union). Omit mode= for the default; pass
+#    mode="hybrid_sam_union" to compare the no-prebg path, or
+#    mode="hybrid_sam_prebg_gray" for the rembg baseline. --
 # test_cutout("test_input/13.jpeg", prompt="the yellow mango shaved ice on the right", prefix="prebg_mango")
 # test_cutout("test_input/14.jpeg", prompt="the rabbit on the right", prefix="prebg_rabbit_right")
 test_cutout("demo_data/17.jpeg", prompt="the boy on the left", prefix="prebg_left_boy")

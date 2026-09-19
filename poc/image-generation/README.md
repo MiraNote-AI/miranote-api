@@ -2,17 +2,51 @@
 
 A FastAPI service that powers MiraNote's sticker / illustration features on top of
 Google Vertex AI (Imagen 4 + Gemini image models) plus local vision models
-(rembg, SAM 2.1, GroundingDINO).
+(Apple Vision, SAM 2.1, GroundingDINO).
 
 It exposes four image pipelines behind one app:
 
 | Endpoint    | What it does                                            | Models used |
 |-------------|---------------------------------------------------------|-------------|
-| `/generate` | Text-to-image sticker & background generation           | Imagen 4 (`imagen-4.0-generate-001`), Gemini 2.5 Flash (prompt expansion), rembg (background removal) |
-| `/cutout`   | Background removal + prompt-guided subject cutout        | rembg, SAM 2.1, GroundingDINO, Gemini 2.5 Flash (bbox) |
+| `/generate` | Text-to-image sticker & background generation           | Imagen 4 (`imagen-4.0-generate-001`), Gemini 2.5 Flash (prompt expansion), Apple Vision (background removal) |
+| `/cutout`   | Background removal + prompt-guided subject cutout        | Apple Vision, SAM 2.1, GroundingDINO, Gemini 2.5 Flash (bbox) |
 | `/stylize`  | Image-to-image style transfer                           | Gemini 2.5 Flash Image ("Nano Banana") |
 | `/border`   | Sticker outlines / AI decorative borders                | Pillow (`outline`), Gemini 2.5 Flash Image (`ai_outline`) |
 | `/health`   | Liveness check                                          | — |
+
+## Background removal runs on Apple Vision
+
+Every cutout -- a prompted `/cutout`, a `/cutout` with no prompt, and the matte
+a generated sticker goes through -- uses Apple's
+`GenerateForegroundInstanceMaskRequest`. On the 17-image bench a prompted
+cutout went from 23.0s to 5.5s end to end and the no-prompt path from 12.55s
+to 0.12s, better on three images and worse on none.
+
+Two consequences worth knowing before you run this:
+
+- **It needs macOS 15+ and a built helper.** Vision has no Python binding, so
+  the work happens in a resident Swift subprocess
+  (`vision_bench/vision_bench`). It is a build artifact, not in the repo.
+  `scripts/start_backends.sh` builds it; to do it by hand:
+  ```bash
+  swiftc -O -parse-as-library vision_bench/vision_bench.swift -o vision_bench/vision_bench
+  ```
+- **Nothing downgrades itself.** There is deliberately no step-down to rembg
+  when the helper is missing -- that would serve rembg at 12-80s per image
+  while every log line and response still looked normal. Instead every cutout
+  answers **503** with the reason, and `/health` reports
+  `cutout.vision_ready`. Check it before assuming the service is fine:
+  ```bash
+  curl -s localhost:8002/health | python3 -m json.tool
+  ```
+
+rembg is still installed, still tested, and still reachable by name
+(`/cutout?mode=auto`, `"matte": "rembg"`). Rolling back to it as the default
+is a deliberate edit of three constants -- see **ROLLING BACK TO REMBG** in
+`config.py`.
+
+The iOS app runs Apple Vision itself for the two pure-removal paths, so it
+asks `/generate` to skip the matte with `"matte": "none"`.
 
 ## Prerequisites
 
@@ -24,8 +58,9 @@ It exposes four image pipelines behind one app:
   ```bash
   gcloud auth application-default login
   ```
-- First run downloads model weights (SAM 2.1, GroundingDINO, rembg `birefnet-general`),
-  so the initial startup takes a while and needs network access.
+- First run downloads model weights (SAM 2.1, GroundingDINO), so the initial
+  startup takes a while and needs network access. rembg's weights are fetched
+  only if something actually asks for rembg by name.
 
 ## Setup
 
@@ -55,7 +90,8 @@ uvicorn main:app --port 8001
 ```
 
 Wait for `Application startup complete.` (the server preloads the Vertex client,
-rembg, SAM, and GroundingDINO at startup). The API is then at
+SAM, GroundingDINO and the Apple Vision helper at startup; rembg is built on
+first use, because nothing reaches it on the default paths). The API is then at
 `http://localhost:8001`.
 
 ## API reference
@@ -70,6 +106,7 @@ field.
 | `command` | string | `"sticker"` or `"background"` |
 | `prompt`  | string | subject prompt |
 | `expand`  | bool   | expand the prompt via Gemini before generating (default `true`) |
+| `matte`   | string | sticker only. `"vision"` (default), `"rembg"`, or `"none"` to get the sticker with its background still on -- how a client that mattes on its own device asks for the raw image. Echoed back as `matte_used`. |
 
 ```bash
 curl -s -X POST http://localhost:8001/generate \
@@ -77,16 +114,18 @@ curl -s -X POST http://localhost:8001/generate \
   -d '{"command":"sticker","prompt":"a cute red apple","expand":true}'
 ```
 
-Returns `images` (a list of base64 PNGs). Stickers have their background removed;
-backgrounds are returned as-is.
+Returns `images` (a list of base64 PNGs). Stickers have their background removed
+unless `matte` says otherwise; backgrounds are returned as-is. A Vision failure
+here answers **503** and discards the generated image rather than quietly
+re-cutting it with a different remover.
 
 ### `POST /cutout` — multipart upload + query params
 
 | Param    | Notes |
 |----------|-------|
 | `file`   | the image to cut out |
-| `prompt` | optional. Empty → full-image rembg (`auto`). Set → prompt-guided cutout |
-| `mode`   | `hybrid_sam_prebg_gray` (default) or `hybrid_sam_union` |
+| `prompt` | optional. Empty → whole-foreground matte. Set → prompt-guided cutout |
+| `mode`   | with a prompt: `hybrid_sam_prebg_vision` (default), `hybrid_sam_prebg_gray`, `hybrid_sam_union`. Without one: `vision` (default) or `auto` (rembg). An unknown value is a 400, never a silent fallback |
 
 ```bash
 curl -s -X POST "http://localhost:8001/cutout?prompt=the%20cat" \
@@ -144,7 +183,8 @@ catalog of extra examples you can enable one at a time.
 ## Configuration
 
 All tunables live in [`config.py`](config.py), grouped by pipeline (model ids,
-aspect ratios, rembg model, SAM/GroundingDINO settings, border defaults, …).
+aspect ratios, cutout defaults, the Vision helper, SAM/GroundingDINO settings,
+border defaults, …).
 Change a value there to change behavior for the corresponding endpoint.
 
 ## Project structure
@@ -153,7 +193,10 @@ Change a value there to change behavior for the corresponding endpoint.
 main.py            FastAPI app — the 5 endpoints
 config.py          all tunables, grouped by pipeline
 generate/          /generate  — prompt_expander, generate_presets, prompt .txt files
-cutout/            /cutout    — bbox_detector, grounding_dino, sam_segmenter
+cutout/            /cutout    — bbox_detector, grounding_dino, sam_segmenter,
+                                vision_matte (owns the Swift helper process)
+vision_bench/      vision_bench.swift — the Apple Vision helper; the binary
+                                beside it is built, not committed
 stylize/           /stylize   — stylizer, style_presets
 border/            /border    — border, border_presets
 shared/            vertex_client — the shared Vertex AI genai client + response helpers

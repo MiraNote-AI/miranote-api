@@ -1,6 +1,6 @@
 """
 MiraNote POC -- Image Generation API
-Imagen 4 sticker generation with rembg background removal.
+Sticker generation with Apple Vision background removal.
 """
 
 import os
@@ -9,8 +9,9 @@ os.environ.setdefault("PYTORCH_ENABLE_MPS_FALLBACK", "1")
 import asyncio
 import base64
 import io
+import time
 from concurrent.futures import ThreadPoolExecutor
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, contextmanager
 
 from fastapi import FastAPI, HTTPException, UploadFile
 from PIL import Image, ImageFilter
@@ -22,7 +23,7 @@ import beta_auth
 import config
 from shared.vertex_client import _get_client
 from generate import fallback, prompt_expander, generate_presets
-from cutout import bbox_detector, sam_segmenter, grounding_dino
+from cutout import bbox_detector, sam_segmenter, grounding_dino, vision_matte
 from stylize import stylizer, style_presets
 from border import border, border_presets
 
@@ -150,9 +151,58 @@ def _call_model(prompt: str, aspect_ratio: str, reprompt=None) -> list[bytes]:
 
 _rembg_session = None
 
+# Whether the Vision helper came up. Nothing branches on it -- the defaults are
+# Vision either way, see config.ROLLING BACK TO REMBG -- but /health reports it,
+# which is the only cheap way to tell "Vision is serving every cutout" from
+# "every cutout is 503ing" from outside the process.
+_vision_ready = False
+
+
+def _rembg():
+    """The rembg session, built on first use.
+
+    Lazy because the defaults are Vision-only now: on a normal run nothing
+    reaches rembg, and eagerly loading a background-removal model that never
+    runs costs startup time and resident memory for nothing. It stays one call
+    away for ?mode=auto, matte="rembg", and a rollback of the config defaults.
+    """
+    global _rembg_session
+    if _rembg_session is None:
+        print(f"Loading rembg session ({config.REMBG_MODEL})...")
+        _rembg_session = new_session(config.REMBG_MODEL)
+        print("rembg session ready.")
+    return _rembg_session
+
 
 class _NotFound(Exception):
     pass
+
+
+@contextmanager
+def _stage(timings: dict, name: str):
+    """Record one /cutout stage's wall-clock ms into `timings`.
+
+    Only the prompt-guided branch is instrumented; the timings ride back on
+    the response so a caller can see which stage dominates without reading
+    server logs. It is the cheapest way to tell a slow detector from a slow
+    matte on a host nobody can attach a profiler to.
+    """
+    start = time.perf_counter()
+    try:
+        yield
+    finally:
+        timings[name] = round((time.perf_counter() - start) * 1000, 1)
+
+
+def _timed(timings: dict, name: str, fn, *args):
+    """asyncio.to_thread target that times `fn` inside the worker thread.
+
+    Timing here rather than around the await measures the call itself, not
+    the time it spent waiting for a thread-pool slot. Concurrent workers
+    write distinct keys, so the shared dict needs no lock.
+    """
+    with _stage(timings, name):
+        return fn(*args)
 
 
 def _iou(a: tuple[float, float, float, float], b: tuple[float, float, float, float]) -> float:
@@ -171,6 +221,34 @@ def _iou(a: tuple[float, float, float, float], b: tuple[float, float, float, flo
 def _union(a: tuple[float, float, float, float], b: tuple[float, float, float, float]) -> tuple[float, float, float, float]:
     """Smallest box covering both. Boxes in 0-1000 (y_min, x_min, y_max, x_max)."""
     return (min(a[0], b[0]), min(a[1], b[1]), max(a[2], b[2]), max(a[3], b[3]))
+
+
+def _intersect(a: tuple[float, float, float, float], b: tuple[float, float, float, float]):
+    """Largest box inside both, or None if they do not overlap."""
+    y_min, x_min = max(a[0], b[0]), max(a[1], b[1])
+    y_max, x_max = min(a[2], b[2]), min(a[3], b[3])
+    if y_max <= y_min or x_max <= x_min:
+        return None
+    return (y_min, x_min, y_max, x_max)
+
+
+def _alpha_bbox(rgba_png_bytes: bytes):
+    """Tight box around a matte's opaque pixels, normalised to 0-1000.
+
+    In the prebg modes everything outside this box is background by
+    construction -- flatten paints it a flat colour -- so it is a hard upper
+    bound on where the subject can be, and clipping a detector box to it can
+    only tighten, never loosen.
+    """
+    alpha = Image.open(io.BytesIO(rgba_png_bytes)).convert("RGBA").getchannel("A")
+    solid = alpha.point(lambda v: 255 if v > 127 else 0)
+    box = solid.getbbox()
+    if box is None:
+        return None
+    left, upper, right, lower = box
+    width, height = alpha.size
+    return (upper / height * 1000, left / width * 1000,
+            lower / height * 1000, right / width * 1000)
 
 
 def _normalized_to_pixels(image_bytes: bytes, bbox_norm: tuple[float, float, float, float]) -> tuple[float, float, float, float]:
@@ -194,21 +272,52 @@ def _flatten_on_bg(rgba_png_bytes: bytes, color: tuple[int, int, int]) -> bytes:
     return buf.getvalue()
 
 
-async def _cutout_via_hybrid_prebg(image_bytes: bytes, prompt: str):
-    """Full-image rembg -> flatten onto a solid gray bg -> hybrid_sam_union.
+async def _cutout_via_prebg(image_bytes: bytes, prompt: str, timings: dict,
+                            matte, stage: str, label: str, clip_to_matte: bool = False):
+    """Full-image background removal -> flatten onto solid gray -> hybrid_sam_union.
 
     Removing the background first stops the union step from spanning competing
     subjects in cluttered/multi-subject scenes -- where plain hybrid_sam_union
     tends to grab the whole frame. Downstream detectors convert("RGB"), so we
-    flatten onto a neutral solid color instead of leaving rembg's transparency
+    flatten onto a neutral solid color instead of leaving the transparency
     (which would otherwise become black).
+
+    `matte` is the only difference between the two prebg modes, so an A/B
+    between them measures the background remover and nothing else. The one that
+    ran is reported back as extras["prebg"].
     """
-    removed = await asyncio.to_thread(remove, image_bytes, session=_rembg_session)
-    flattened = _flatten_on_bg(removed, (128, 128, 128))
-    out, bbox, extras = await _cutout_via_hybrid_sam(flattened, prompt)
+    with _stage(timings, stage):
+        removed = await asyncio.to_thread(matte, image_bytes)
+    with _stage(timings, "flatten"):
+        flattened = _flatten_on_bg(removed, (128, 128, 128))
+    clip = _alpha_bbox(removed) if clip_to_matte else None
+    out, bbox, extras = await _cutout_via_hybrid_sam(flattened, prompt, timings, clip)
     extras = extras or {}
-    extras["prebg"] = "gray"
+    extras["prebg"] = label
+    if clip is not None:
+        extras["matte_bbox"] = [round(v, 1) for v in clip]
     return out, bbox, extras
+
+
+def _rembg_matte(image_bytes: bytes) -> bytes:
+    return remove(image_bytes, session=_rembg())
+
+
+async def _cutout_via_hybrid_prebg(image_bytes: bytes, prompt: str, timings: dict):
+    return await _cutout_via_prebg(image_bytes, prompt, timings,
+                                   _rembg_matte, "rembg", "gray")
+
+
+async def _cutout_via_hybrid_prebg_vision(image_bytes: bytes, prompt: str, timings: dict):
+    """Same as the rembg prebg mode with Apple Vision producing the matte.
+
+    Vision costs 0.03 s against rembg's 12.55 s on the 17-image bench, and was
+    better on three of them and worse on none. It raises rather than falling
+    back, so a run of this mode is always a run of Vision.
+    """
+    return await _cutout_via_prebg(image_bytes, prompt, timings,
+                                   vision_matte.remove_background, "vision_matte", "vision",
+                                   clip_to_matte=True)
 
 
 def _apply_fullsize_mask(image_bytes: bytes, mask_png: bytes) -> bytes:
@@ -222,18 +331,53 @@ def _apply_fullsize_mask(image_bytes: bytes, mask_png: bytes) -> bytes:
     return buf.getvalue()
 
 
-async def _cutout_via_hybrid_sam(image_bytes: bytes, prompt: str):
+async def _cutout_via_hybrid_sam(image_bytes: bytes, prompt: str, timings: dict,
+                                 clip_bbox=None):
+    """Detector boxes -> SAM. `clip_bbox` bounds where the subject can be.
+
+    A box covering most of the frame tells SAM almost nothing, and on a prebg
+    image -- subject over one flat colour -- SAM then answers "the flat field"
+    with high confidence: on 06_parfait all three candidates came back as the
+    background, none overlapping the subject at all. Clipping the box to the
+    matte's extent fixed it (candidates went to 0.998 overlap). The flat colour
+    itself is not the trigger; grey, black, white and green all failed
+    identically, while the untouched photo with the same loose box was fine.
+    """
     dino_task = asyncio.to_thread(
+        _timed, timings, "dino",
         grounding_dino.detect_all_boxes, image_bytes, prompt, config.HYBRID_DINO_THRESHOLD
     )
     gemini_task = asyncio.to_thread(
+        _timed, timings, "gemini",
         bbox_detector.detect_bbox, image_bytes, prompt, config.BBOX_DETECTOR_MODEL
     )
-    dino_candidates, gemini_bbox = await asyncio.gather(
-        dino_task, gemini_task, return_exceptions=False
-    )
+    # The two detectors run concurrently, so dino + gemini exceeds detect_wall;
+    # detect_wall is the wall-clock cost this step actually adds.
+    #
+    # return_exceptions=True so one detector failing degrades to the other
+    # instead of killing the request: the dino-only / gemini-only branches
+    # below already handle a missing box, and a transient Vertex 429/500 used
+    # to 500 a cutout that GroundingDINO alone could have served.
+    with _stage(timings, "detect_wall"):
+        dino_candidates, gemini_bbox = await asyncio.gather(
+            dino_task, gemini_task, return_exceptions=True
+        )
+
+    dino_error = gemini_error = None
+    if isinstance(dino_candidates, BaseException):
+        dino_error = dino_candidates
+        dino_candidates = []
+        print(f"[hybrid] dino failed, falling back: {dino_error!r}")
+    if isinstance(gemini_bbox, BaseException):
+        gemini_error = gemini_bbox
+        gemini_bbox = None
+        print(f"[hybrid] gemini failed, falling back: {gemini_error!r}")
 
     if not dino_candidates and gemini_bbox is None:
+        # Both detectors down is an outage, not a miss -- surface the real
+        # error rather than a misleading "not found".
+        if dino_error is not None or gemini_error is not None:
+            raise dino_error or gemini_error
         raise _NotFound(f"hybrid_sam: '{prompt}' not found")
 
     if gemini_bbox is None:
@@ -254,24 +398,75 @@ async def _cutout_via_hybrid_sam(image_bytes: bytes, prompt: str):
             best = max((m for _b, _s, m in rated), default=0.0)
             used_path = f"gemini(best_iou={best:.2f})"
 
-    print(f"[hybrid] {used_path} bbox={chosen_bbox}")
+    clipped_to = None
+    if clip_bbox is not None:
+        tightened = _intersect(chosen_bbox, clip_bbox)
+        # No overlap means the detectors and the matte disagree completely;
+        # trust the detectors rather than hand SAM an empty box.
+        if tightened is not None and tightened != chosen_bbox:
+            clipped_to = chosen_bbox
+            chosen_bbox = tightened
+
+    print(f"[hybrid] {used_path} bbox={chosen_bbox}"
+          + (f" (clipped from {clipped_to})" if clipped_to else ""))
 
     bbox_pixels = _normalized_to_pixels(image_bytes, chosen_bbox)
-    mask_png = await asyncio.to_thread(sam_segmenter.segment_with_bbox, image_bytes, bbox_pixels)
-    out = _apply_fullsize_mask(image_bytes, mask_png)
+    with _stage(timings, "sam"):
+        mask_png = await asyncio.to_thread(
+            sam_segmenter.segment_with_bbox, image_bytes, bbox_pixels
+        )
+    with _stage(timings, "apply_mask"):
+        out = _apply_fullsize_mask(image_bytes, mask_png)
     extras = {
         "dino_bboxes": [list(b) for b, _s in dino_candidates],
         "dino_scores": [round(s, 3) for _b, s in dino_candidates],
         "gemini_bbox": list(gemini_bbox) if gemini_bbox else None,
         "chosen_path": used_path,
     }
+    if clipped_to is not None:
+        extras["bbox_before_matte_clip"] = list(clipped_to)
+    if dino_error is not None or gemini_error is not None:
+        extras["detector_errors"] = {
+            name: f"{type(err).__name__}: {str(err)[:200]}"
+            for name, err in (("dino", dino_error), ("gemini", gemini_error))
+            if err is not None
+        }
     return out, chosen_bbox, extras
 
 
 PROMPT_CUTOUT_MODES = {
     "hybrid_sam_union": _cutout_via_hybrid_sam,             # DINO candidates disambiguated by Gemini box (IoU + union) -> SAM
-    "hybrid_sam_prebg_gray": _cutout_via_hybrid_prebg,     # DEFAULT: rembg -> gray bg -> hybrid_sam_union
+    "hybrid_sam_prebg_gray": _cutout_via_hybrid_prebg,     # rembg -> gray bg -> hybrid_sam_union
+    "hybrid_sam_prebg_vision": _cutout_via_hybrid_prebg_vision,  # DEFAULT: as above, Apple Vision matte instead of rembg (macOS only)
 }
+
+# Whole-foreground modes, for a /cutout with no prompt. Unlike the prompted
+# modes these are not a dispatch table -- each is two lines inline in the
+# endpoint -- but naming the valid set here keeps a typo'd `mode` a 400 rather
+# than a silent rembg run, which is how it would read once the default is Vision.
+AUTO_CUTOUT_MODES = {"vision", "auto"}
+
+# Background removers for a generated sticker (/generate). Not a /cutout mode
+# set: this path has no prompt, no detector and no SAM, it is just the matte.
+#
+# "none" returns the sticker with its background still on. It is how a client
+# that runs Apple Vision itself -- the iOS app does, on the user's own device --
+# asks for the generated image and nothing else. Leaving the matte to the phone
+# costs the server a Vision call per image, and gives the app a failure it can
+# handle locally instead of a 503 that discards an image already paid for.
+STICKER_MATTE_MODES = {"vision", "rembg", "none"}
+
+# Modes that cannot run without the Vision helper. Named or defaulted to, they
+# raise when the helper is missing and answer 503; nothing downgrades them.
+#
+# There is deliberately no startup step-down to rembg. A machine that could not
+# build the helper would then serve rembg at 12-80 s per image while every log
+# line and response still looked normal -- the slowdown was the only symptom,
+# and nothing named it. Rolling back is a deliberate edit of the three config
+# defaults instead; see ROLLING BACK TO REMBG in config.py.
+VISION_PROMPT_CUTOUT_MODES = {"hybrid_sam_prebg_vision"}
+VISION_AUTO_CUTOUT_MODES = {"vision"}
+VISION_STICKER_MATTE_MODES = {"vision"}
 
 
 def _parse_hex(color: str) -> tuple[int, int, int, int]:
@@ -321,20 +516,52 @@ def _erode_alpha(png_bytes: bytes, radius: int) -> bytes:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global _rembg_session
     print("Connecting to Vertex AI (genai client)...")
     _get_client()
     print("Vertex AI client ready.")
-    print(f"Loading rembg session ({config.REMBG_MODEL})...")
-    _rembg_session = new_session(config.REMBG_MODEL)
-    print("rembg session ready.")
+    # rembg is no longer preloaded: nothing reaches it on the default paths, so
+    # see _rembg() for why it is built on first use instead.
     print("Loading SAM ONNX sessions...")
     sam_segmenter.preload()
     print("SAM ready.")
     print("Loading GroundingDINO...")
     grounding_dino.preload()
     print("GroundingDINO ready.")
-    yield
+    # Every cutout needs it. Starting it here keeps its ~1.4 s model load off the
+    # first request; failing to start it must still not stop the server booting,
+    # because /stylize, /describe and /border have nothing to do with the matte
+    # and taking them down too would turn one broken feature into four.
+    global _vision_ready
+    _vision_ready = False
+    error = None
+    if vision_matte.available():
+        try:
+            vision_matte.preload()
+            _vision_ready = True
+            print("Vision matte helper ready.")
+        except Exception as e:                      # noqa: BLE001 - reported below
+            error = e
+    else:
+        error = "not built for this machine"
+
+    if _vision_ready:
+        print(f"[cutout] prompted={config.DEFAULT_PROMPT_CUTOUT_MODE} "
+              f"auto={config.DEFAULT_AUTO_CUTOUT_MODE} "
+              f"sticker_matte={config.DEFAULT_STICKER_MATTE}")
+    else:
+        # Loud, because the service is Vision-only: there is no step-down to
+        # rembg, so this is not a slow mode, it is no cutout at all.
+        print(f"[cutout] !! VISION HELPER DOWN ({error}) -- every /cutout and "
+              f"every sticker /generate will answer 503 until it is back. "
+              f"Build it with: swiftc -O -parse-as-library "
+              f"vision_bench/vision_bench.swift -o vision_bench/vision_bench "
+              f"(macOS 15+). To serve rembg instead, see ROLLING BACK TO REMBG "
+              f"in config.py.")
+    try:
+        yield
+    finally:
+        # Otherwise the helper outlives the server -- see vision_matte.shutdown.
+        vision_matte.shutdown()
 
 
 app = FastAPI(title="MiraNote Image Generation", version="0.1.0", lifespan=lifespan)
@@ -347,10 +574,35 @@ app = FastAPI(title="MiraNote Image Generation", version="0.1.0", lifespan=lifes
 beta_auth.install(app)
 
 
+def _remove_sticker_bg(raw: bytes, matte: str) -> bytes:
+    """Cut a generated sticker out. Raises VisionMatteUnavailable on failure.
+
+    There is deliberately no fallback to rembg when Vision fails. The image is
+    already generated and paid for, so answering 503 throws that away over a
+    background rembg could still have removed -- but a matte the caller cannot
+    identify is worse than a failure they can retry, and a quietly-rembg'd
+    sticker was indistinguishable from a Vision one in the page it landed on.
+    The discarded generation is the accepted cost.
+
+    rembg still runs when the caller asks for it by name, and is one config
+    edit from being the default again (ROLLING BACK TO REMBG in config.py).
+    """
+    if matte == "vision":
+        cut = vision_matte.remove_background(raw)
+    else:
+        cut = remove(raw, session=_rembg())
+    # Eroding here rather than in the endpoint keeps all of the pixel work on
+    # the worker thread; it is off by default, but it is a full-image filter.
+    if config.REMBG_ERODE_RADIUS > 0:
+        cut = _erode_alpha(cut, config.REMBG_ERODE_RADIUS)
+    return cut
+
+
 class GenerateRequest(BaseModel):
     command: str        # "sticker" | "background"
     prompt: str = ""    # user-written prompt for sticker
     expand: bool = True   # if True, expand prompt via LLM before generation
+    matte: str = ""     # sticker background remover: "vision" (default) | "rembg" | "none"
 
 
 @app.post("/generate")
@@ -380,6 +632,18 @@ async def _generate(req: GenerateRequest):
         )
     expander_name, builder_name = spec
 
+    matte = req.matte or config.DEFAULT_STICKER_MATTE
+    mattable = config.REMOVE_BG and req.command == "sticker"
+    if mattable and matte not in STICKER_MATTE_MODES:
+        # Checked before generating: a typo should not cost an image call out
+        # of a bucket holding two a minute.
+        raise HTTPException(
+            status_code=400,
+            detail=f"unknown matte '{matte}'; valid: {sorted(STICKER_MATTE_MODES)}",
+        )
+    # Validated as a matte above, then honoured by not running one.
+    remove_bg = mattable and matte != "none"
+
     def _fresh_prompt() -> str:
         """Expand and dress the user's words. Called once normally, and once
         more if the first attempt draws a blank -- expansion is not
@@ -401,21 +665,27 @@ async def _generate(req: GenerateRequest):
     reprompt = _fresh_prompt if req.expand else None
     images = await asyncio.to_thread(_call_model, prompt, ratio, reprompt)
 
-    remove_bg = config.REMOVE_BG and req.command == "sticker"
     encoded = []
     for raw in images:
-        processed = (
-            await asyncio.to_thread(remove, raw, session=_rembg_session)
-            if remove_bg
-            else raw
-        )
-        if remove_bg and config.REMBG_ERODE_RADIUS > 0:
-            processed = await asyncio.to_thread(
-                _erode_alpha, processed, config.REMBG_ERODE_RADIUS
-            )
+        if remove_bg:
+            try:
+                # to_thread, not a bare call: background removal is pixel work
+                # off the event loop either way, and rembg (still reachable by
+                # name) is seconds of CPU per image.
+                processed = await asyncio.to_thread(_remove_sticker_bg, raw, matte)
+            except vision_matte.VisionMatteUnavailable as e:
+                raise HTTPException(status_code=503, detail=str(e))
+        else:
+            processed = raw
         encoded.append(base64.b64encode(processed).decode())
 
-    return {"command": req.command, "prompt": prompt, "raw_input": req.prompt, "images": encoded, "count": len(encoded)}
+    response = {"command": req.command, "prompt": prompt, "raw_input": req.prompt,
+                "images": encoded, "count": len(encoded)}
+    if mattable:
+        # Reported for "none" too, so a caller can tell "you asked me not to"
+        # from "this build does not matte stickers".
+        response["matte_used"] = matte
+    return response
 
 
 def _shrink_for_model(raw: bytes, max_side: int = 1536) -> bytes:
@@ -438,7 +708,12 @@ async def cutout_image(
     prompt: str = "",
     mode: str = "",
 ):
-    raw = _shrink_for_model(await file.read())
+    timings: dict = {}
+    request_start = time.perf_counter()
+    with _stage(timings, "read"):
+        uploaded = await file.read()
+    with _stage(timings, "shrink"):
+        raw = _shrink_for_model(uploaded)
 
     if prompt:
         chosen = mode or config.DEFAULT_PROMPT_CUTOUT_MODE
@@ -448,26 +723,52 @@ async def cutout_image(
                 detail=f"unknown mode '{chosen}'; valid: {list(PROMPT_CUTOUT_MODES)}",
             )
         try:
-            processed, bbox, extras = await PROMPT_CUTOUT_MODES[chosen](raw, prompt)
+            processed, bbox, extras = await PROMPT_CUTOUT_MODES[chosen](raw, prompt, timings)
             used = chosen
         except _NotFound as e:
             raise HTTPException(status_code=404, detail=str(e))
+        except vision_matte.VisionMatteUnavailable as e:
+            # A Vision mode never silently becomes a rembg one, so say what broke
+            # instead of letting a bare 500 look like a bug in the cutout itself.
+            raise HTTPException(status_code=503, detail=str(e))
+        with _stage(timings, "encode"):
+            encoded = base64.b64encode(processed).decode()
+        timings["total_server"] = round(time.perf_counter() - request_start, 3)
         response = {
-            "image": base64.b64encode(processed).decode(),
+            "image": encoded,
             "mode_used": used,
             "prompt": prompt,
             "bbox": bbox,
+            # Per-stage ms. Kept out of `extras` because read/shrink/encode
+            # happen here, outside the mode function that builds `extras`.
+            "timings": timings,
         }
         if extras:
             response.update(extras)
         return response
 
-    processed = await asyncio.to_thread(remove, raw, session=_rembg_session)
+    # No prompt: whole-foreground removal, Apple Vision by default and rembg
+    # under mode="auto". Same discipline as the prompted branch above -- every
+    # mode, defaulted to or named, is served or refused, never substituted.
+    chosen = mode or config.DEFAULT_AUTO_CUTOUT_MODE
+    if chosen not in AUTO_CUTOUT_MODES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"unknown mode '{chosen}'; valid without a prompt: "
+                   f"{sorted(AUTO_CUTOUT_MODES)}",
+        )
+    if chosen == "vision":
+        try:
+            processed = await asyncio.to_thread(vision_matte.remove_background, raw)
+        except vision_matte.VisionMatteUnavailable as e:
+            raise HTTPException(status_code=503, detail=str(e))
+    else:
+        processed = await asyncio.to_thread(_rembg_matte, raw)
     if config.REMBG_ERODE_RADIUS > 0:
         processed = _erode_alpha(processed, config.REMBG_ERODE_RADIUS)
     return {
         "image": base64.b64encode(processed).decode(),
-        "mode_used": "auto",
+        "mode_used": chosen,
     }
 
 
@@ -567,4 +868,13 @@ async def border_image(
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "model": config.MODEL_ID}
+    return {"status": "ok",
+            "model": config.MODEL_ID,
+            # Whether the Vision helper came up. Worth a health field precisely
+            # because nothing steps down: a false here means every cutout is
+            # answering 503, and the defaults beside it say what the server
+            # would be serving if it were true. start_backends.sh reads this.
+            "cutout": {"vision_ready": _vision_ready,
+                       "prompt_mode": config.DEFAULT_PROMPT_CUTOUT_MODE,
+                       "auto_mode": config.DEFAULT_AUTO_CUTOUT_MODE,
+                       "sticker_matte": config.DEFAULT_STICKER_MATTE}}

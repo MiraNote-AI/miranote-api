@@ -65,7 +65,6 @@ Two kinds of dependencies:
    and cutout run on-device. On FIRST startup the service downloads,
    via the Hugging Face hub, roughly 3-4 GB total:
 
-   - rembg `birefnet-general` (background removal)
    - SAM 2.1 Large (segmentation, runs on Apple `mps`)
    - GroundingDINO tiny (text-guided box detection)
 
@@ -73,6 +72,19 @@ Two kinds of dependencies:
    later boots load from the local cache in seconds. An `HF_TOKEN` env
    var is optional (higher rate limits only). There is nothing to
    install by hand.
+
+3. **Apple Vision (built, not downloaded)** -- every background removal
+   goes through `GenerateForegroundInstanceMaskRequest`, which has no
+   Python binding, so a small Swift helper runs beside the service.
+   **macOS 15+ only.** `scripts/start_backends.sh` compiles it; the
+   binary is a build artifact and is not in the repo.
+
+   Nothing falls back to rembg when it is missing -- every cutout
+   answers 503 instead, because a silent downgrade meant 12-80s per
+   image with no visible symptom. `GET :8002/health` reports
+   `cutout.vision_ready`; check it before trusting a healthy-looking
+   service. rembg is still installed and reachable by name, and
+   `poc/image-generation/config.py` documents the rollback.
 
    Requires Python 3.13 (torch >= 2.5): `brew install python@3.13`,
    then `/opt/homebrew/bin/python3.13 -m venv .venv`.

@@ -5,7 +5,7 @@ handler it blocks the event loop, freezing every other in-flight request
 including /health. These tests pin that it does not, and that concurrent
 generations are capped rather than allowed to saturate the machine.
 
-The rembg call is replaced with a sleep of the same shape: a synchronous,
+The matte call is replaced with a sleep of the same shape: a synchronous,
 GIL-releasing wait. That is what makes the difference between "blocks the
 loop" and "runs on a worker thread" observable without generating images.
 """
@@ -36,7 +36,13 @@ def _fake_call_model(prompt, aspect_ratio, reprompt=None):
 
 
 class _ConcurrencyProbe:
-    """A stand-in for rembg.remove that records how many run at once."""
+    """A stand-in for the sticker matte that records how many run at once.
+
+    It replaces _remove_sticker_bg rather than rembg.remove, so it stands for
+    whichever remover the config names -- Apple Vision today, rembg after a
+    rollback. Patching the remover itself would make this suite silently stop
+    measuring anything the moment the default moved.
+    """
 
     def __init__(self, seconds=BLOCKING_SECONDS):
         self.seconds = seconds
@@ -44,7 +50,7 @@ class _ConcurrencyProbe:
         self.active = 0
         self.max_active = 0
 
-    def __call__(self, raw, session=None):
+    def __call__(self, raw, matte=None):
         with self._lock:
             self.active += 1
             self.max_active = max(self.max_active, self.active)
@@ -99,7 +105,7 @@ class GenerateConcurrencyTests(unittest.IsolatedAsyncioTestCase):
         stamps: List[float] = []
         stop = asyncio.Event()
 
-        with mock.patch.object(main, "remove", probe), mock.patch.object(
+        with mock.patch.object(main, "_remove_sticker_bg", probe), mock.patch.object(
             main, "_call_model", _fake_call_model
         ):
             async with self._client() as client:
@@ -134,7 +140,7 @@ class GenerateConcurrencyTests(unittest.IsolatedAsyncioTestCase):
         """Three generations must overlap, not queue behind one another."""
         probe = _ConcurrencyProbe()
 
-        with mock.patch.object(main, "remove", probe), mock.patch.object(
+        with mock.patch.object(main, "_remove_sticker_bg", probe), mock.patch.object(
             main, "_call_model", _fake_call_model
         ):
             async with self._client() as client:
@@ -163,7 +169,7 @@ class GenerateConcurrencyTests(unittest.IsolatedAsyncioTestCase):
         probe = _ConcurrencyProbe(seconds=0.2)
         cap = main.GENERATE_CONCURRENCY
 
-        with mock.patch.object(main, "remove", probe), mock.patch.object(
+        with mock.patch.object(main, "_remove_sticker_bg", probe), mock.patch.object(
             main, "_call_model", _fake_call_model
         ):
             async with self._client() as client:

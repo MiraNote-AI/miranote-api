@@ -29,6 +29,29 @@ SERVICES=(
   "voice:voice-to-text:main:app:8005"
 )
 
+echo "== building the Apple Vision matte helper"
+# Every cutout goes through it, and nothing downgrades to rembg, so a missing
+# binary is not a slow server -- it is no cutout at all. It is a build artifact
+# (arm64 Mach-O), so it does not travel with a clone: build it whenever it is
+# absent or older than its source.
+VISION_DIR="$API_ROOT/poc/image-generation/vision_bench"
+VISION_BIN="$VISION_DIR/vision_bench"
+if [ "$(uname -s)" != "Darwin" ]; then
+  echo "   not macOS -- Apple Vision cannot run here; every /cutout will 503."
+  echo "   To serve rembg instead, see ROLLING BACK TO REMBG in poc/image-generation/config.py"
+elif ! command -v swiftc >/dev/null 2>&1; then
+  echo "   swiftc not found -- install Xcode command line tools (needs macOS 15+)"
+elif [ -x "$VISION_BIN" ] && [ "$VISION_BIN" -nt "$VISION_DIR/vision_bench.swift" ]; then
+  echo "   up to date"
+else
+  if (cd "$API_ROOT/poc/image-generation" \
+        && swiftc -O -parse-as-library vision_bench/vision_bench.swift -o vision_bench/vision_bench); then
+    echo "   built $VISION_BIN"
+  else
+    echo "   BUILD FAILED -- every /cutout will 503. vision_bench.swift needs macOS 15+."
+  fi
+fi
+
 echo "== stopping anything already on the beta ports"
 for spec in "${SERVICES[@]}"; do
   port="${spec##*:}"
@@ -94,6 +117,16 @@ for spec in "${SERVICES[@]}"; do
     echo "      bound to loopback; stop it before starting the tunnel"
   else
     echo "   $name: healthy on loopback only"
+  fi
+  # "healthy" is not enough for the image service: it serves /stylize, /describe
+  # and /border fine with the Vision helper down, while every cutout 503s.
+  if [ "$name" = "image" ]; then
+    if curl -s -m 2 "http://localhost:$port/health" | grep -q '"vision_ready":true'; then
+      echo "      cutout: Apple Vision ready"
+    else
+      echo "      cutout: !! VISION HELPER DOWN -- /cutout and sticker /generate will 503"
+      echo "      see $LOGS/image.log"
+    fi
   fi
 done
 
