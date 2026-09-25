@@ -33,7 +33,7 @@ class ModelPathTests(unittest.TestCase):
         with mock.patch.object(main, "_get_client", return_value=client), mock.patch.object(
             main.fallback, "image_parts", return_value=[b"png"]
         ):
-            main._call_model("a cat", "1:1")
+            main._call_model("a cat", "1:1", config.MODEL_ID)
 
         called = {c.kwargs.get("model") for c in client.models.generate_content.call_args_list}
         self.assertEqual(called, {config.MODEL_ID})
@@ -44,7 +44,7 @@ class ModelPathTests(unittest.TestCase):
         with mock.patch.object(main, "_get_client", return_value=client), mock.patch.object(
             main.fallback, "image_parts", return_value=[b"png"]
         ):
-            main._call_model("a cat", "1:1")
+            main._call_model("a cat", "1:1", config.MODEL_ID)
 
         client.models.generate_images.assert_not_called()
 
@@ -56,7 +56,7 @@ class ModelPathTests(unittest.TestCase):
         )
         with mock.patch.object(main, "_get_client", return_value=client):
             with self.assertRaises(Exception) as caught:
-                main._call_model("a cat", "1:1")
+                main._call_model("a cat", "1:1", config.MODEL_ID)
         self.assertIn("404", str(caught.exception))
 
     def test_nothing_can_disable_a_model_for_the_process(self):
@@ -72,7 +72,7 @@ class ModelPathTests(unittest.TestCase):
         client.models.generate_content.side_effect = Exception(RATE_LIMITED)
         with mock.patch.object(main, "_get_client", return_value=client):
             with self.assertRaises(HTTPException) as caught:
-                main._call_model("a cat", "1:1")
+                main._call_model("a cat", "1:1", config.MODEL_ID)
         self.assertEqual(caught.exception.status_code, 503)
 
 

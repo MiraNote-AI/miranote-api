@@ -1,18 +1,48 @@
 # MiraNote — Image Generation Service
 
-A FastAPI service that powers MiraNote's sticker / illustration features on top of
-Google Vertex AI (Imagen 4 + Gemini image models) plus local vision models
-(Apple Vision, SAM 2.1, GroundingDINO).
+A FastAPI service that powers MiraNote's sticker / illustration features on two
+clouds plus local vision models: `/generate` runs on Aliyun Bailian (DashScope),
+everything else on Google Vertex AI, and background removal and segmentation run
+on this machine (Apple Vision, SAM 2.1, GroundingDINO).
 
 It exposes four image pipelines behind one app:
 
 | Endpoint    | What it does                                            | Models used |
 |-------------|---------------------------------------------------------|-------------|
-| `/generate` | Text-to-image sticker & background generation           | Imagen 4 (`imagen-4.0-generate-001`), Gemini 2.5 Flash (prompt expansion), Apple Vision (background removal) |
+| `/generate` | Text-to-image sticker & background generation           | `z-image-turbo` (DashScope), `qwen-turbo` (prompt expansion), Apple Vision (background removal) |
 | `/cutout`   | Background removal + prompt-guided subject cutout        | Apple Vision, SAM 2.1, GroundingDINO, Gemini 2.5 Flash (bbox) |
 | `/stylize`  | Image-to-image style transfer                           | Gemini 2.5 Flash Image ("Nano Banana") |
 | `/border`   | Sticker outlines / AI decorative borders                | Pillow (`outline`), Gemini 2.5 Flash Image (`ai_outline`) |
-| `/health`   | Liveness check                                          | — |
+| `/describe` | One sentence about a photo, for page context             | `gemini-2.5-flash` (vision) |
+| `/health`   | Liveness check, and which models are in use             | — |
+
+## /generate runs on DashScope
+
+The image model is `z-image-turbo` and the prompt expander is `qwen-turbo`, both
+on Aliyun Bailian. It was the fastest and cheapest of six models on a 90-image
+comparison, at `IMAGE_PRICE_CNY` 0.10 per image.
+
+Three things to know:
+
+- **It needs `DASHSCOPE_API_KEY`** (see `.env.example`). This is the same key
+  `poc/voice-to-text` uses for transcript correction -- one account covers both.
+  Without it `/generate` answers 502 naming the variable; nothing else breaks.
+- **Vertex is still mandatory.** `/describe`, `/stylize`, `/border` and the bbox
+  detector inside a prompted `/cutout` all still call Gemini, so ADC and
+  `PROJECT_ID` are as required as before. This was not a de-Google-ing.
+- **The rollback is one environment variable.** `IMAGE_MODEL=<config.MODEL_ID>`
+  puts all three modes back on Gemini with no code change; `image_providers.py`
+  routes that id to `generate/gemini_image.py`, which is the pre-DashScope call
+  moved out of `main.py` unchanged. `GET /health` reports which model each mode
+  is actually using, so you can confirm the override took.
+
+`PROMPT_EXTEND` stays `False`, guarded by a unit test: DashScope's own prompt
+rewriting would discard what `qwen-turbo` just produced, and on `z-image-turbo`
+it is also the difference between 0.10 and 0.20 CNY an image.
+
+**A failure is a failure.** There is no fallback to a second image model -- that
+would make both the bill and the look of a page unpredictable. Out of credit
+answers 503; a content block or anything untriaged answers 502.
 
 ## Background removal runs on Apple Vision
 
@@ -51,9 +81,11 @@ asks `/generate` to skip the matte with `"matte": "none"`.
 ## Prerequisites
 
 - **Python 3.13**
+- A **DashScope (Aliyun Bailian) API key** for `/generate`.
 - A **Google Cloud project** with the **Vertex AI API** enabled and access to
-  the Gemini image models. `/generate` runs on `gemini-3.1-flash-lite-image`,
-  which is served only from the `global` endpoint.
+  the Gemini models, for everything else. The Gemini image id in `config.py` is
+  served only from the `global` endpoint, so `LOCATION` must be `global` even
+  though only a rollback calls it.
 - **Application Default Credentials (ADC)** configured locally:
   ```bash
   gcloud auth application-default login

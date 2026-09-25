@@ -2,27 +2,48 @@
 # Grouped by the pipeline that uses each setting; a shared section holds the
 # values used by more than one pipeline. Changing a value here changes behavior
 # for every pipeline listed above its section.
+import os
 
 # --------------------------------------------------------------------------- #
 # Shared across pipelines
 # --------------------------------------------------------------------------- #
-# /generate output. Two predecessors sat here: Imagen 4 until 2026-09-14, which
-# is enabled per project on Vertex and was enabled on none of ours, so every
-# process paid a 404 on its first request; then gemini-2.5-flash-image until
-# 2026-09-15, which answered but ignored the aspect ratio in the prompt and
-# returned 1024x1024 for every command, making each "background" a square.
-# This model honors it (9:16 measured as 768x1376) and returns a ~90 KB JPEG
-# rather than a ~900 KB PNG, which is most of the wall clock on a phone.
+# The Gemini image model, and the way back off DashScope.
+#
+# /generate no longer calls it by default -- see IMAGE_MODELS_BY_MODE below --
+# but this id stays because it is the rollback: IMAGE_MODEL=<this> restores the
+# pre-DashScope path with no code change, and image_providers.py routes it to
+# generate/gemini_image.py.
+#
+# History, kept because two of these were paid for: Imagen 4 until 2026-09-14,
+# enabled per project on Vertex and enabled on none of ours, so every process
+# paid a 404 on its first request; then gemini-2.5-flash-image until 2026-09-15,
+# which answered but ignored the aspect ratio in the prompt and returned
+# 1024x1024 for every command, making each "background" a square. This model
+# honors it (9:16 measured as 768x1376) and returns a ~90 KB JPEG rather than a
+# ~900 KB PNG.
 #
 # It answers only on the global endpoint: us-central1 returns 404 NOT_FOUND for
-# it, so LOCATION must be "global" (see .env.example). Every other model named
-# in this file was verified to answer there too.
+# it, so LOCATION must be "global" (see .env.example). Every other Gemini model
+# named in this file was verified to answer there too.
 #
 # Deliberately NOT the same id as STYLE_MODEL / BORDER_MODEL. Vertex meters
-# image generation as 1/min/{project}/{base_model}, so keeping /generate on its
-# own model gives it a quota bucket that /stylize and /border cannot drain.
+# image generation as 1/min/{project}/{base_model}, so a rollback of /generate
+# lands in its own quota bucket rather than draining /stylize and /border.
 MODEL_ID = "gemini-3.1-flash-lite-image"
-PROMPT_EXPANDER_MODEL = "gemini-2.5-flash"  # prompt expansion: /generate + /describe
+
+# /generate prompt expansion. A text-only job, so a text-only model is enough.
+# Moved to qwen-turbo with the image models: on the 90-image bench it produced
+# expansions of the same shape and length as gemini-2.5-flash at 1/14th the cost
+# and half the latency. It is about 1% of what a /generate call costs either way
+# -- the money is in the image.
+PROMPT_EXPANDER_MODEL = "qwen-turbo"
+
+# /describe is a VISION call -- it sends image bytes -- so this model must
+# accept images. It is deliberately NOT PROMPT_EXPANDER_MODEL: the two shared
+# one constant until this change, and pointing that constant at qwen-turbo (text
+# only) would have broken /describe silently, which poc/chatbot depends on for
+# canvas mode.
+DESCRIBE_MODEL = "gemini-2.5-flash"
 
 # /describe default: one sentence about a photo, for the app's page
 # context. Every ImageRef.summary the app has ever stored was written
@@ -57,6 +78,9 @@ REMBG_ERODE_RADIUS = 0  # pixels to erode alpha edge inward; 0 to disable. /gene
 # with no other traffic, while a lone call succeeded in 3.6s immediately after.
 # The app's picker renders whatever count comes back, so this turns "pick one of
 # two" into "keep it or discard it" rather than breaking anything.
+# Left at 1 through the move to DashScope. The Vertex quota that forced it here
+# no longer applies, but DashScope's own concurrency limits have not been
+# measured, and this is not the change to find them with. Raising it is one line.
 NUMBER_OF_IMAGES = 1
 ASPECT_RATIOS = {
     "sticker":    "1:1",
@@ -64,6 +88,116 @@ ASPECT_RATIOS = {
     "art":        "1:1",
 }
 REMOVE_BG = True  # set to False to skip background removal for testing
+
+# --------------------------------------------------------------------------- #
+# /generate  --  image providers
+#
+# /generate runs on DashScope (Aliyun Bailian) as of this change. Vertex is
+# still required by /describe, /stylize and /border, so this is not a
+# Google-free service -- ADC and PROJECT_ID are still mandatory.
+# --------------------------------------------------------------------------- #
+DASHSCOPE_BASE_URL = os.getenv("DASHSCOPE_BASE_URL",
+                               "https://dashscope.aliyuncs.com/api/v1")  # Beijing
+
+# The DashScope text-to-image models, and the request shape each one answers on.
+# Two shapes, because the platform genuinely has two endpoints:
+#   mm_sync    multimodal-generation/generation -- answers immediately
+#   t2i_async  text2image/image-synthesis -- returns a task id to poll
+# Shapes are documented in generate/dashscope_image.py. Availability is
+# region-dependent and the vendor docs disagree about which endpoint the older
+# wan models still answer on, so treat an id here as "was verified once", not
+# "is guaranteed".
+IMAGE_MODELS = {
+    "z-image-turbo":     {"provider": "dashscope", "shape": "mm_sync"},
+    "qwen-image-3.0":    {"provider": "dashscope", "shape": "mm_sync"},
+    "wan2.2-t2i-flash":  {"provider": "dashscope", "shape": "t2i_async"},
+    "wanx2.0-t2i-turbo": {"provider": "dashscope", "shape": "t2i_async"},
+}
+
+# Every model is asked for the same pixel budget, so a side-by-side review does
+# not read "bigger" as "better". DashScope has a real `size` parameter, unlike
+# Nano Banana which took the aspect ratio in prose and ignored it.
+TARGET_SIZES = {"1:1": (1024, 1024), "9:16": (720, 1280)}
+
+
+def size_for(model: str, aspect_ratio: str) -> tuple[int, int]:
+    """The (width, height) to request from `model` for this aspect ratio."""
+    return TARGET_SIZES[aspect_ratio]
+
+
+# List prices per image, checked on the date below. Re-check it when you touch
+# these: a stale cost column reads as authoritative whether or not it is.
+#   help.aliyun.com/zh/model-studio/model-pricing
+#   ai.google.dev/gemini-api/docs/pricing
+PRICES_CHECKED = "2026-09-05"
+USD_TO_CNY = 7.1
+
+# Per image, in CNY. Only the DashScope models are here.
+#
+# MODEL_ID is deliberately absent: nobody has looked up what
+# gemini-3.1-flash-lite-image costs, and a guessed number in a price table is
+# worse than a gap, because a cost column reads as authoritative either way.
+# Fill it in before using this table to argue about the rollback.
+IMAGE_PRICE_CNY = {
+    # 0.10 only because PROMPT_EXTEND is False; it is 0.20 with rewriting on.
+    "z-image-turbo":     0.10,
+    "qwen-image-3.0":    0.20,
+    "wan2.2-t2i-flash":  0.14,
+    "wanx2.0-t2i-turbo": 0.04,
+}
+
+# (input, output) CNY per 1M tokens, for the two text models. The Gemini row is
+# converted from $0.30 / $2.50 at the rate above, so it is an estimate; the qwen
+# row is a Bailian list price.
+TEXT_PRICE_CNY_PER_MTOK = {
+    "qwen-turbo":       (0.30, 0.60),
+    "gemini-2.5-flash": (0.30 * USD_TO_CNY, 2.50 * USD_TO_CNY),
+}
+
+# DashScope will rewrite the prompt for you if allowed. Off for two reasons:
+# it would undo the expansion PROMPT_EXPANDER_MODEL just produced, and on
+# z-image-turbo it is also the difference between 0.10 and 0.20 CNY per image --
+# turning this on doubles the /generate bill. A unit test guards it.
+PROMPT_EXTEND = False
+
+POLL_INTERVAL = 2.0    # seconds between task-status polls on the async shape
+IMAGE_TIMEOUT = 180.0  # per-image ceiling, including polling and download
+
+# Which model generates each /generate mode. One entry per mode rather than one
+# global constant, because the 90-image bench says these three will not stay
+# equal: z-image-turbo was the fastest and cheapest of six everywhere, but it
+# was also the weakest at following decorative and spatial instructions, which
+# only background asks for (it flattened "film border", "trees in four corners"
+# and "travel route" into plain gradients where wan2.2-t2i-flash drew them).
+# Shaped like ASPECT_RATIOS above, so switching one mode later is this one line.
+IMAGE_MODELS_BY_MODE = {
+    "sticker":    "z-image-turbo",
+    "background": "z-image-turbo",   # candidate to revisit: wan2.2-t2i-flash
+    "art":        "z-image-turbo",
+}
+
+# One model for every mode, for walking a ladder by restarting the server
+# instead of editing this file mid-experiment. Accepts any key of IMAGE_MODELS
+# plus MODEL_ID, which is also the rollback:
+#   IMAGE_MODEL=gemini-3.1-flash-lite-image
+# restores the pre-DashScope path for all three modes.
+_image_model_override = os.getenv("IMAGE_MODEL", "").strip()
+if _image_model_override:
+    IMAGE_MODELS_BY_MODE = {mode: _image_model_override
+                            for mode in IMAGE_MODELS_BY_MODE}
+
+# Fail at import, not on the first paid call.
+_KNOWN_IMAGE_MODELS = set(IMAGE_MODELS) | {MODEL_ID}
+for _mode, _model in IMAGE_MODELS_BY_MODE.items():
+    if _model not in _KNOWN_IMAGE_MODELS:
+        raise ValueError(f"IMAGE_MODELS_BY_MODE[{_mode!r}]={_model!r} is not one "
+                         f"of {sorted(_KNOWN_IMAGE_MODELS)}")
+# A mode present in one dict and missing from the other would either 500 on that
+# command or silently generate at the wrong aspect ratio, so the two are
+# required to describe the same set of modes.
+if set(IMAGE_MODELS_BY_MODE) != set(ASPECT_RATIOS):
+    raise ValueError(f"IMAGE_MODELS_BY_MODE covers {sorted(IMAGE_MODELS_BY_MODE)} "
+                     f"but ASPECT_RATIOS covers {sorted(ASPECT_RATIOS)}")
 
 # Which background remover a generated sticker goes through. On the 12-image
 # sticker bench (test_output/sticker_matte/) Vision was 94.6x faster --

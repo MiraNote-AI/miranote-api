@@ -31,7 +31,7 @@ SAMPLE_INTERVAL = 0.005
 SETTLE = 0.05
 
 
-def _fake_call_model(prompt, aspect_ratio, reprompt=None):
+def _fake_call_model(prompt, aspect_ratio, model, reprompt=None):
     return [b"first-image", b"second-image"]
 
 
@@ -194,7 +194,7 @@ class GenerateConcurrencyTests(unittest.IsolatedAsyncioTestCase):
         """A failed generation must not leak its slot."""
         cap = main.GENERATE_CONCURRENCY
 
-        def explode(prompt, aspect_ratio, reprompt=None):
+        def explode(prompt, aspect_ratio, model, reprompt=None):
             raise RuntimeError("vertex is down")
 
         with mock.patch.object(main, "_call_model", explode):

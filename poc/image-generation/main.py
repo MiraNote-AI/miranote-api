@@ -22,7 +22,8 @@ import beta_auth
 
 import config
 from shared.vertex_client import _get_client
-from generate import fallback, prompt_expander, generate_presets
+from generate import fallback, prompt_expander, generate_presets, image_providers
+from generate.http_client import ProviderError
 from cutout import bbox_detector, sam_segmenter, grounding_dino, vision_matte
 from stylize import stylizer, style_presets
 from border import border, border_presets
@@ -77,15 +78,84 @@ def _quota_exhausted(model: str, error: Exception) -> HTTPException:
     return HTTPException(status_code=503, detail=QUOTA_DETAIL)
 
 
-def _call_model(prompt: str, aspect_ratio: str, reprompt=None) -> list[bytes]:
-    """Generate NUMBER_OF_IMAGES images.
+# How a DashScope failure maps onto the three outcomes above. Gemini reports all
+# of this in the response object (fallback.is_safety_refusal and friends);
+# DashScope has no equivalent, so the only signal is the error text.
+#
+# Both lists hold ONLY codes that have actually been observed. Guessing more in
+# would mean a wrong status for a failure nobody has seen, which is worse than
+# the generic path -- so anything unmatched propagates as a 502 carrying the
+# provider's own words.
+_DASHSCOPE_QUOTA_MARKERS = (
+    "Arrearage",      # account out of credit. Seen 2026-09-11: all three modes
+                      # answered 400 Arrearage at once, mid-benchmark.
+    "429",            # survived http_client's four backoff attempts
+)
+_DASHSCOPE_REFUSAL_MARKERS = (
+    "DataInspectionFailed",   # content filter, on the request or the output
+)
+
+
+def _classify_provider_error(error: Exception) -> str:
+    """"quota" | "refused" | "unknown" for a ProviderError."""
+    text = str(error)
+    if any(marker in text for marker in _DASHSCOPE_QUOTA_MARKERS):
+        return "quota"
+    if any(marker in text for marker in _DASHSCOPE_REFUSAL_MARKERS):
+        return "refused"
+    return "unknown"
+
+
+def _one_image(model: str, prompt: str, aspect_ratio: str) -> tuple[bytes | None, bool]:
+    """One image from one call: (image, refused).
+
+    Split out of _call_model so the retry loop around it is identical on both
+    providers. The Gemini branch is the pre-DashScope code verbatim, which is
+    what makes IMAGE_MODEL=<config.MODEL_ID> a real rollback rather than an
+    untested one.
+
+    Raises HTTPException(503) when the provider says the budget is gone, and
+    lets anything it cannot classify propagate to _call_model.
+    """
+    if model == config.MODEL_ID:
+        response = _get_client().models.generate_content(
+            model=model,
+            contents=fallback.build_prompt(prompt, aspect_ratio),
+        )
+        parts = fallback.image_parts(response)
+        if parts:
+            return parts[0], False
+        print(f"[generate] empty response from {model}: "
+              f"{fallback.empty_reason(response)}")
+        return None, fallback.is_safety_refusal(response)
+
+    try:
+        images = image_providers.generate(model, prompt, aspect_ratio, 1)
+    except ProviderError as error:
+        outcome = _classify_provider_error(error)
+        if outcome == "quota":
+            raise _quota_exhausted(model, error)
+        if outcome == "refused":
+            print(f"[generate] {model} refused the prompt: {str(error)[:200]}")
+            return None, True
+        raise
+    if images:
+        return images[0], False
+    # A 200 that carried no image. Distinct from every branch above: it is the
+    # one failure worth another attempt, so it comes back as "empty".
+    print(f"[generate] {model} answered with no image")
+    return None, False
+
+
+def _call_model(prompt: str, aspect_ratio: str, model: str,
+                reprompt=None) -> list[bytes]:
+    """Generate NUMBER_OF_IMAGES images with `model`.
 
     `reprompt`, when given, produces a fresh prompt for a retry. /generate
     passes the expander so the second attempt does not send the string that
     just drew a blank; it passes None when the caller asked for no expansion,
     because then there is nothing to vary.
     """
-    client = _get_client()
 
     def _next_prompt(previous: str) -> str:
         """A fresh prompt for the retry, or the previous one if that fails.
@@ -107,28 +177,21 @@ def _call_model(prompt: str, aspect_ratio: str, reprompt=None) -> list[bytes]:
         """(image, refused). Refused is carried alongside because an empty
         answer is only a failure once every call has come back empty.
 
-        A blank gets one more attempt; a refusal gets none. Vertex allows two
-        image calls a minute per model, so the second call is expensive enough
-        that it is only worth spending where it can succeed: NO_IMAGE and the
-        other ordinary endings can produce a picture on a second try, while a
+        A blank gets one more attempt; a refusal gets none. An image call is
+        expensive enough that the second one is only worth spending where it can
+        succeed: an empty answer can produce a picture on a second try, while a
         refusal buys another refusal (#78). Bounded at one extra attempt --
         NUMBER_OF_IMAGES = 1 left a single blank with nothing to hide behind,
-        and the point is to cover that, not to grind against the quota.
+        and the point is to cover that, not to grind against the provider.
         """
         current = prompt
         for attempt in range(1 + EMPTY_RESPONSE_RETRIES):
             if attempt:
                 current = _next_prompt(current)
-            response = client.models.generate_content(
-                model=config.MODEL_ID,
-                contents=fallback.build_prompt(current, aspect_ratio),
-            )
-            parts = fallback.image_parts(response)
-            if parts:
-                return parts[0], False
-            print(f"[generate] empty response from {config.MODEL_ID} "
-                  f"(attempt {attempt + 1}): {fallback.empty_reason(response)}")
-            if fallback.is_safety_refusal(response):
+            image, refused = _one_image(model, current, aspect_ratio)
+            if image:
+                return image, False
+            if refused:
                 return None, True
         return None, False
 
@@ -137,9 +200,18 @@ def _call_model(prompt: str, aspect_ratio: str, reprompt=None) -> list[bytes]:
     try:
         with ThreadPoolExecutor(max_workers=config.NUMBER_OF_IMAGES) as pool:
             results = list(pool.map(lambda _: _one(), range(config.NUMBER_OF_IMAGES)))
+    except HTTPException:
+        # _one_image already chose the status (503 for a spent budget). Re-raising
+        # it unchanged matters: the branches below would relabel it 502, and the
+        # app keys its message off the status code alone.
+        raise
+    except ProviderError as error:
+        # Anything _classify_provider_error could not place. The provider's own
+        # words go in the detail because nobody has triaged this shape yet.
+        raise HTTPException(status_code=502, detail=f"{model}: {error}")
     except Exception as error:
         if fallback.is_rate_limited(error):
-            raise _quota_exhausted(config.MODEL_ID, error)
+            raise _quota_exhausted(model, error)
         raise
     images = [image for image, _ in results if image]
     if not images:
@@ -661,9 +733,10 @@ async def _generate(req: GenerateRequest):
 
     prompt = await asyncio.to_thread(_fresh_prompt)
     ratio = config.ASPECT_RATIOS.get(req.command, "1:1")
+    model = config.IMAGE_MODELS_BY_MODE[req.command]
     # Nothing to vary when the caller asked for no expansion.
     reprompt = _fresh_prompt if req.expand else None
-    images = await asyncio.to_thread(_call_model, prompt, ratio, reprompt)
+    images = await asyncio.to_thread(_call_model, prompt, ratio, model, reprompt)
 
     encoded = []
     for raw in images:
@@ -811,7 +884,9 @@ async def describe_image(file: UploadFile, prompt: str = None):
     def _describe() -> str:
         from google.genai import types
         response = _get_client().models.generate_content(
-            model=config.PROMPT_EXPANDER_MODEL,
+            # Not PROMPT_EXPANDER_MODEL: this call sends image bytes, and that
+            # constant now names a text-only model. See config.DESCRIBE_MODEL.
+            model=config.DESCRIBE_MODEL,
             contents=[
                 types.Part.from_bytes(data=raw, mime_type=file.content_type or "image/png"),
                 question,
@@ -869,7 +944,14 @@ async def border_image(
 @app.get("/health")
 async def health():
     return {"status": "ok",
-            "model": config.MODEL_ID,
+            # Per mode, not one `model` key. That key used to name the single
+            # /generate model; now MODEL_ID is only the rollback target, so
+            # reporting it would name a model the service never calls -- worse
+            # than reporting none. `image_models` is also how you confirm an
+            # IMAGE_MODEL override actually took effect.
+            "image_models": config.IMAGE_MODELS_BY_MODE,
+            "prompt_expander": config.PROMPT_EXPANDER_MODEL,
+            "describe": config.DESCRIBE_MODEL,
             # Whether the Vision helper came up. Worth a health field precisely
             # because nothing steps down: a false here means every cutout is
             # answering 503, and the defaults beside it say what the server

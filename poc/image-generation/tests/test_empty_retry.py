@@ -54,7 +54,7 @@ def _client(*responses):
 
 def _call(client):
     with mock.patch.object(main, "_get_client", return_value=client):
-        return main._call_model("a cat", "1:1")
+        return main._call_model("a cat", "1:1", config.MODEL_ID)
 
 
 class EmptyResponseRetryTests(unittest.TestCase):
@@ -98,7 +98,7 @@ class EmptyResponseRetryTests(unittest.TestCase):
         client.models.generate_content.side_effect = Exception(RATE_LIMITED)
         with mock.patch.object(main, "_get_client", return_value=client):
             with self.assertRaises(HTTPException) as caught:
-                main._call_model("a cat", "1:1")
+                main._call_model("a cat", "1:1", config.MODEL_ID)
         self.assertEqual(caught.exception.status_code, 503)
         self.assertLessEqual(
             client.models.generate_content.call_count, config.NUMBER_OF_IMAGES
@@ -113,7 +113,7 @@ class EmptyResponseRetryTests(unittest.TestCase):
         ]
         with mock.patch.object(main, "_get_client", return_value=client):
             with self.assertRaises(HTTPException) as caught:
-                main._call_model("a cat", "1:1")
+                main._call_model("a cat", "1:1", config.MODEL_ID)
         self.assertEqual(caught.exception.status_code, 503)
 
 
