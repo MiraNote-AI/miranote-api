@@ -63,8 +63,15 @@ def detect_bbox(image_bytes: bytes, target: str, model: str) -> Optional[tuple[f
             types.Part.from_bytes(data=image_bytes, mime_type=mime),
             prompt,
         ],
-        # temperature=0 + fixed seed makes the bbox stable across runs;
-        # the default (~1.0) samples a different box each call.
+        # Asks for a stable box; does not guarantee one. Measured 2026-09-26:
+        # with these exact settings and identical bytes, four calls to
+        # gemini-2.5-flash returned three different boxes, and varied the JSON
+        # schema between {"box":..}, {"box_2d":..} and {"x_min":..} across them.
+        # gemini-3.1-flash-lite (the current default) returned one box in the
+        # requested schema on all four. So this config narrows the sampling, and
+        # how much it actually buys is a property of the model, not of the flag
+        # -- do not build an A/B on the assumption that one call is the model's
+        # answer. Evidence: test_output/bbox_model_ab/20260926_134013/
         config=types.GenerateContentConfig(temperature=0, seed=0),
     )
     raw = response.text or ""

@@ -987,4 +987,10 @@ async def health():
             "cutout": {"vision_ready": _vision_ready,
                        "prompt_mode": config.DEFAULT_PROMPT_CUTOUT_MODE,
                        "auto_mode": config.DEFAULT_AUTO_CUTOUT_MODE,
-                       "sticker_matte": config.DEFAULT_STICKER_MATTE}}
+                       "sticker_matte": config.DEFAULT_STICKER_MATTE,
+                       # Reported for the same reason as image_models and
+                       # stylize: a BBOX_DETECTOR_MODEL override is otherwise
+                       # invisible from outside the process, and an A/B between
+                       # detectors is worthless if you cannot prove which one
+                       # the arm actually ran.
+                       "bbox_detector": config.BBOX_DETECTOR_MODEL}}

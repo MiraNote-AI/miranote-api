@@ -1,0 +1,96 @@
+"""The bbox detector reads the model it is given, and reads its answer honestly.
+
+This path had no test at all until the detector model moved off
+gemini-2.5-flash, which is a poor combination: main.py degrades to dino-only
+whenever the detector returns nothing, so a detector that silently stopped
+working would keep serving cutouts and no test would notice.
+
+Two things are pinned here. That the endpoint calls the CONFIGURED model rather
+than a hardcoded one -- the reason BBOX_DETECTOR_MODEL exists is to make an A/B
+a restart instead of an edit, and that is worthless if the value is not the one
+used. And that _parse treats a malformed answer as "no box" rather than
+crashing or inventing one: gemini-2.5-flash was observed answering
+'{"box": [199, 13, [969, 572]}' on a real image, and the three response schemas
+below were all seen from the same model on the same bytes.
+"""
+
+from __future__ import annotations
+
+import os
+import unittest
+from unittest import mock
+
+import config
+from cutout import bbox_detector
+
+os.environ["BETA_TOKENS"] = "test-token"
+
+
+def _response(text: str):
+    return mock.Mock(text=text)
+
+
+class ConfiguredModelTests(unittest.TestCase):
+    def test_the_model_argument_is_the_one_called(self):
+        client = mock.Mock()
+        client.models.generate_content.return_value = _response('{"box": [1, 2, 3, 4]}')
+        with mock.patch.object(bbox_detector, "_get_client", return_value=client):
+            bbox_detector.detect_bbox(b"\x89PNG_bytes", "a cat", "some-model-id")
+        self.assertEqual(
+            client.models.generate_content.call_args.kwargs["model"], "some-model-id"
+        )
+
+    def test_the_default_is_a_vision_model_not_an_image_one(self):
+        """A detector reads an image and writes JSON. Pointing this at an
+        "-image" id would ask a model that draws to answer in text, which is
+        how PROMPT_EXPANDER_MODEL nearly broke /describe (see config.py)."""
+        self.assertFalse(config.BBOX_DETECTOR_MODEL.endswith("-image"))
+
+    def test_the_env_var_overrides_the_default(self):
+        """The ladder switch: an A/B arm is a restart, not an edit to config.py."""
+        import importlib
+        with mock.patch.dict(os.environ, {"BBOX_DETECTOR_MODEL": "gemini-2.5-flash"}):
+            reloaded = importlib.reload(config)
+            self.assertEqual(reloaded.BBOX_DETECTOR_MODEL, "gemini-2.5-flash")
+        importlib.reload(config)   # leave the module as the rest of the suite expects
+
+
+class ParseTests(unittest.TestCase):
+    def test_every_schema_the_models_actually_emit_is_read(self):
+        """All three were observed from gemini-2.5-flash on identical bytes."""
+        for raw in ('{"box": [100, 200, 300, 400]}',
+                    '{"box_2d": [100, 200, 300, 400]}',
+                    '{"y_min": 100, "x_min": 200, "y_max": 300, "x_max": 400}'):
+            with self.subTest(raw=raw):
+                self.assertEqual(bbox_detector._parse(raw), (100.0, 200.0, 300.0, 400.0))
+
+    def test_a_fenced_answer_is_read(self):
+        self.assertEqual(
+            bbox_detector._parse('```json\n{"box": [1, 2, 3, 4]}\n```'),
+            (1.0, 2.0, 3.0, 4.0),
+        )
+
+    def test_malformed_json_is_no_box_rather_than_a_crash(self):
+        """Observed verbatim from gemini-2.5-flash: a stray nested bracket."""
+        self.assertIsNone(bbox_detector._parse('{"box": [199, 13, [969, 572]}'))
+
+    def test_the_documented_not_visible_answer_is_no_box(self):
+        self.assertIsNone(bbox_detector._parse("{}"))
+
+    def test_an_inverted_or_out_of_range_box_is_rejected(self):
+        """A box SAM cannot use must not reach it: main._normalized_to_pixels
+        would happily turn either of these into a negative-width crop."""
+        self.assertIsNone(bbox_detector._parse('{"box": [300, 200, 100, 400]}'))
+        self.assertIsNone(bbox_detector._parse('{"box": [0, 0, 1200, 400]}'))
+
+    def test_prose_around_the_json_is_no_box(self):
+        """A reasoning model that narrates before answering degrades the
+        pipeline to dino-only. Pinned so a future model swap that starts
+        narrating is caught here rather than in the cutouts."""
+        self.assertIsNone(
+            bbox_detector._parse("Sure! Here is the box you asked for: [1,2,3,4]")
+        )
+
+
+if __name__ == "__main__":
+    unittest.main()

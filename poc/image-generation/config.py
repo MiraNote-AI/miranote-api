@@ -297,8 +297,43 @@ VISION_MATTE_BIN = "vision_bench/vision_bench"
 # hit by a hang, never by a slow image.
 VISION_MATTE_TIMEOUT = 30
 
-# Gemini bbox detector (hybrid disambiguator)
-BBOX_DETECTOR_MODEL = "gemini-2.5-flash"
+# Gemini bbox detector (hybrid disambiguator), for a /cutout with a prompt.
+#
+# This is a vision-in / text-out call -- it reads an image and answers with JSON
+# -- so it is NOT restricted to the ids that can draw. The image-capable Gemini
+# models stop at 3.1; a detector may go past that.
+#
+# Moved off gemini-2.5-flash on the date below. What decided it was not accuracy
+# -- on a 5-image A/B the final cutouts were pixel-identical on 3, better on 1
+# and worse on 1 -- but RELIABILITY OF THE ANSWER. Given the same bytes and the
+# same temperature=0/seed=0, four calls to 2.5 returned three different boxes and
+# varied the JSON schema between {"box":..}, {"box_2d":..} and {"x_min":..}; one
+# call answered with malformed JSON outright. 3.1-flash-lite returned one box,
+# in the requested schema, every time. It is also about 25% faster on the
+# detector call (median 2190 ms -> 1644 ms).
+#
+# An unreadable answer is not loud: _parse returns None and main.py degrades to
+# dino-only, serving a quieter cutout with nothing in the response to say the
+# disambiguator dropped out.
+#
+# The one regression was 06_parfait, where 3.1-lite boxed the glass and left the
+# dessert above the rim outside it -- a literal reading of "the strawberry
+# parfait glass". 2.5 covered it only by returning a frame-spanning box that
+# GroundingDINO rejected and the matte clip rescued. Suspected to be the system
+# prompt in cutout/bbox_detector.py rather than the model; not yet retested.
+# Evidence: test_output/bbox_model_ab/20260926_134013/ (REVIEW.md, contact_sheet.png)
+#
+# BBOX_DETECTOR_MODEL=gemini-2.5-flash is the rollback.
+BBOX_DETECTOR_MODEL = "gemini-3.1-flash-lite"
+BBOX_DETECTOR_CHECKED = "2026-09-26"   # date the id above was last seen answering
+
+# Same ladder switch as IMAGE_MODEL and STYLE_MODEL above: point the bbox
+# detector at another model by restarting the server rather than editing this
+# line between runs, which is how a comparison ends up labelled with the wrong
+# model. /health reports the value in effect.
+_bbox_detector_override = os.getenv("BBOX_DETECTOR_MODEL", "").strip()
+if _bbox_detector_override:
+    BBOX_DETECTOR_MODEL = _bbox_detector_override
 
 # SAM 2.1 segmenter
 SAM2_CHECKPOINT_URL = "https://dl.fbaipublicfiles.com/segment_anything_2/092824/sam2.1_hiera_large.pt"
