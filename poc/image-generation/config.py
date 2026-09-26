@@ -214,8 +214,40 @@ DEFAULT_STICKER_MATTE = "vision"       # Apple Vision foreground matte ("rembg" 
 # --------------------------------------------------------------------------- #
 # /stylize  (image-to-image style transfer)
 # --------------------------------------------------------------------------- #
-STYLE_MODEL = "gemini-2.5-flash-image"  # Nano Banana image-to-image; verify GA/preview id on Vertex
+# Image-to-image for /stylize, which the app reaches from "Ask AI" on a photo
+# and from "Edit sticker".
+#
+# Deliberately NOT the same id as BORDER_MODEL, for the same reason MODEL_ID is
+# not: Vertex meters image generation at 1/min/{project}/{base_model}, so two
+# pipelines sharing an id share a bucket and starve each other. They were both
+# on gemini-2.5-flash-image until /generate moved off Vertex and left this id's
+# bucket empty. A test pins them apart -- "tidying" them back together would
+# silently halve the rate either one can sustain.
+STYLE_MODEL = "gemini-3.1-flash-lite-image"
 STYLE_TEMPERATURE = 0  # default for /stylize; lower = more faithful to the original photo
+
+# Same ladder switch as IMAGE_MODEL above: point /stylize at another model by
+# restarting the server rather than editing this file mid-experiment (an edit
+# between runs is how a comparison ends up labelled with the wrong model).
+# STYLE_MODEL=gemini-2.5-flash-image is the rollback.
+_style_model_override = os.getenv("STYLE_MODEL", "").strip()
+if _style_model_override:
+    STYLE_MODEL = _style_model_override
+
+# CNY per /stylize call, for the two ids this endpoint can be pointed at. Also
+# fills the gap IMAGE_PRICE_CNY still has: nobody had looked up what
+# gemini-3.1-flash-lite-image costs, and both pipelines can now cite it.
+#
+# Neither figure comes from Google. The pricing page truncated when fetched, so
+# 2.5 is this repo's own conversion (1290 tokens at 30 USD/1M) and 3.1-lite is
+# third-party aggregators. Re-check both against Google's page before quoting
+# them in an argument -- an unverified number in a cost table still reads as
+# authoritative.
+STYLE_PRICES_CHECKED = "2026-09-25"
+STYLE_PRICE_CNY = {
+    "gemini-2.5-flash-image":      0.039 * USD_TO_CNY,   # repo conversion
+    "gemini-3.1-flash-lite-image": 0.0336 * USD_TO_CNY,  # third-party
+}
 
 # --------------------------------------------------------------------------- #
 # /cutout  (background removal + prompt-guided cutout)
@@ -290,7 +322,15 @@ HYBRID_IOU_THRESHOLD = 0.5  # min IoU for a DINO box to be accepted over the Gem
 # --------------------------------------------------------------------------- #
 # /border  (sticker frames / borders)
 # --------------------------------------------------------------------------- #
-BORDER_MODEL = "gemini-2.5-flash-image"  # ai_outline: Nano Banana img2img; same model as STYLE_MODEL (verified available)
+# ai_outline only. The other /border mode (outline) is pure Pillow and calls
+# nothing, and the app only ever asks for that one -- ImageStudio.swift sends
+# mode=outline and "ai_outline" appears nowhere in the iOS repo. So this model
+# is not on any path a user reaches today.
+#
+# Left on 2.5 while STYLE_MODEL moved to 3.1: the two ids must differ to keep
+# separate Vertex quota buckets (see STYLE_MODEL), and there is nothing to gain
+# from re-verifying a model for a pipeline nobody calls.
+BORDER_MODEL = "gemini-2.5-flash-image"  # Nano Banana img2img
 BORDER_TEMPERATURE = 1.0  # ai_outline; higher = more creative decoration
 BORDER_WIDTH = 12  # outline: default stroke width (px)
 BORDER_COLOR = "#FFFFFF"  # outline: default stroke color

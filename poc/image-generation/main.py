@@ -952,6 +952,10 @@ async def health():
             "image_models": config.IMAGE_MODELS_BY_MODE,
             "prompt_expander": config.PROMPT_EXPANDER_MODEL,
             "describe": config.DESCRIBE_MODEL,
+            # Reported for the same reason as image_models: a STYLE_MODEL
+            # override is otherwise invisible from outside the process.
+            "stylize": config.STYLE_MODEL,
+            "border": config.BORDER_MODEL,
             # Whether the Vision helper came up. Worth a health field precisely
             # because nothing steps down: a false here means every cutout is
             # answering 503, and the defaults beside it say what the server

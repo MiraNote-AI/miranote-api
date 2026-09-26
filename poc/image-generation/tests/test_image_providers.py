@@ -5,11 +5,13 @@ the DashScope request shapes actually differ and where a copy-paste between them
 produce a plausible-looking wrong call. No network, no keys.
 """
 
+import inspect
 import unittest
 from unittest import mock
 
 import config
 from generate import dashscope_image, dashscope_text, image_providers
+from stylize import stylizer
 from generate.http_client import ProviderError
 
 
@@ -76,6 +78,22 @@ class ProductionWiringTests(unittest.TestCase):
         # On z-image-turbo this is the difference between 0.10 and 0.20 CNY an
         # image, and it would also discard the expansion model's output.
         self.assertFalse(config.PROMPT_EXTEND)
+
+    def test_stylize_and_border_do_not_share_a_quota_bucket(self):
+        # Vertex meters image generation at 1/min/{project}/{base_model}, so two
+        # pipelines on one id share one bucket and starve each other. They were
+        # both on gemini-2.5-flash-image until /generate left Vertex and freed
+        # this id. Making them equal again would halve the rate either can
+        # sustain, and nothing would fail loudly enough to notice.
+        self.assertNotEqual(config.STYLE_MODEL, config.BORDER_MODEL)
+
+    def test_stylize_sends_text_and_image_modalities(self):
+        # Gemini 3.x image models reject an IMAGE-only request. STYLE_MODEL is a
+        # 3.x id, so dropping TEXT here -- it looks redundant, /stylize wants an
+        # image -- breaks every restyle on the first call. border.py has carried
+        # the same pair since it first called a 3.x model.
+        source = inspect.getsource(stylizer.stylize)
+        self.assertIn('response_modalities=["TEXT", "IMAGE"]', source)
 
 
 class DashScopeRequestTests(unittest.TestCase):

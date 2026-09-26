@@ -1,9 +1,14 @@
 """
-Image-to-image style transfer via Gemini 2.5 Flash Image (Nano Banana).
+Image-to-image style transfer via a Gemini image model (config.STYLE_MODEL).
 
 Unlike the other Gemini calls in this package (which read response.text), the
 image model returns the result as an inline image part, so we pull the bytes out
 of the response via vertex_client._extract_image_bytes and normalize them to PNG.
+
+Normalising to PNG changes the container, not the content: a model that answers
+with JPEG has already discarded any alpha, and re-encoding gives an opaque PNG.
+That matters for the "Edit sticker" path, whose input is a transparent cutout --
+it is why that path runs the result back through /cutout afterwards.
 """
 
 import io
@@ -29,7 +34,13 @@ def stylize(image_bytes: bytes, instruction: str, model: str, temperature: float
             instruction,
         ],
         config=types.GenerateContentConfig(
-            response_modalities=["IMAGE"],
+            # TEXT as well as IMAGE: Gemini 3.x image models expect both and
+            # reject an IMAGE-only request. border.py has carried this since it
+            # first called a 3.x model; this path only needed it once
+            # STYLE_MODEL moved off 2.5. _extract_image_bytes drops any text
+            # part and returns the inline image, so the return value is
+            # unchanged on either generation of the model.
+            response_modalities=["TEXT", "IMAGE"],
             temperature=temperature,
             seed=0,
         ),
