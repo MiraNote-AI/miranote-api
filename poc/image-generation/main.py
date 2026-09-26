@@ -304,6 +304,24 @@ def _intersect(a: tuple[float, float, float, float], b: tuple[float, float, floa
     return (y_min, x_min, y_max, x_max)
 
 
+def _is_transparent(image_bytes: bytes) -> bool:
+    """Whether an image actually has see-through pixels.
+
+    Not "does it have an alpha band": a fully opaque RGBA PNG has one and is
+    still a photo. The app stores every image under a .png name -- including
+    photos, whose bytes are JPEG from PhotoTreatments.downscaled() -- so the
+    filename says nothing and the band alone would misread the day that
+    encoding changes. What /stylize needs to know is whether anything is
+    see-through, so that is what this asks.
+    """
+    image = Image.open(io.BytesIO(image_bytes))
+    if image.mode == "P":
+        image = image.convert("RGBA")
+    if "A" not in image.getbands():
+        return False
+    return image.getchannel("A").getextrema()[0] < 255
+
+
 def _alpha_bbox(rgba_png_bytes: bytes):
     """Tight box around a matte's opaque pixels, normalised to 0-1000.
 
@@ -854,7 +872,13 @@ async def stylize_image(
 ):
     raw = _shrink_for_model(await file.read())
     try:
-        instruction = style_presets.build_instruction(style=style, prompt=prompt)
+        # Transparency is how a sticker announces itself. The app never tells us
+        # which it sent, and it does not have to: a photo is opaque, a sticker is
+        # a cutout. Asking a photo for a flat backdrop would replace the scene
+        # the user wanted edited, so this must not fire on one.
+        instruction = style_presets.build_instruction(
+            style=style, prompt=prompt,
+            cut_out_afterwards=_is_transparent(raw))
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 

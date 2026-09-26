@@ -52,6 +52,40 @@ _INSTRUCTION = (
     "Do not add any text, watermark, signature, or border."
 )
 
+# Appended when the caller is going to cut the result out again -- which, in
+# practice, means the input was a sticker.
+#
+# This is the request generate/sticker_suffix.txt has been making on the
+# CREATION side all along, and it is the whole reason a generated sticker cuts
+# out cleanly while an edited one did not. Left to itself the model draws a
+# sticker on white, which is also the colour of the die-cut edge the sticker
+# carries, and the matte that has to find that edge has only a faint drop shadow
+# to go on. Measured over five stickers, the edge came back 0-1% saturated
+# against 49-57% for the alternative -- flattening the input onto a colour of
+# our own, which tints every semi-transparent edge pixel.
+#
+# Two wordings here are deliberate:
+#
+#   "edge", not "border". _INSTRUCTION already says "Do not add any text,
+#   watermark, signature, or border", and a second sentence using that word
+#   would contradict the first -- the exact defect that started this whole
+#   investigation.
+#
+#   "keep", not "add", and only "if the subject already has" one. A sticker
+#   without a die-cut edge must not be given one.
+#
+# The second sentence earns its place: without it the painterly sticker of the
+# five came back as bare artwork with the edge gone.
+#   poc/image-generation/test_output/stylize_model_bg/20260926_073455/
+_SOLID_BACKGROUND = (
+    " Place the result on a solid flat single-colour background. That colour "
+    "must not appear anywhere in the subject itself and must contrast strongly "
+    "with the subject's palette, so the background can be removed cleanly "
+    "afterwards."
+    " If the subject already has a white die-cut edge around its outline, keep "
+    "that edge."
+)
+
 STYLE_PRESETS = {
     "impressionist": (
         "an impressionist oil painting with visible loose brushstrokes, soft "
@@ -72,10 +106,16 @@ STYLE_PRESETS = {
 }
 
 
-def build_instruction(style: str = "", prompt: str = "") -> str:
+def build_instruction(style: str = "", prompt: str = "",
+                      cut_out_afterwards: bool = False) -> str:
     """Return the full instruction for a preset key or a custom prompt.
 
     The two take different wrappers; see the module docstring for why.
+
+    `cut_out_afterwards` says the caller will matte the result -- the sticker
+    path -- and adds the backdrop request that makes that matte possible. It is
+    off by default because a photo must not be asked for a flat backdrop: that
+    would replace the scene the user wanted edited.
 
     Raises ValueError if neither is usable so the endpoint can map it to a 400.
     """
@@ -86,5 +126,6 @@ def build_instruction(style: str = "", prompt: str = "") -> str:
             )
         return _SKELETON.format(style=STYLE_PRESETS[style])
     if prompt:
-        return _INSTRUCTION.format(instruction=prompt)
+        sent = _INSTRUCTION.format(instruction=prompt)
+        return sent + _SOLID_BACKGROUND if cut_out_afterwards else sent
     raise ValueError("either 'style' (preset key) or 'prompt' (custom) is required")
