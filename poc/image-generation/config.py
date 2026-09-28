@@ -316,12 +316,22 @@ VISION_MATTE_TIMEOUT = 30
 # dino-only, serving a quieter cutout with nothing in the response to say the
 # disambiguator dropped out.
 #
-# The one regression was 06_parfait, where 3.1-lite boxed the glass and left the
-# dessert above the rim outside it -- a literal reading of "the strawberry
-# parfait glass". 2.5 covered it only by returning a frame-spanning box that
-# GroundingDINO rejected and the matte clip rescued. Suspected to be the system
-# prompt in cutout/bbox_detector.py rather than the model; not yet retested.
-# Evidence: test_output/bbox_model_ab/20260926_134013/ (REVIEW.md, contact_sheet.png)
+# It was retested over all 17 cases on 2026-09-28. 17/17 answer 200 and 16/17
+# take the healthy dino+union path. The one regression that A/B found --
+# 06_parfait, where 3.1-lite boxed the glass and left the dessert above the rim
+# outside it -- was the system prompt, not the model, and is fixed: the
+# whole-object clause in cutout/bbox_detector.py restored 73% more of that
+# subject while leaving the other 16 cutouts pixel-identical.
+#
+# 08_noodle_soup still comes back as a bare bowl rim. That one is NOT the
+# detector: the box handed to SAM differs from the 2.5 run by about 5%
+# ([152, 51, 995, 941] against [111, 0, 1000, 941]) and SAM returns a third as
+# many pixels, so it is SAM's sensitivity on that image. Both arms were sampled
+# once, and 2.5's box is not reproducible, so which model "passes" 08 is not
+# established. Tracked separately, out of scope here.
+#
+# Evidence: test_output/bbox_model_ab/20260926_134013/ (the A/B),
+# test_output/bbox_17_newprompt/ (all 17 on the shipped configuration)
 #
 # BBOX_DETECTOR_MODEL=gemini-2.5-flash is the rollback.
 BBOX_DETECTOR_MODEL = "gemini-3.1-flash-lite"

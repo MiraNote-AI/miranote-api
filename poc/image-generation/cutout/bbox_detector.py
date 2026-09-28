@@ -13,6 +13,10 @@ Given the image and a target description, return the bounding box of the request
 
 Rules:
 - Return ONLY a JSON object: {"box": [y_min, x_min, y_max, x_max]} with values normalized to 0-1000.
+- Box the WHOLE thing the target names, including whatever is served in it, piled
+  on it, or held by it. When the target names a container -- "the parfait glass",
+  "the bowl of noodle soup" -- the box must also cover its contents, including
+  any part that rises above the rim or hangs over the edge.
 - If multiple instances of the target exist, return only the LARGEST one (by area).
 - If the target object is NOT visible in the image, return exactly: {}
 - No commentary, no markdown fences, no extra text.

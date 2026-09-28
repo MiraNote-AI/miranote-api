@@ -55,6 +55,47 @@ class ConfiguredModelTests(unittest.TestCase):
         importlib.reload(config)   # leave the module as the rest of the suite expects
 
 
+class SystemPromptTests(unittest.TestCase):
+    """The detector's instructions, pinned where getting them wrong is silent.
+
+    A prompt defect does not raise: it returns a plausible box for the wrong
+    extent, the cutout comes back truncated, and the request still answers 200.
+    That is how "the strawberry parfait glass" lost its strawberries -- the
+    model boxed the glass, correctly reading an instruction that only said
+    "the requested object".
+
+    These pin the clauses, not the model's behaviour. No unit test can promise
+    a model obeys; what they buy is that nobody removes a clause while tidying
+    without the removal showing up here. Measured effect of the whole-object
+    clause over the 17-case set: 06_parfait +73% of its subject back, the other
+    16 cutouts pixel-identical.
+    """
+
+    def test_the_whole_object_clause_is_present(self):
+        prompt = bbox_detector._SYSTEM_PROMPT.lower()
+        self.assertIn("whole", prompt)
+        self.assertIn("contents", prompt)
+
+    def test_the_largest_instance_rule_survives_alongside_it(self):
+        """The two rules are about different things -- which instance to pick
+        vs how much of it to cover -- and the second was added later. A reader
+        could mistake them for duplicates and drop one."""
+        self.assertIn("LARGEST", bbox_detector._SYSTEM_PROMPT)
+
+    def test_the_not_visible_escape_hatch_survives(self):
+        """Without it the model invents a box for an absent target, and
+        main.py has no way to answer 404."""
+        self.assertIn("{}", bbox_detector._SYSTEM_PROMPT)
+
+    def test_the_target_placeholder_is_still_substituted(self):
+        """An unsubstituted {{TARGET}} would ask every image the same
+        question and still parse cleanly, which is the silent kind of wrong."""
+        self.assertIn("{{TARGET}}", bbox_detector._SYSTEM_PROMPT)
+        built = bbox_detector._SYSTEM_PROMPT.replace("{{TARGET}}", "a cat")
+        self.assertNotIn("{{TARGET}}", built)
+        self.assertIn("a cat", built)
+
+
 class ParseTests(unittest.TestCase):
     def test_every_schema_the_models_actually_emit_is_read(self):
         """All three were observed from gemini-2.5-flash on identical bytes."""
