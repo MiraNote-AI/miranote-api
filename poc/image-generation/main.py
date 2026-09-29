@@ -23,7 +23,8 @@ import beta_auth
 
 import config
 from shared.vertex_client import _get_client
-from generate import fallback, prompt_expander, generate_presets, image_providers
+from generate import (fallback, prompt_expander, generate_presets,
+                      image_providers, dashscope_text)
 from generate.http_client import ProviderError
 from cutout import bbox_detector, sam_segmenter, grounding_dino, vision_matte
 from stylize import stylizer, style_presets
@@ -245,6 +246,25 @@ _vision_ready = False
 # That is the shape the voice service was broken in for weeks (#73). One cheap
 # call at boot is what turns it into something a person can see.
 _bbox_detector_error = None
+
+# Same for DashScope: None until probed, the error text, or "" for ok. A third
+# value matters here -- "unused" -- because the documented rollback
+# (IMAGE_MODEL=<config.MODEL_ID>) puts /generate back on Vertex, and warning
+# about a credential that path never reads would be noise.
+_dashscope_error = None
+
+
+def _dashscope_is_configured() -> bool:
+    """Whether anything this process will actually call lives on DashScope.
+
+    Two independent users: the image models, and the prompt expander. Either
+    one alone makes the credential required, and the rollback to Gemini only
+    moves the first -- PROMPT_EXPANDER_MODEL stays on qwen unless it is changed
+    too, which is why this asks about both rather than about IMAGE_MODEL.
+    """
+    if any(m in config.IMAGE_MODELS for m in config.IMAGE_MODELS_BY_MODE.values()):
+        return True
+    return config.PROMPT_EXPANDER_MODEL.lower().startswith("qwen")
 
 
 def _rembg():
@@ -685,6 +705,37 @@ async def lifespan(app: FastAPI):
               f"answer 200, but with GroundingDINO alone and no disambiguation. "
               f"Check the model id and that Vertex is reachable.")
 
+    # /generate runs on DashScope, and http_client.api_key() only looks at the
+    # environment when a request is already in flight. Without this a host that
+    # forgot the key boots clean, answers /health 200 and reports its image
+    # models, then 502s every /generate -- and the app says "AI server is not
+    # running", which is false. Exactly the shape the voice service was broken
+    # in for weeks (#73) before #77 gave it a startup check.
+    #
+    # A real round trip, not a presence check, for the reason _check_llm states
+    # in voice-to-text: what matters is whether this key works for this base
+    # URL and this model. It also catches a revoked key and an account in
+    # arrears, which a presence check cannot and which has really happened.
+    global _dashscope_error
+    if not _dashscope_is_configured():
+        _dashscope_error = "unused"
+        print("[generate] DashScope not in use (Gemini rollback); "
+              "DASHSCOPE_API_KEY not required.")
+    else:
+        try:
+            await asyncio.to_thread(dashscope_text.complete, "ping",
+                                    config.PROMPT_EXPANDER_MODEL)
+            _dashscope_error = ""
+            print(f"[generate] DashScope ready "
+                  f"({config.PROMPT_EXPANDER_MODEL}, "
+                  f"{config.DASHSCOPE_BASE_URL}).")
+        except Exception as e:                      # noqa: BLE001 - reported below
+            _dashscope_error = f"{type(e).__name__}: {str(e)[:200]}"
+            print(f"[generate] !! DASHSCOPE NOT WORKING: {_dashscope_error} -- "
+                  f"every /generate will answer 502 and the app will say the "
+                  f"AI server is not running, which will not be true. Check "
+                  f"DASHSCOPE_API_KEY in this host's .env (see .env.example).")
+
     try:
         yield
     finally:
@@ -1013,6 +1064,12 @@ async def health():
             # IMAGE_MODEL override actually took effect.
             "image_models": config.IMAGE_MODELS_BY_MODE,
             "prompt_expander": config.PROMPT_EXPANDER_MODEL,
+            # "" once DashScope answered at boot, "unused" on the Gemini
+            # rollback, the error text otherwise. Worth a field for the same
+            # reason as cutout.bbox_detector_error: the failure it names does
+            # not stop the server or show up anywhere else until a user hits
+            # /generate.
+            "dashscope_error": _dashscope_error,
             "describe": config.DESCRIBE_MODEL,
             # Reported for the same reason as image_models: a STYLE_MODEL
             # override is otherwise invisible from outside the process.
