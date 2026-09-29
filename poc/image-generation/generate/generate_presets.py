@@ -22,7 +22,12 @@ def build_sticker_prompt(core: str) -> str:
 
 
 def build_background_prompt(core: str) -> str:
-    """Append the fixed background rule to the (expanded or raw) user prompt."""
+    """Append the fixed background rule to the (expanded or raw) user prompt.
+
+    The rule deliberately forbids no border, margin or rounded corners. Saying
+    so is what produced them -- see BackgroundRuleTests in
+    tests/test_generate_presets.py for the measurement and the evidence.
+    """
     return core + _BACKGROUND_RULE
 
 
