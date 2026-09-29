@@ -7,6 +7,34 @@ import os
 # --------------------------------------------------------------------------- #
 # Shared across pipelines
 # --------------------------------------------------------------------------- #
+# GEMINI MODEL LAUNCH STAGE, checked 2026-09-29.
+#
+# Vertex encodes the stage in the id: preview and experimental models carry
+# "-preview" or "-exp" (the catalogue for this project returns
+# gemini-2.5-flash-preview-04-17, gemini-2.5-pro-exp-03-25,
+# gemini-3.1-flash-image-preview, gemini-3.1-pro-preview and others). None of
+# the four ids this file uses carries either marker, and all four resolve
+# through models.get():
+#
+#   gemini-3.1-flash-lite         BBOX_DETECTOR_MODEL
+#   gemini-2.5-flash              DESCRIBE_MODEL
+#   gemini-3.1-flash-lite-image   MODEL_ID, STYLE_MODEL
+#   gemini-2.5-flash-image        BORDER_MODEL
+#
+# What that does and does not establish: the naming convention is Google's own
+# and it is consistent across the 27 models this project can see, so the
+# absence of a marker is real evidence. It is NOT a published GA declaration --
+# the SDK exposes only name and version, with no launch-stage field, so a
+# documentation page is the only authoritative source and it was not reachable
+# from here. Treat these as "not marked preview" rather than "confirmed GA",
+# and re-check before relying on a deprecation window.
+#
+# Note gemini-2.5-flash-image is absent from models.list() while models.get()
+# resolves it, so that listing is not exhaustive and absence from it means
+# nothing on its own.
+#
+# This replaces the "# verify GA/preview id on Vertex" note that lived on
+# origin/dev's STYLE_MODEL line and was dropped when that block was rewritten.
 # The Gemini image model, and the way back off DashScope.
 #
 # /generate no longer calls it by default -- see IMAGE_MODELS_BY_MODE below --

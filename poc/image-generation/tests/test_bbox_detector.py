@@ -21,6 +21,8 @@ import unittest
 from unittest import mock
 
 import config
+import inspect
+import main
 from cutout import bbox_detector
 
 os.environ["BETA_TOKENS"] = "test-token"
@@ -131,6 +133,55 @@ class ParseTests(unittest.TestCase):
         self.assertIsNone(
             bbox_detector._parse("Sure! Here is the box you asked for: [1,2,3,4]")
         )
+
+
+
+class StartupProbeTests(unittest.TestCase):
+    """The detector is probed at boot, and a failure is loud but not fatal.
+
+    Without the probe a mistyped or retired model id costs nothing visible: the
+    gather in _cutout_via_hybrid_sam takes return_exceptions=True, so the
+    request still answers 200 with chosen_path="dino-only" and /health stays
+    green. The pipeline really is designed to degrade rather than fail -- what
+    was missing is any way to notice it had. Same silent shape the voice
+    service was broken in for weeks before it got a startup check.
+
+    Not fatal on purpose: /stylize, /describe and /border never touch the
+    detector, and taking four endpoints down over one of them is the mistake
+    the Vision helper block beside it already avoids.
+    """
+
+    def test_lifespan_probes_the_detector(self):
+        source = inspect.getsource(main.lifespan)
+        self.assertIn("detect_bbox", source,
+                      "startup must actually call the detector, not just "
+                      "report a flag nobody set")
+        self.assertIn("config.BBOX_DETECTOR_MODEL", source,
+                      "the probe must use the configured model, or it proves "
+                      "nothing about what requests will use")
+
+    def test_a_failed_probe_does_not_stop_the_server(self):
+        source = inspect.getsource(main.lifespan)
+        probe = source[source.index("global _bbox_detector_error"):]
+        self.assertIn("except Exception", probe)
+        self.assertNotIn("raise", probe.split("yield")[0],
+                         "a detector failure must not prevent startup -- three "
+                         "endpoints do not use the detector at all")
+
+    def test_a_failed_probe_is_loud(self):
+        self.assertIn("BBOX DETECTOR DOWN", inspect.getsource(main.lifespan),
+                      "the whole point is that somebody can see it happened")
+
+    def test_health_reports_the_probe_result(self):
+        self.assertIn("bbox_detector_error", inspect.getsource(main.health),
+                      "the log line scrolls away; /health is how you check "
+                      "later, and how a deploy script could check at all")
+
+    def test_the_probe_image_is_tracked_not_gitignored(self):
+        """test_input/ is gitignored, so probing from it would crash a fresh
+        clone at boot. demo_data/ travels with the repo."""
+        self.assertTrue(main._PROBE_IMAGE.exists(), main._PROBE_IMAGE)
+        self.assertIn("demo_data", str(main._PROBE_IMAGE))
 
 
 if __name__ == "__main__":

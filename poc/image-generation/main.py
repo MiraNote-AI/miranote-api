@@ -12,6 +12,7 @@ import io
 import time
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager, contextmanager
+from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, UploadFile
 from PIL import Image, ImageFilter
@@ -221,6 +222,11 @@ def _call_model(prompt: str, aspect_ratio: str, model: str,
     return images
 
 
+# The startup probe's image. demo_data/ is tracked, unlike test_input/, so the
+# probe works on a fresh clone. Any photo with a subject does; the probe checks
+# that the model answers at all, not what it answers.
+_PROBE_IMAGE = Path(__file__).parent / "demo_data" / "17.jpeg"
+
 _rembg_session = None
 
 # Whether the Vision helper came up. Nothing branches on it -- the defaults are
@@ -228,6 +234,17 @@ _rembg_session = None
 # which is the only cheap way to tell "Vision is serving every cutout" from
 # "every cutout is 503ing" from outside the process.
 _vision_ready = False
+
+# Whether the bbox detector answered at startup: None until probed, then the
+# error text, or "" for ok. Nothing branches on it either, for a different and
+# worse reason: a detector that stops answering does not fail the request, it
+# quietly removes the disambiguation step. _cutout_via_hybrid_sam gathers the
+# two detectors with return_exceptions=True, so a dead Gemini becomes
+# chosen_path="dino-only" and a 200, with /health still green.
+#
+# That is the shape the voice service was broken in for weeks (#73). One cheap
+# call at boot is what turns it into something a person can see.
+_bbox_detector_error = None
 
 
 def _rembg():
@@ -647,6 +664,27 @@ async def lifespan(app: FastAPI):
               f"vision_bench/vision_bench.swift -o vision_bench/vision_bench "
               f"(macOS 15+). To serve rembg instead, see ROLLING BACK TO REMBG "
               f"in config.py.")
+    # The prompted /cutout disambiguates GroundingDINO's candidates with this
+    # model. It is deliberately not fatal: the pipeline really does degrade to
+    # dino-only rather than failing, and /stylize, /describe and /border do not
+    # use the detector at all. What is NOT acceptable is that happening
+    # silently, which is all this probe fixes.
+    global _bbox_detector_error
+    try:
+        await asyncio.to_thread(
+            bbox_detector.detect_bbox,
+            Path(_PROBE_IMAGE).read_bytes(), "a subject",
+            config.BBOX_DETECTOR_MODEL,
+        )
+        _bbox_detector_error = ""
+        print(f"[cutout] bbox detector ready ({config.BBOX_DETECTOR_MODEL}).")
+    except Exception as e:                          # noqa: BLE001 - reported below
+        _bbox_detector_error = f"{type(e).__name__}: {str(e)[:200]}"
+        print(f"[cutout] !! BBOX DETECTOR DOWN ({config.BBOX_DETECTOR_MODEL}): "
+              f"{_bbox_detector_error} -- every prompted /cutout will still "
+              f"answer 200, but with GroundingDINO alone and no disambiguation. "
+              f"Check the model id and that Vertex is reachable.")
+
     try:
         yield
     finally:
@@ -993,4 +1031,9 @@ async def health():
                        # invisible from outside the process, and an A/B between
                        # detectors is worthless if you cannot prove which one
                        # the arm actually ran.
-                       "bbox_detector": config.BBOX_DETECTOR_MODEL}}
+                       "bbox_detector": config.BBOX_DETECTOR_MODEL,
+                       # "" once the detector answered at boot, the error text
+                       # if it did not, null if the probe never ran. Worth a
+                       # field because a dead detector does not fail requests --
+                       # it silently drops the disambiguation step.
+                       "bbox_detector_error": _bbox_detector_error}}
