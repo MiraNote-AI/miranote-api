@@ -24,6 +24,7 @@ from google.genai.types import FinishReason
 
 import config
 import main
+from tests.gemini_path import serving_gemini
 
 os.environ.setdefault("BETA_TOKENS", "test-token")
 
@@ -60,7 +61,7 @@ class CallModelRepromptTests(unittest.TestCase):
     def test_the_retry_sends_what_the_reprompt_produced(self):
         client = _client(_empty(), _image())
         with mock.patch.object(main, "_get_client", return_value=client):
-            main._call_model("first prompt", "1:1", reprompt=lambda: "second prompt")
+            main._call_model("first prompt", "1:1", config.MODEL_ID, reprompt=lambda: "second prompt")
         sent = _prompts_sent(client)
         self.assertIn("first prompt", sent[0])
         self.assertIn("second prompt", sent[1])
@@ -70,7 +71,7 @@ class CallModelRepromptTests(unittest.TestCase):
         """expand=false has nothing to vary; behaviour there is unchanged."""
         client = _client(_empty(), _image())
         with mock.patch.object(main, "_get_client", return_value=client):
-            main._call_model("only prompt", "1:1", reprompt=None)
+            main._call_model("only prompt", "1:1", config.MODEL_ID, reprompt=None)
         sent = _prompts_sent(client)
         self.assertIn("only prompt", sent[0])
         self.assertIn("only prompt", sent[1])
@@ -81,14 +82,14 @@ class CallModelRepromptTests(unittest.TestCase):
         client = _client(_empty(FinishReason.IMAGE_SAFETY), _image())
         with mock.patch.object(main, "_get_client", return_value=client):
             with self.assertRaises(HTTPException):
-                main._call_model("p", "1:1", reprompt=lambda: calls.append(1) or "unused")
+                main._call_model("p", "1:1", config.MODEL_ID, reprompt=lambda: calls.append(1) or "unused")
         self.assertEqual(calls, [], "a refusal triggered a re-expansion")
 
     def test_a_first_attempt_that_works_never_reaches_the_reprompt(self):
         calls = []
         client = _client(_image())
         with mock.patch.object(main, "_get_client", return_value=client):
-            main._call_model("p", "1:1", reprompt=lambda: calls.append(1) or "unused")
+            main._call_model("p", "1:1", config.MODEL_ID, reprompt=lambda: calls.append(1) or "unused")
         self.assertEqual(calls, [])
 
     def test_a_failing_reprompt_does_not_cost_the_retry(self):
@@ -98,7 +99,7 @@ class CallModelRepromptTests(unittest.TestCase):
 
         client = _client(_empty(), _image(b"recovered"))
         with mock.patch.object(main, "_get_client", return_value=client):
-            result = main._call_model("original", "1:1", reprompt=_boom)
+            result = main._call_model("original", "1:1", config.MODEL_ID, reprompt=_boom)
         self.assertEqual(result, [b"recovered"] * config.NUMBER_OF_IMAGES)
         self.assertIn("original", _prompts_sent(client)[1])
 
@@ -107,7 +108,8 @@ class GenerateWiresTheRepromptTests(unittest.IsolatedAsyncioTestCase):
     """_call_model accepting a reprompt is worth nothing if /generate omits it."""
 
     async def _post(self, client_stub, *, expand):
-        with mock.patch.object(main, "_get_client", return_value=client_stub):
+        with serving_gemini(), \
+                mock.patch.object(main, "_get_client", return_value=client_stub):
             async with httpx.AsyncClient(
                 transport=httpx.ASGITransport(app=main.app),
                 base_url="http://probe",

@@ -6,3 +6,7 @@ __pycache__/
 *.pyc
 *.pyo
 .DS_Store
+
+# Build artifact: an arm64 Mach-O compiled from vision_bench.swift by
+# scripts/start_backends.sh. Every machine that serves cutouts builds its own.
+vision_bench/vision_bench

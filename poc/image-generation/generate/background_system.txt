@@ -13,4 +13,4 @@ Important:
 User input: {user_prompt}
 
 Fixed rule that will be appended later:
-full-page journaling background, edge-to-edge, fills canvas, texture reaches all corners, clean writing space, no text, no watermark, no shadow, no border, no white margin, no rounded corners.
+seamless journaling background texture, the pattern is cropped by the frame and continues beyond all four edges, uncluttered so handwriting stays legible, no text, no watermark, no shadow.

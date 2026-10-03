@@ -17,8 +17,8 @@ import httpx
 from fastapi import HTTPException
 
 import config
-import config
 import main
+from tests.gemini_path import serving_gemini
 from tests.test_fallback import RATE_LIMITED
 
 # The service requires a beta token on every request except /health. These
@@ -37,14 +37,14 @@ class QuotaExhaustionTests(unittest.TestCase):
         client = self._client_raising(RATE_LIMITED)
         with mock.patch.object(main, "_get_client", return_value=client):
             with self.assertRaises(HTTPException) as caught:
-                main._call_model("a cat", "1:1")
+                main._call_model("a cat", "1:1", config.MODEL_ID)
         self.assertEqual(caught.exception.status_code, 503)
 
     def test_the_message_tells_a_tester_what_to_do(self):
         client = self._client_raising(RATE_LIMITED)
         with mock.patch.object(main, "_get_client", return_value=client):
             with self.assertRaises(HTTPException) as caught:
-                main._call_model("a cat", "1:1")
+                main._call_model("a cat", "1:1", config.MODEL_ID)
         detail = caught.exception.detail.lower()
         self.assertNotIn("resource_exhausted", detail, "raw provider text leaked")
         self.assertTrue(
@@ -57,7 +57,7 @@ class QuotaExhaustionTests(unittest.TestCase):
         client = self._client_raising(RATE_LIMITED)
         with mock.patch.object(main, "_get_client", return_value=client):
             with self.assertRaises(HTTPException):
-                main._call_model("a cat", "1:1")
+                main._call_model("a cat", "1:1", config.MODEL_ID)
         # At most one call per image, never more. An exact count would pin
         # ThreadPoolExecutor's short-circuit behaviour on the first raised
         # result rather than the property being asserted, which is that a
@@ -72,7 +72,7 @@ class QuotaExhaustionTests(unittest.TestCase):
         client = self._client_raising("500 INTERNAL")
         with mock.patch.object(main, "_get_client", return_value=client):
             with self.assertRaises(Exception) as caught:
-                main._call_model("a cat", "1:1")
+                main._call_model("a cat", "1:1", config.MODEL_ID)
         self.assertNotIsInstance(caught.exception, HTTPException)
 
 
@@ -89,7 +89,8 @@ class QuotaOverTheWireTests(unittest.IsolatedAsyncioTestCase):
         stub = mock.Mock()
         stub.models.generate_content.side_effect = Exception(RATE_LIMITED)
 
-        with mock.patch.object(main, "_get_client", return_value=stub):
+        with serving_gemini(), \
+                mock.patch.object(main, "_get_client", return_value=stub):
             async with httpx.AsyncClient(
                 transport=httpx.ASGITransport(app=main.app),
                 base_url="http://probe",
@@ -119,7 +120,8 @@ class QuotaOverTheWireTests(unittest.IsolatedAsyncioTestCase):
         stub.models.generate_content.side_effect = Exception(RATE_LIMITED)
         attempts = main.GENERATE_CONCURRENCY + 2
 
-        with mock.patch.object(main, "_get_client", return_value=stub):
+        with serving_gemini(), \
+                mock.patch.object(main, "_get_client", return_value=stub):
             async with httpx.AsyncClient(
                 transport=httpx.ASGITransport(app=main.app),
                 base_url="http://probe",

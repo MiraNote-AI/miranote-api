@@ -111,8 +111,41 @@ Three env vars control the LLM:
 | Variable        | Required | Default                                                  | Notes |
 |-----------------|----------|----------------------------------------------------------|-------|
 | `LLM_API_KEY`   | optional | empty (disables correction)                              | empty -> raw Whisper output only |
-| `LLM_BASE_URL`  | optional | `https://generativelanguage.googleapis.com/v1beta/openai` | any OpenAI-compatible endpoint |
-| `LLM_MODEL`     | optional | `gemini-2.5-flash`                                       | must be served by the configured base URL |
+| `LLM_BASE_URL`  | optional | `https://dashscope.aliyuncs.com/compatible-mode/v1`      | any OpenAI-compatible endpoint |
+| `LLM_MODEL`     | optional | `qwen3.5-flash`                                          | must be served by the configured base URL |
+
+`LLM_BASE_URL` has a real default in code, so overriding only `LLM_MODEL`
+leaves the SDK pointed at DashScope with a model it does not serve.
+
+### Why qwen3.5-flash
+
+From `bench_correction.py` (2026-09-05): it corrected 77% of planted errors
+against `gemini-2.5-flash`'s 87%, at roughly a tenth of the cost, and was
+stable on English input where `qwen-flash` was not -- `qwen-flash` translated
+whole English transcripts into Chinese and corrected only 18%.
+
+The 10-point gap is not spread evenly. It is almost entirely one homophone
+pair; on every other error type measured, qwen3.5-flash was the better of the
+two (92% vs 71%). Two weaknesses to know about before trusting it:
+
+- **One homophone pair: 67% against Gemini's 97%.** It is the most common
+  Chinese ASR homophone, and `prompts/correction.txt` has no worked example
+  for it. Adding one is the cheapest available quality win -- but it is
+  context-dependent, not find-and-replace, so the example has to teach the
+  distinction rather than the substitution.
+- **It strips stutter repeats.** In 6 of 6 runs it collapsed a doubled word
+  into one, though the prompt asks to keep spoken fillers and its own example
+  keeps them. That is a change to what the user said, which is worth more
+  caution than a missed fix.
+
+Correction requests to any `qwen*` model automatically carry
+`enable_thinking: false` (`correction.default_extra_body`), and so does the
+startup probe. Qwen3-series models reason by default; correction is not a
+reasoning task, thinking tokens bill as output, that is the configuration the
+benchmark measured, and some Qwen3 models reject a non-streaming request
+outright with thinking on.
+
+Rolling back is one env var -- but see the Gemini note below first.
 
 ### Provider examples
 
@@ -126,7 +159,20 @@ invisible from the outside: `/transcribe` still answers 200, with
 until 2026-09-15 (issue #73). Confirm a change with one real request and check
 `correction_status` before trusting it.
 
-**Gemini (default)**
+**Aliyun Bailian / DashScope (default)**
+```bash
+LLM_API_KEY=sk-...
+LLM_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
+LLM_MODEL=qwen3.5-flash
+```
+
+Note this sends transcripts to a provider in China. That is a policy decision
+that arrived here as a side effect of a cost decision; it deserves its own
+call rather than being inherited from this table.
+
+**Gemini** -- the previous default. `gemini-2.5-flash` is retired for newly
+issued AI Studio keys and answers 404 `NOT_FOUND`; existing keys still work,
+so a rollback may need a Vertex path rather than this one.
 ```bash
 LLM_API_KEY=AIza...
 LLM_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai
@@ -204,7 +250,7 @@ or raw_text`. Clients that care whether the LLM ran should check
 **`GET /health`**
 
 ```json
-{"status": "ok", "whisper_model": "medium", "llm_model": "deepseek-flash"}
+{"status": "ok", "whisper_model": "medium", "llm_model": "qwen3.5-flash"}
 ```
 
 `llm_model` is `null` when no LLM key is configured.
@@ -213,7 +259,6 @@ or raw_text`. Clients that care whether the LLM ran should check
 
 - No request auth, no rate limit, no upload size cap -- do not expose to
   the public internet
-- No tests
 - Dependencies pinned with lower bounds only
 - Single-process; not benchmarked under load
 - LLM retry is 3 attempts with linear 45/90s backoff on HTTP 429; other
@@ -260,9 +305,41 @@ curl -s -X POST http://localhost:8005/emotion -F file=@demo_data/en_short.m4a | 
 
 `emotion` is `null` and `emotion_status` is `"failed"` if classification raised; `null` and `"skipped"` if `with_emotion=false`.
 
+## Benchmarking correction models
+
+`bench_correction.py` runs the same correction request the service runs
+(`correction.correct_once`, shared with `/transcribe`) against several models
+on one corpus of transcripts, and reports latency, token usage and RMB cost
+side by side. It changes nothing about the service: the default stays whatever
+`LLM_MODEL` says.
+
+It needs only `openai` and `python-dotenv` -- not Whisper, not ffmpeg, because
+the correction layer takes text.
+
+```bash
+cd poc/voice-to-text
+.venv/bin/python bench_correction.py --dry-run                 # config check, no spend
+.venv/bin/python bench_correction.py --only zh_01 --repeat 1   # smoke, 1 call per model
+.venv/bin/python bench_correction.py --repeat 3                # full matrix
+```
+
+Cases come from `test_input/correction_cases.json`; the first run writes an
+ASCII template there if the file is missing. That path is git-ignored, so the
+corpus may hold Chinese transcripts even though the script may not (org
+Rule 3). Results land in `test_output/correction_bench/<timestamp>/`:
+`compare.html` is the side-by-side sheet to read, with `summary.csv`,
+`results.csv` and `results.jsonl` beside it.
+
+Models live in the `MODELS` registry at the top of the script. The evidence
+base is thin -- 29 hand-written cases, not real Whisper output -- so treat the
+ordering as a signal and not an SLO.
+
 ## Tests
 
 ```bash
 cd poc/voice-to-text
 PYTHONPATH=. .venv/bin/python3 -m pytest tests/ -v
 ```
+
+`tests/test_correction.py` is offline: it needs neither a network nor Whisper,
+and stubs the heavy imports so it runs in a lean venv.

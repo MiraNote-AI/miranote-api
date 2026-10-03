@@ -66,10 +66,12 @@ Two common cases:
   `LLM_API_KEY` empty. `/transcribe` returns `raw_text`,
   `corrected_text: null`, and `correction_status: "skipped"`.
 - **Whisper plus LLM post-correction.** Put an OpenAI-compatible API
-  key into `LLM_API_KEY`. Default base URL points at Gemini; switch
-  `LLM_BASE_URL` and `LLM_MODEL` together if you use a different
-  provider. README.md has copy-pasteable blocks for Gemini, DeepSeek,
-  Moonshot, OpenAI, and local vLLM / Ollama.
+  key into `LLM_API_KEY`. The default provider is Aliyun Bailian
+  (DashScope) running `qwen3.5-flash`, so that key should be a
+  DashScope one; switch `LLM_BASE_URL` and `LLM_MODEL` together if you
+  use a different provider. README.md has copy-pasteable blocks for
+  DashScope, Gemini, DeepSeek, Moonshot, OpenAI, and local
+  vLLM / Ollama.
 
 Optional: set `WHISPER_MODEL=small` (or `base`) for a faster, smaller
 download while you are just sanity-checking. The default `medium` is

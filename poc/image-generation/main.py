@@ -1,6 +1,6 @@
 """
 MiraNote POC -- Image Generation API
-Imagen 4 sticker generation with rembg background removal.
+Sticker generation with Apple Vision background removal.
 """
 
 import os
@@ -9,8 +9,10 @@ os.environ.setdefault("PYTORCH_ENABLE_MPS_FALLBACK", "1")
 import asyncio
 import base64
 import io
+import time
 from concurrent.futures import ThreadPoolExecutor
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, contextmanager
+from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, UploadFile
 from PIL import Image, ImageFilter
@@ -21,8 +23,10 @@ import beta_auth
 
 import config
 from shared.vertex_client import _get_client
-from generate import fallback, prompt_expander, generate_presets
-from cutout import bbox_detector, sam_segmenter, grounding_dino
+from generate import (fallback, prompt_expander, generate_presets,
+                      image_providers, dashscope_text)
+from generate.http_client import ProviderError
+from cutout import bbox_detector, sam_segmenter, grounding_dino, vision_matte
 from stylize import stylizer, style_presets
 from border import border, border_presets
 
@@ -76,15 +80,84 @@ def _quota_exhausted(model: str, error: Exception) -> HTTPException:
     return HTTPException(status_code=503, detail=QUOTA_DETAIL)
 
 
-def _call_model(prompt: str, aspect_ratio: str, reprompt=None) -> list[bytes]:
-    """Generate NUMBER_OF_IMAGES images.
+# How a DashScope failure maps onto the three outcomes above. Gemini reports all
+# of this in the response object (fallback.is_safety_refusal and friends);
+# DashScope has no equivalent, so the only signal is the error text.
+#
+# Both lists hold ONLY codes that have actually been observed. Guessing more in
+# would mean a wrong status for a failure nobody has seen, which is worse than
+# the generic path -- so anything unmatched propagates as a 502 carrying the
+# provider's own words.
+_DASHSCOPE_QUOTA_MARKERS = (
+    "Arrearage",      # account out of credit. Seen 2026-09-11: all three modes
+                      # answered 400 Arrearage at once, mid-benchmark.
+    "429",            # survived http_client's four backoff attempts
+)
+_DASHSCOPE_REFUSAL_MARKERS = (
+    "DataInspectionFailed",   # content filter, on the request or the output
+)
+
+
+def _classify_provider_error(error: Exception) -> str:
+    """"quota" | "refused" | "unknown" for a ProviderError."""
+    text = str(error)
+    if any(marker in text for marker in _DASHSCOPE_QUOTA_MARKERS):
+        return "quota"
+    if any(marker in text for marker in _DASHSCOPE_REFUSAL_MARKERS):
+        return "refused"
+    return "unknown"
+
+
+def _one_image(model: str, prompt: str, aspect_ratio: str) -> tuple[bytes | None, bool]:
+    """One image from one call: (image, refused).
+
+    Split out of _call_model so the retry loop around it is identical on both
+    providers. The Gemini branch is the pre-DashScope code verbatim, which is
+    what makes IMAGE_MODEL=<config.MODEL_ID> a real rollback rather than an
+    untested one.
+
+    Raises HTTPException(503) when the provider says the budget is gone, and
+    lets anything it cannot classify propagate to _call_model.
+    """
+    if model == config.MODEL_ID:
+        response = _get_client().models.generate_content(
+            model=model,
+            contents=fallback.build_prompt(prompt, aspect_ratio),
+        )
+        parts = fallback.image_parts(response)
+        if parts:
+            return parts[0], False
+        print(f"[generate] empty response from {model}: "
+              f"{fallback.empty_reason(response)}")
+        return None, fallback.is_safety_refusal(response)
+
+    try:
+        images = image_providers.generate(model, prompt, aspect_ratio, 1)
+    except ProviderError as error:
+        outcome = _classify_provider_error(error)
+        if outcome == "quota":
+            raise _quota_exhausted(model, error)
+        if outcome == "refused":
+            print(f"[generate] {model} refused the prompt: {str(error)[:200]}")
+            return None, True
+        raise
+    if images:
+        return images[0], False
+    # A 200 that carried no image. Distinct from every branch above: it is the
+    # one failure worth another attempt, so it comes back as "empty".
+    print(f"[generate] {model} answered with no image")
+    return None, False
+
+
+def _call_model(prompt: str, aspect_ratio: str, model: str,
+                reprompt=None) -> list[bytes]:
+    """Generate NUMBER_OF_IMAGES images with `model`.
 
     `reprompt`, when given, produces a fresh prompt for a retry. /generate
     passes the expander so the second attempt does not send the string that
     just drew a blank; it passes None when the caller asked for no expansion,
     because then there is nothing to vary.
     """
-    client = _get_client()
 
     def _next_prompt(previous: str) -> str:
         """A fresh prompt for the retry, or the previous one if that fails.
@@ -106,28 +179,21 @@ def _call_model(prompt: str, aspect_ratio: str, reprompt=None) -> list[bytes]:
         """(image, refused). Refused is carried alongside because an empty
         answer is only a failure once every call has come back empty.
 
-        A blank gets one more attempt; a refusal gets none. Vertex allows two
-        image calls a minute per model, so the second call is expensive enough
-        that it is only worth spending where it can succeed: NO_IMAGE and the
-        other ordinary endings can produce a picture on a second try, while a
+        A blank gets one more attempt; a refusal gets none. An image call is
+        expensive enough that the second one is only worth spending where it can
+        succeed: an empty answer can produce a picture on a second try, while a
         refusal buys another refusal (#78). Bounded at one extra attempt --
         NUMBER_OF_IMAGES = 1 left a single blank with nothing to hide behind,
-        and the point is to cover that, not to grind against the quota.
+        and the point is to cover that, not to grind against the provider.
         """
         current = prompt
         for attempt in range(1 + EMPTY_RESPONSE_RETRIES):
             if attempt:
                 current = _next_prompt(current)
-            response = client.models.generate_content(
-                model=config.MODEL_ID,
-                contents=fallback.build_prompt(current, aspect_ratio),
-            )
-            parts = fallback.image_parts(response)
-            if parts:
-                return parts[0], False
-            print(f"[generate] empty response from {config.MODEL_ID} "
-                  f"(attempt {attempt + 1}): {fallback.empty_reason(response)}")
-            if fallback.is_safety_refusal(response):
+            image, refused = _one_image(model, current, aspect_ratio)
+            if image:
+                return image, False
+            if refused:
                 return None, True
         return None, False
 
@@ -136,9 +202,18 @@ def _call_model(prompt: str, aspect_ratio: str, reprompt=None) -> list[bytes]:
     try:
         with ThreadPoolExecutor(max_workers=config.NUMBER_OF_IMAGES) as pool:
             results = list(pool.map(lambda _: _one(), range(config.NUMBER_OF_IMAGES)))
+    except HTTPException:
+        # _one_image already chose the status (503 for a spent budget). Re-raising
+        # it unchanged matters: the branches below would relabel it 502, and the
+        # app keys its message off the status code alone.
+        raise
+    except ProviderError as error:
+        # Anything _classify_provider_error could not place. The provider's own
+        # words go in the detail because nobody has triaged this shape yet.
+        raise HTTPException(status_code=502, detail=f"{model}: {error}")
     except Exception as error:
         if fallback.is_rate_limited(error):
-            raise _quota_exhausted(config.MODEL_ID, error)
+            raise _quota_exhausted(model, error)
         raise
     images = [image for image, _ in results if image]
     if not images:
@@ -148,11 +223,95 @@ def _call_model(prompt: str, aspect_ratio: str, reprompt=None) -> list[bytes]:
     return images
 
 
+# The startup probe's image. demo_data/ is tracked, unlike test_input/, so the
+# probe works on a fresh clone. Any photo with a subject does; the probe checks
+# that the model answers at all, not what it answers.
+_PROBE_IMAGE = Path(__file__).parent / "demo_data" / "17.jpeg"
+
 _rembg_session = None
+
+# Whether the Vision helper came up. Nothing branches on it -- the defaults are
+# Vision either way, see config.ROLLING BACK TO REMBG -- but /health reports it,
+# which is the only cheap way to tell "Vision is serving every cutout" from
+# "every cutout is 503ing" from outside the process.
+_vision_ready = False
+
+# Whether the bbox detector answered at startup: None until probed, then the
+# error text, or "" for ok. Nothing branches on it either, for a different and
+# worse reason: a detector that stops answering does not fail the request, it
+# quietly removes the disambiguation step. _cutout_via_hybrid_sam gathers the
+# two detectors with return_exceptions=True, so a dead Gemini becomes
+# chosen_path="dino-only" and a 200, with /health still green.
+#
+# That is the shape the voice service was broken in for weeks (#73). One cheap
+# call at boot is what turns it into something a person can see.
+_bbox_detector_error = None
+
+# Same for DashScope: None until probed, the error text, or "" for ok. A third
+# value matters here -- "unused" -- because the documented rollback
+# (IMAGE_MODEL=<config.MODEL_ID>) puts /generate back on Vertex, and warning
+# about a credential that path never reads would be noise.
+_dashscope_error = None
+
+
+def _dashscope_is_configured() -> bool:
+    """Whether anything this process will actually call lives on DashScope.
+
+    Two independent users: the image models, and the prompt expander. Either
+    one alone makes the credential required, and the rollback to Gemini only
+    moves the first -- PROMPT_EXPANDER_MODEL stays on qwen unless it is changed
+    too, which is why this asks about both rather than about IMAGE_MODEL.
+    """
+    if any(m in config.IMAGE_MODELS for m in config.IMAGE_MODELS_BY_MODE.values()):
+        return True
+    return config.PROMPT_EXPANDER_MODEL.lower().startswith("qwen")
+
+
+def _rembg():
+    """The rembg session, built on first use.
+
+    Lazy because the defaults are Vision-only now: on a normal run nothing
+    reaches rembg, and eagerly loading a background-removal model that never
+    runs costs startup time and resident memory for nothing. It stays one call
+    away for ?mode=auto, matte="rembg", and a rollback of the config defaults.
+    """
+    global _rembg_session
+    if _rembg_session is None:
+        print(f"Loading rembg session ({config.REMBG_MODEL})...")
+        _rembg_session = new_session(config.REMBG_MODEL)
+        print("rembg session ready.")
+    return _rembg_session
 
 
 class _NotFound(Exception):
     pass
+
+
+@contextmanager
+def _stage(timings: dict, name: str):
+    """Record one /cutout stage's wall-clock ms into `timings`.
+
+    Only the prompt-guided branch is instrumented; the timings ride back on
+    the response so a caller can see which stage dominates without reading
+    server logs. It is the cheapest way to tell a slow detector from a slow
+    matte on a host nobody can attach a profiler to.
+    """
+    start = time.perf_counter()
+    try:
+        yield
+    finally:
+        timings[name] = round((time.perf_counter() - start) * 1000, 1)
+
+
+def _timed(timings: dict, name: str, fn, *args):
+    """asyncio.to_thread target that times `fn` inside the worker thread.
+
+    Timing here rather than around the await measures the call itself, not
+    the time it spent waiting for a thread-pool slot. Concurrent workers
+    write distinct keys, so the shared dict needs no lock.
+    """
+    with _stage(timings, name):
+        return fn(*args)
 
 
 def _iou(a: tuple[float, float, float, float], b: tuple[float, float, float, float]) -> float:
@@ -171,6 +330,52 @@ def _iou(a: tuple[float, float, float, float], b: tuple[float, float, float, flo
 def _union(a: tuple[float, float, float, float], b: tuple[float, float, float, float]) -> tuple[float, float, float, float]:
     """Smallest box covering both. Boxes in 0-1000 (y_min, x_min, y_max, x_max)."""
     return (min(a[0], b[0]), min(a[1], b[1]), max(a[2], b[2]), max(a[3], b[3]))
+
+
+def _intersect(a: tuple[float, float, float, float], b: tuple[float, float, float, float]):
+    """Largest box inside both, or None if they do not overlap."""
+    y_min, x_min = max(a[0], b[0]), max(a[1], b[1])
+    y_max, x_max = min(a[2], b[2]), min(a[3], b[3])
+    if y_max <= y_min or x_max <= x_min:
+        return None
+    return (y_min, x_min, y_max, x_max)
+
+
+def _is_transparent(image_bytes: bytes) -> bool:
+    """Whether an image actually has see-through pixels.
+
+    Not "does it have an alpha band": a fully opaque RGBA PNG has one and is
+    still a photo. The app stores every image under a .png name -- including
+    photos, whose bytes are JPEG from PhotoTreatments.downscaled() -- so the
+    filename says nothing and the band alone would misread the day that
+    encoding changes. What /stylize needs to know is whether anything is
+    see-through, so that is what this asks.
+    """
+    image = Image.open(io.BytesIO(image_bytes))
+    if image.mode == "P":
+        image = image.convert("RGBA")
+    if "A" not in image.getbands():
+        return False
+    return image.getchannel("A").getextrema()[0] < 255
+
+
+def _alpha_bbox(rgba_png_bytes: bytes):
+    """Tight box around a matte's opaque pixels, normalised to 0-1000.
+
+    In the prebg modes everything outside this box is background by
+    construction -- flatten paints it a flat colour -- so it is a hard upper
+    bound on where the subject can be, and clipping a detector box to it can
+    only tighten, never loosen.
+    """
+    alpha = Image.open(io.BytesIO(rgba_png_bytes)).convert("RGBA").getchannel("A")
+    solid = alpha.point(lambda v: 255 if v > 127 else 0)
+    box = solid.getbbox()
+    if box is None:
+        return None
+    left, upper, right, lower = box
+    width, height = alpha.size
+    return (upper / height * 1000, left / width * 1000,
+            lower / height * 1000, right / width * 1000)
 
 
 def _normalized_to_pixels(image_bytes: bytes, bbox_norm: tuple[float, float, float, float]) -> tuple[float, float, float, float]:
@@ -194,21 +399,52 @@ def _flatten_on_bg(rgba_png_bytes: bytes, color: tuple[int, int, int]) -> bytes:
     return buf.getvalue()
 
 
-async def _cutout_via_hybrid_prebg(image_bytes: bytes, prompt: str):
-    """Full-image rembg -> flatten onto a solid gray bg -> hybrid_sam_union.
+async def _cutout_via_prebg(image_bytes: bytes, prompt: str, timings: dict,
+                            matte, stage: str, label: str, clip_to_matte: bool = False):
+    """Full-image background removal -> flatten onto solid gray -> hybrid_sam_union.
 
     Removing the background first stops the union step from spanning competing
     subjects in cluttered/multi-subject scenes -- where plain hybrid_sam_union
     tends to grab the whole frame. Downstream detectors convert("RGB"), so we
-    flatten onto a neutral solid color instead of leaving rembg's transparency
+    flatten onto a neutral solid color instead of leaving the transparency
     (which would otherwise become black).
+
+    `matte` is the only difference between the two prebg modes, so an A/B
+    between them measures the background remover and nothing else. The one that
+    ran is reported back as extras["prebg"].
     """
-    removed = await asyncio.to_thread(remove, image_bytes, session=_rembg_session)
-    flattened = _flatten_on_bg(removed, (128, 128, 128))
-    out, bbox, extras = await _cutout_via_hybrid_sam(flattened, prompt)
+    with _stage(timings, stage):
+        removed = await asyncio.to_thread(matte, image_bytes)
+    with _stage(timings, "flatten"):
+        flattened = _flatten_on_bg(removed, (128, 128, 128))
+    clip = _alpha_bbox(removed) if clip_to_matte else None
+    out, bbox, extras = await _cutout_via_hybrid_sam(flattened, prompt, timings, clip)
     extras = extras or {}
-    extras["prebg"] = "gray"
+    extras["prebg"] = label
+    if clip is not None:
+        extras["matte_bbox"] = [round(v, 1) for v in clip]
     return out, bbox, extras
+
+
+def _rembg_matte(image_bytes: bytes) -> bytes:
+    return remove(image_bytes, session=_rembg())
+
+
+async def _cutout_via_hybrid_prebg(image_bytes: bytes, prompt: str, timings: dict):
+    return await _cutout_via_prebg(image_bytes, prompt, timings,
+                                   _rembg_matte, "rembg", "gray")
+
+
+async def _cutout_via_hybrid_prebg_vision(image_bytes: bytes, prompt: str, timings: dict):
+    """Same as the rembg prebg mode with Apple Vision producing the matte.
+
+    Vision costs 0.03 s against rembg's 12.55 s on the 17-image bench, and was
+    better on three of them and worse on none. It raises rather than falling
+    back, so a run of this mode is always a run of Vision.
+    """
+    return await _cutout_via_prebg(image_bytes, prompt, timings,
+                                   vision_matte.remove_background, "vision_matte", "vision",
+                                   clip_to_matte=True)
 
 
 def _apply_fullsize_mask(image_bytes: bytes, mask_png: bytes) -> bytes:
@@ -222,18 +458,53 @@ def _apply_fullsize_mask(image_bytes: bytes, mask_png: bytes) -> bytes:
     return buf.getvalue()
 
 
-async def _cutout_via_hybrid_sam(image_bytes: bytes, prompt: str):
+async def _cutout_via_hybrid_sam(image_bytes: bytes, prompt: str, timings: dict,
+                                 clip_bbox=None):
+    """Detector boxes -> SAM. `clip_bbox` bounds where the subject can be.
+
+    A box covering most of the frame tells SAM almost nothing, and on a prebg
+    image -- subject over one flat colour -- SAM then answers "the flat field"
+    with high confidence: on 06_parfait all three candidates came back as the
+    background, none overlapping the subject at all. Clipping the box to the
+    matte's extent fixed it (candidates went to 0.998 overlap). The flat colour
+    itself is not the trigger; grey, black, white and green all failed
+    identically, while the untouched photo with the same loose box was fine.
+    """
     dino_task = asyncio.to_thread(
+        _timed, timings, "dino",
         grounding_dino.detect_all_boxes, image_bytes, prompt, config.HYBRID_DINO_THRESHOLD
     )
     gemini_task = asyncio.to_thread(
+        _timed, timings, "gemini",
         bbox_detector.detect_bbox, image_bytes, prompt, config.BBOX_DETECTOR_MODEL
     )
-    dino_candidates, gemini_bbox = await asyncio.gather(
-        dino_task, gemini_task, return_exceptions=False
-    )
+    # The two detectors run concurrently, so dino + gemini exceeds detect_wall;
+    # detect_wall is the wall-clock cost this step actually adds.
+    #
+    # return_exceptions=True so one detector failing degrades to the other
+    # instead of killing the request: the dino-only / gemini-only branches
+    # below already handle a missing box, and a transient Vertex 429/500 used
+    # to 500 a cutout that GroundingDINO alone could have served.
+    with _stage(timings, "detect_wall"):
+        dino_candidates, gemini_bbox = await asyncio.gather(
+            dino_task, gemini_task, return_exceptions=True
+        )
+
+    dino_error = gemini_error = None
+    if isinstance(dino_candidates, BaseException):
+        dino_error = dino_candidates
+        dino_candidates = []
+        print(f"[hybrid] dino failed, falling back: {dino_error!r}")
+    if isinstance(gemini_bbox, BaseException):
+        gemini_error = gemini_bbox
+        gemini_bbox = None
+        print(f"[hybrid] gemini failed, falling back: {gemini_error!r}")
 
     if not dino_candidates and gemini_bbox is None:
+        # Both detectors down is an outage, not a miss -- surface the real
+        # error rather than a misleading "not found".
+        if dino_error is not None or gemini_error is not None:
+            raise dino_error or gemini_error
         raise _NotFound(f"hybrid_sam: '{prompt}' not found")
 
     if gemini_bbox is None:
@@ -254,24 +525,75 @@ async def _cutout_via_hybrid_sam(image_bytes: bytes, prompt: str):
             best = max((m for _b, _s, m in rated), default=0.0)
             used_path = f"gemini(best_iou={best:.2f})"
 
-    print(f"[hybrid] {used_path} bbox={chosen_bbox}")
+    clipped_to = None
+    if clip_bbox is not None:
+        tightened = _intersect(chosen_bbox, clip_bbox)
+        # No overlap means the detectors and the matte disagree completely;
+        # trust the detectors rather than hand SAM an empty box.
+        if tightened is not None and tightened != chosen_bbox:
+            clipped_to = chosen_bbox
+            chosen_bbox = tightened
+
+    print(f"[hybrid] {used_path} bbox={chosen_bbox}"
+          + (f" (clipped from {clipped_to})" if clipped_to else ""))
 
     bbox_pixels = _normalized_to_pixels(image_bytes, chosen_bbox)
-    mask_png = await asyncio.to_thread(sam_segmenter.segment_with_bbox, image_bytes, bbox_pixels)
-    out = _apply_fullsize_mask(image_bytes, mask_png)
+    with _stage(timings, "sam"):
+        mask_png = await asyncio.to_thread(
+            sam_segmenter.segment_with_bbox, image_bytes, bbox_pixels
+        )
+    with _stage(timings, "apply_mask"):
+        out = _apply_fullsize_mask(image_bytes, mask_png)
     extras = {
         "dino_bboxes": [list(b) for b, _s in dino_candidates],
         "dino_scores": [round(s, 3) for _b, s in dino_candidates],
         "gemini_bbox": list(gemini_bbox) if gemini_bbox else None,
         "chosen_path": used_path,
     }
+    if clipped_to is not None:
+        extras["bbox_before_matte_clip"] = list(clipped_to)
+    if dino_error is not None or gemini_error is not None:
+        extras["detector_errors"] = {
+            name: f"{type(err).__name__}: {str(err)[:200]}"
+            for name, err in (("dino", dino_error), ("gemini", gemini_error))
+            if err is not None
+        }
     return out, chosen_bbox, extras
 
 
 PROMPT_CUTOUT_MODES = {
     "hybrid_sam_union": _cutout_via_hybrid_sam,             # DINO candidates disambiguated by Gemini box (IoU + union) -> SAM
-    "hybrid_sam_prebg_gray": _cutout_via_hybrid_prebg,     # DEFAULT: rembg -> gray bg -> hybrid_sam_union
+    "hybrid_sam_prebg_gray": _cutout_via_hybrid_prebg,     # rembg -> gray bg -> hybrid_sam_union
+    "hybrid_sam_prebg_vision": _cutout_via_hybrid_prebg_vision,  # DEFAULT: as above, Apple Vision matte instead of rembg (macOS only)
 }
+
+# Whole-foreground modes, for a /cutout with no prompt. Unlike the prompted
+# modes these are not a dispatch table -- each is two lines inline in the
+# endpoint -- but naming the valid set here keeps a typo'd `mode` a 400 rather
+# than a silent rembg run, which is how it would read once the default is Vision.
+AUTO_CUTOUT_MODES = {"vision", "auto"}
+
+# Background removers for a generated sticker (/generate). Not a /cutout mode
+# set: this path has no prompt, no detector and no SAM, it is just the matte.
+#
+# "none" returns the sticker with its background still on. It is how a client
+# that runs Apple Vision itself -- the iOS app does, on the user's own device --
+# asks for the generated image and nothing else. Leaving the matte to the phone
+# costs the server a Vision call per image, and gives the app a failure it can
+# handle locally instead of a 503 that discards an image already paid for.
+STICKER_MATTE_MODES = {"vision", "rembg", "none"}
+
+# Modes that cannot run without the Vision helper. Named or defaulted to, they
+# raise when the helper is missing and answer 503; nothing downgrades them.
+#
+# There is deliberately no startup step-down to rembg. A machine that could not
+# build the helper would then serve rembg at 12-80 s per image while every log
+# line and response still looked normal -- the slowdown was the only symptom,
+# and nothing named it. Rolling back is a deliberate edit of the three config
+# defaults instead; see ROLLING BACK TO REMBG in config.py.
+VISION_PROMPT_CUTOUT_MODES = {"hybrid_sam_prebg_vision"}
+VISION_AUTO_CUTOUT_MODES = {"vision"}
+VISION_STICKER_MATTE_MODES = {"vision"}
 
 
 def _parse_hex(color: str) -> tuple[int, int, int, int]:
@@ -321,20 +643,104 @@ def _erode_alpha(png_bytes: bytes, radius: int) -> bytes:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global _rembg_session
     print("Connecting to Vertex AI (genai client)...")
     _get_client()
     print("Vertex AI client ready.")
-    print(f"Loading rembg session ({config.REMBG_MODEL})...")
-    _rembg_session = new_session(config.REMBG_MODEL)
-    print("rembg session ready.")
+    # rembg is no longer preloaded: nothing reaches it on the default paths, so
+    # see _rembg() for why it is built on first use instead.
     print("Loading SAM ONNX sessions...")
     sam_segmenter.preload()
     print("SAM ready.")
     print("Loading GroundingDINO...")
     grounding_dino.preload()
     print("GroundingDINO ready.")
-    yield
+    # Every cutout needs it. Starting it here keeps its ~1.4 s model load off the
+    # first request; failing to start it must still not stop the server booting,
+    # because /stylize, /describe and /border have nothing to do with the matte
+    # and taking them down too would turn one broken feature into four.
+    global _vision_ready
+    _vision_ready = False
+    error = None
+    if vision_matte.available():
+        try:
+            vision_matte.preload()
+            _vision_ready = True
+            print("Vision matte helper ready.")
+        except Exception as e:                      # noqa: BLE001 - reported below
+            error = e
+    else:
+        error = "not built for this machine"
+
+    if _vision_ready:
+        print(f"[cutout] prompted={config.DEFAULT_PROMPT_CUTOUT_MODE} "
+              f"auto={config.DEFAULT_AUTO_CUTOUT_MODE} "
+              f"sticker_matte={config.DEFAULT_STICKER_MATTE}")
+    else:
+        # Loud, because the service is Vision-only: there is no step-down to
+        # rembg, so this is not a slow mode, it is no cutout at all.
+        print(f"[cutout] !! VISION HELPER DOWN ({error}) -- every /cutout and "
+              f"every sticker /generate will answer 503 until it is back. "
+              f"Build it with: swiftc -O -parse-as-library "
+              f"vision_bench/vision_bench.swift -o vision_bench/vision_bench "
+              f"(macOS 15+). To serve rembg instead, see ROLLING BACK TO REMBG "
+              f"in config.py.")
+    # The prompted /cutout disambiguates GroundingDINO's candidates with this
+    # model. It is deliberately not fatal: the pipeline really does degrade to
+    # dino-only rather than failing, and /stylize, /describe and /border do not
+    # use the detector at all. What is NOT acceptable is that happening
+    # silently, which is all this probe fixes.
+    global _bbox_detector_error
+    try:
+        await asyncio.to_thread(
+            bbox_detector.detect_bbox,
+            Path(_PROBE_IMAGE).read_bytes(), "a subject",
+            config.BBOX_DETECTOR_MODEL,
+        )
+        _bbox_detector_error = ""
+        print(f"[cutout] bbox detector ready ({config.BBOX_DETECTOR_MODEL}).")
+    except Exception as e:                          # noqa: BLE001 - reported below
+        _bbox_detector_error = f"{type(e).__name__}: {str(e)[:200]}"
+        print(f"[cutout] !! BBOX DETECTOR DOWN ({config.BBOX_DETECTOR_MODEL}): "
+              f"{_bbox_detector_error} -- every prompted /cutout will still "
+              f"answer 200, but with GroundingDINO alone and no disambiguation. "
+              f"Check the model id and that Vertex is reachable.")
+
+    # /generate runs on DashScope, and http_client.api_key() only looks at the
+    # environment when a request is already in flight. Without this a host that
+    # forgot the key boots clean, answers /health 200 and reports its image
+    # models, then 502s every /generate -- and the app says "AI server is not
+    # running", which is false. Exactly the shape the voice service was broken
+    # in for weeks (#73) before #77 gave it a startup check.
+    #
+    # A real round trip, not a presence check, for the reason _check_llm states
+    # in voice-to-text: what matters is whether this key works for this base
+    # URL and this model. It also catches a revoked key and an account in
+    # arrears, which a presence check cannot and which has really happened.
+    global _dashscope_error
+    if not _dashscope_is_configured():
+        _dashscope_error = "unused"
+        print("[generate] DashScope not in use (Gemini rollback); "
+              "DASHSCOPE_API_KEY not required.")
+    else:
+        try:
+            await asyncio.to_thread(dashscope_text.complete, "ping",
+                                    config.PROMPT_EXPANDER_MODEL)
+            _dashscope_error = ""
+            print(f"[generate] DashScope ready "
+                  f"({config.PROMPT_EXPANDER_MODEL}, "
+                  f"{config.DASHSCOPE_BASE_URL}).")
+        except Exception as e:                      # noqa: BLE001 - reported below
+            _dashscope_error = f"{type(e).__name__}: {str(e)[:200]}"
+            print(f"[generate] !! DASHSCOPE NOT WORKING: {_dashscope_error} -- "
+                  f"every /generate will answer 502 and the app will say the "
+                  f"AI server is not running, which will not be true. Check "
+                  f"DASHSCOPE_API_KEY in this host's .env (see .env.example).")
+
+    try:
+        yield
+    finally:
+        # Otherwise the helper outlives the server -- see vision_matte.shutdown.
+        vision_matte.shutdown()
 
 
 app = FastAPI(title="MiraNote Image Generation", version="0.1.0", lifespan=lifespan)
@@ -347,10 +753,35 @@ app = FastAPI(title="MiraNote Image Generation", version="0.1.0", lifespan=lifes
 beta_auth.install(app)
 
 
+def _remove_sticker_bg(raw: bytes, matte: str) -> bytes:
+    """Cut a generated sticker out. Raises VisionMatteUnavailable on failure.
+
+    There is deliberately no fallback to rembg when Vision fails. The image is
+    already generated and paid for, so answering 503 throws that away over a
+    background rembg could still have removed -- but a matte the caller cannot
+    identify is worse than a failure they can retry, and a quietly-rembg'd
+    sticker was indistinguishable from a Vision one in the page it landed on.
+    The discarded generation is the accepted cost.
+
+    rembg still runs when the caller asks for it by name, and is one config
+    edit from being the default again (ROLLING BACK TO REMBG in config.py).
+    """
+    if matte == "vision":
+        cut = vision_matte.remove_background(raw)
+    else:
+        cut = remove(raw, session=_rembg())
+    # Eroding here rather than in the endpoint keeps all of the pixel work on
+    # the worker thread; it is off by default, but it is a full-image filter.
+    if config.REMBG_ERODE_RADIUS > 0:
+        cut = _erode_alpha(cut, config.REMBG_ERODE_RADIUS)
+    return cut
+
+
 class GenerateRequest(BaseModel):
     command: str        # "sticker" | "background"
     prompt: str = ""    # user-written prompt for sticker
     expand: bool = True   # if True, expand prompt via LLM before generation
+    matte: str = ""     # sticker background remover: "vision" (default) | "rembg" | "none"
 
 
 @app.post("/generate")
@@ -380,6 +811,18 @@ async def _generate(req: GenerateRequest):
         )
     expander_name, builder_name = spec
 
+    matte = req.matte or config.DEFAULT_STICKER_MATTE
+    mattable = config.REMOVE_BG and req.command == "sticker"
+    if mattable and matte not in STICKER_MATTE_MODES:
+        # Checked before generating: a typo should not cost an image call out
+        # of a bucket holding two a minute.
+        raise HTTPException(
+            status_code=400,
+            detail=f"unknown matte '{matte}'; valid: {sorted(STICKER_MATTE_MODES)}",
+        )
+    # Validated as a matte above, then honoured by not running one.
+    remove_bg = mattable and matte != "none"
+
     def _fresh_prompt() -> str:
         """Expand and dress the user's words. Called once normally, and once
         more if the first attempt draws a blank -- expansion is not
@@ -397,25 +840,32 @@ async def _generate(req: GenerateRequest):
 
     prompt = await asyncio.to_thread(_fresh_prompt)
     ratio = config.ASPECT_RATIOS.get(req.command, "1:1")
+    model = config.IMAGE_MODELS_BY_MODE[req.command]
     # Nothing to vary when the caller asked for no expansion.
     reprompt = _fresh_prompt if req.expand else None
-    images = await asyncio.to_thread(_call_model, prompt, ratio, reprompt)
+    images = await asyncio.to_thread(_call_model, prompt, ratio, model, reprompt)
 
-    remove_bg = config.REMOVE_BG and req.command == "sticker"
     encoded = []
     for raw in images:
-        processed = (
-            await asyncio.to_thread(remove, raw, session=_rembg_session)
-            if remove_bg
-            else raw
-        )
-        if remove_bg and config.REMBG_ERODE_RADIUS > 0:
-            processed = await asyncio.to_thread(
-                _erode_alpha, processed, config.REMBG_ERODE_RADIUS
-            )
+        if remove_bg:
+            try:
+                # to_thread, not a bare call: background removal is pixel work
+                # off the event loop either way, and rembg (still reachable by
+                # name) is seconds of CPU per image.
+                processed = await asyncio.to_thread(_remove_sticker_bg, raw, matte)
+            except vision_matte.VisionMatteUnavailable as e:
+                raise HTTPException(status_code=503, detail=str(e))
+        else:
+            processed = raw
         encoded.append(base64.b64encode(processed).decode())
 
-    return {"command": req.command, "prompt": prompt, "raw_input": req.prompt, "images": encoded, "count": len(encoded)}
+    response = {"command": req.command, "prompt": prompt, "raw_input": req.prompt,
+                "images": encoded, "count": len(encoded)}
+    if mattable:
+        # Reported for "none" too, so a caller can tell "you asked me not to"
+        # from "this build does not matte stickers".
+        response["matte_used"] = matte
+    return response
 
 
 def _shrink_for_model(raw: bytes, max_side: int = 1536) -> bytes:
@@ -438,7 +888,12 @@ async def cutout_image(
     prompt: str = "",
     mode: str = "",
 ):
-    raw = _shrink_for_model(await file.read())
+    timings: dict = {}
+    request_start = time.perf_counter()
+    with _stage(timings, "read"):
+        uploaded = await file.read()
+    with _stage(timings, "shrink"):
+        raw = _shrink_for_model(uploaded)
 
     if prompt:
         chosen = mode or config.DEFAULT_PROMPT_CUTOUT_MODE
@@ -448,26 +903,52 @@ async def cutout_image(
                 detail=f"unknown mode '{chosen}'; valid: {list(PROMPT_CUTOUT_MODES)}",
             )
         try:
-            processed, bbox, extras = await PROMPT_CUTOUT_MODES[chosen](raw, prompt)
+            processed, bbox, extras = await PROMPT_CUTOUT_MODES[chosen](raw, prompt, timings)
             used = chosen
         except _NotFound as e:
             raise HTTPException(status_code=404, detail=str(e))
+        except vision_matte.VisionMatteUnavailable as e:
+            # A Vision mode never silently becomes a rembg one, so say what broke
+            # instead of letting a bare 500 look like a bug in the cutout itself.
+            raise HTTPException(status_code=503, detail=str(e))
+        with _stage(timings, "encode"):
+            encoded = base64.b64encode(processed).decode()
+        timings["total_server"] = round(time.perf_counter() - request_start, 3)
         response = {
-            "image": base64.b64encode(processed).decode(),
+            "image": encoded,
             "mode_used": used,
             "prompt": prompt,
             "bbox": bbox,
+            # Per-stage ms. Kept out of `extras` because read/shrink/encode
+            # happen here, outside the mode function that builds `extras`.
+            "timings": timings,
         }
         if extras:
             response.update(extras)
         return response
 
-    processed = await asyncio.to_thread(remove, raw, session=_rembg_session)
+    # No prompt: whole-foreground removal, Apple Vision by default and rembg
+    # under mode="auto". Same discipline as the prompted branch above -- every
+    # mode, defaulted to or named, is served or refused, never substituted.
+    chosen = mode or config.DEFAULT_AUTO_CUTOUT_MODE
+    if chosen not in AUTO_CUTOUT_MODES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"unknown mode '{chosen}'; valid without a prompt: "
+                   f"{sorted(AUTO_CUTOUT_MODES)}",
+        )
+    if chosen == "vision":
+        try:
+            processed = await asyncio.to_thread(vision_matte.remove_background, raw)
+        except vision_matte.VisionMatteUnavailable as e:
+            raise HTTPException(status_code=503, detail=str(e))
+    else:
+        processed = await asyncio.to_thread(_rembg_matte, raw)
     if config.REMBG_ERODE_RADIUS > 0:
         processed = _erode_alpha(processed, config.REMBG_ERODE_RADIUS)
     return {
         "image": base64.b64encode(processed).decode(),
-        "mode_used": "auto",
+        "mode_used": chosen,
     }
 
 
@@ -480,7 +961,13 @@ async def stylize_image(
 ):
     raw = _shrink_for_model(await file.read())
     try:
-        instruction = style_presets.build_instruction(style=style, prompt=prompt)
+        # Transparency is how a sticker announces itself. The app never tells us
+        # which it sent, and it does not have to: a photo is opaque, a sticker is
+        # a cutout. Asking a photo for a flat backdrop would replace the scene
+        # the user wanted edited, so this must not fire on one.
+        instruction = style_presets.build_instruction(
+            style=style, prompt=prompt,
+            cut_out_afterwards=_is_transparent(raw))
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -510,7 +997,9 @@ async def describe_image(file: UploadFile, prompt: str = None):
     def _describe() -> str:
         from google.genai import types
         response = _get_client().models.generate_content(
-            model=config.PROMPT_EXPANDER_MODEL,
+            # Not PROMPT_EXPANDER_MODEL: this call sends image bytes, and that
+            # constant now names a text-only model. See config.DESCRIBE_MODEL.
+            model=config.DESCRIBE_MODEL,
             contents=[
                 types.Part.from_bytes(data=raw, mime_type=file.content_type or "image/png"),
                 question,
@@ -567,4 +1056,41 @@ async def border_image(
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "model": config.MODEL_ID}
+    return {"status": "ok",
+            # Per mode, not one `model` key. That key used to name the single
+            # /generate model; now MODEL_ID is only the rollback target, so
+            # reporting it would name a model the service never calls -- worse
+            # than reporting none. `image_models` is also how you confirm an
+            # IMAGE_MODEL override actually took effect.
+            "image_models": config.IMAGE_MODELS_BY_MODE,
+            "prompt_expander": config.PROMPT_EXPANDER_MODEL,
+            # "" once DashScope answered at boot, "unused" on the Gemini
+            # rollback, the error text otherwise. Worth a field for the same
+            # reason as cutout.bbox_detector_error: the failure it names does
+            # not stop the server or show up anywhere else until a user hits
+            # /generate.
+            "dashscope_error": _dashscope_error,
+            "describe": config.DESCRIBE_MODEL,
+            # Reported for the same reason as image_models: a STYLE_MODEL
+            # override is otherwise invisible from outside the process.
+            "stylize": config.STYLE_MODEL,
+            "border": config.BORDER_MODEL,
+            # Whether the Vision helper came up. Worth a health field precisely
+            # because nothing steps down: a false here means every cutout is
+            # answering 503, and the defaults beside it say what the server
+            # would be serving if it were true. start_backends.sh reads this.
+            "cutout": {"vision_ready": _vision_ready,
+                       "prompt_mode": config.DEFAULT_PROMPT_CUTOUT_MODE,
+                       "auto_mode": config.DEFAULT_AUTO_CUTOUT_MODE,
+                       "sticker_matte": config.DEFAULT_STICKER_MATTE,
+                       # Reported for the same reason as image_models and
+                       # stylize: a BBOX_DETECTOR_MODEL override is otherwise
+                       # invisible from outside the process, and an A/B between
+                       # detectors is worthless if you cannot prove which one
+                       # the arm actually ran.
+                       "bbox_detector": config.BBOX_DETECTOR_MODEL,
+                       # "" once the detector answered at boot, the error text
+                       # if it did not, null if the probe never ran. Worth a
+                       # field because a dead detector does not fail requests --
+                       # it silently drops the disambiguation step.
+                       "bbox_detector_error": _bbox_detector_error}}

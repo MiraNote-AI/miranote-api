@@ -1,0 +1,5 @@
+# Benchmark corpora and results. The correction test cases are Chinese
+# transcripts, so they must stay out of git (org Rule 3: no CJK in committed
+# files). Mirrors poc/image-generation/.gitignore.
+test_input/
+test_output/

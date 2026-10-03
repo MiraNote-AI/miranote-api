@@ -113,7 +113,7 @@ def _call_and_capture(response):
     with mock.patch.object(main, "_get_client", return_value=client):
         with contextlib.redirect_stdout(buffer):
             with unittest.TestCase().assertRaises(HTTPException) as caught:
-                main._call_model("a cat", "1:1")
+                main._call_model("a cat", "1:1", config.MODEL_ID)
     return caught.exception, buffer.getvalue()
 
 
@@ -151,7 +151,7 @@ class GenerateEmptyResponseTests(unittest.TestCase):
         client = _client_returning(_response(parts))
         with mock.patch.object(main, "_get_client", return_value=client):
             self.assertEqual(
-                main._call_model("a cat", "1:1"),
+                main._call_model("a cat", "1:1", config.MODEL_ID),
                 [b"png-1"] * config.NUMBER_OF_IMAGES,
             )
 

@@ -48,24 +48,34 @@ than a blank reply.
 
 Two kinds of dependencies:
 
-1. **Vertex AI (cloud)** -- generation, stylize, and describe run on
-   Gemini models in your GCP project:
+1. **Vertex AI (cloud)** -- stylize, border, describe, and the bbox
+   detector inside a prompted cutout run on Gemini models in your GCP
+   project:
 
    ```bash
    gcloud auth application-default login   # once per machine
    # .env: PROJECT_ID=<your-gcp-project>, LOCATION=global
    ```
 
-   `/generate` calls `gemini-3.1-flash-lite-image` directly -- there is no
-   fallback chain any more. That model is served only from the `global`
-   endpoint, so `LOCATION` must be `global`; a regional value makes Vertex
+   `LOCATION` must be `global`: the Gemini image id in `config.py` is
+   served only from that endpoint and a regional value makes Vertex
    answer 404 for it.
 
-2. **Local models (downloaded automatically)** -- background removal
+2. **Aliyun Bailian / DashScope (cloud)** -- `/generate` only. The image
+   model is `z-image-turbo` and the prompt expander is `qwen-turbo`.
+   Needs `DASHSCOPE_API_KEY`, which is the **same key** the
+   voice-to-text service uses for transcript correction.
+
+   There is no fallback to a second image model: out of credit answers
+   503, a content block answers 502. Rolling back to Gemini is one
+   environment variable (`IMAGE_MODEL=`, see
+   `poc/image-generation/.env.example`), and `GET :8002/health` reports
+   which model each mode is really using.
+
+3. **Local models (downloaded automatically)** -- background removal
    and cutout run on-device. On FIRST startup the service downloads,
    via the Hugging Face hub, roughly 3-4 GB total:
 
-   - rembg `birefnet-general` (background removal)
    - SAM 2.1 Large (segmentation, runs on Apple `mps`)
    - GroundingDINO tiny (text-guided box detection)
 
@@ -73,6 +83,19 @@ Two kinds of dependencies:
    later boots load from the local cache in seconds. An `HF_TOKEN` env
    var is optional (higher rate limits only). There is nothing to
    install by hand.
+
+4. **Apple Vision (built, not downloaded)** -- every background removal
+   goes through `GenerateForegroundInstanceMaskRequest`, which has no
+   Python binding, so a small Swift helper runs beside the service.
+   **macOS 15+ only.** `scripts/start_backends.sh` compiles it; the
+   binary is a build artifact and is not in the repo.
+
+   Nothing falls back to rembg when it is missing -- every cutout
+   answers 503 instead, because a silent downgrade meant 12-80s per
+   image with no visible symptom. `GET :8002/health` reports
+   `cutout.vision_ready`; check it before trusting a healthy-looking
+   service. rembg is still installed and reachable by name, and
+   `poc/image-generation/config.py` documents the rollback.
 
    Requires Python 3.13 (torch >= 2.5): `brew install python@3.13`,
    then `/opt/homebrew/bin/python3.13 -m venv .venv`.

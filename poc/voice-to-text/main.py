@@ -21,6 +21,8 @@ from openai import OpenAI
 from yanyi_client import YanYiError, health as yanyi_health, transcribe as yanyi_transcribe
 import emotion
 from emotion import analyze_emotion
+import correction
+from correction import CORRECTION_PROMPT
 
 load_dotenv()
 
@@ -57,9 +59,24 @@ YANYI_OK = "ok"                       # YanYi answered its health check
 YANYI_UNREACHABLE = "unreachable"     # it did not
 _yanyi_status = YANYI_UNCONFIGURED
 
+# Correction defaults. Chosen from the benchmark in bench_correction.py:
+# qwen3.5-flash corrected 77% of planted errors against gemini-2.5-flash's 87%
+# at about a tenth of the cost, and was stable on English where qwen-flash was
+# not -- qwen-flash translated whole English transcripts into Chinese. Two
+# known trade-offs, both accepted: it is weaker on one homophone pair (67% vs
+# 97%), and it strips the stutter repeats the prompt asks it to keep. It is
+# better than gemini-2.5-flash on every other error type measured. See
+# README.md.
+#
+# LLM_BASE_URL carries a default deliberately. The OpenAI SDK falls back to
+# api.openai.com when base_url is None, so overriding LLM_MODEL alone used to
+# point the service at a provider that has never heard of the model, and the
+# only symptom was correction quietly returning nothing. The three move
+# together or not at all.
+DASHSCOPE_BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1"
 LLM_API_KEY = os.getenv("LLM_API_KEY")
-LLM_BASE_URL = os.getenv("LLM_BASE_URL")
-LLM_MODEL = os.getenv("LLM_MODEL", "gemini-2.5-flash")
+LLM_BASE_URL = os.getenv("LLM_BASE_URL", DASHSCOPE_BASE_URL)
+LLM_MODEL = os.getenv("LLM_MODEL", "qwen3.5-flash")
 
 # ---------- Lazy model loading ----------
 _whisper_model = None
@@ -163,11 +180,19 @@ def _check_llm() -> None:
               "/transcribe will return raw Whisper output.")
         return
     try:
-        llm.chat.completions.create(
-            model=LLM_MODEL,
-            messages=[{"role": "user", "content": "ping"}],
-            max_tokens=1,
-        )
+        # Same extra_body the real correction call sends. Without it a
+        # Qwen3-series model reasons by default, and some reject a
+        # non-streaming request outright when thinking is on -- so a probe
+        # that skipped it would report a working corrector as broken.
+        kwargs = {
+            "model": LLM_MODEL,
+            "messages": [{"role": "user", "content": "ping"}],
+            "max_tokens": 1,
+        }
+        extra_body = correction.default_extra_body(LLM_MODEL)
+        if extra_body:
+            kwargs["extra_body"] = extra_body
+        llm.chat.completions.create(**kwargs)
     except Exception as error:
         _llm_status = LLM_UNREACHABLE
         print("[voice] LLM CORRECTION IS NOT WORKING. Every transcript will be "
@@ -260,13 +285,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# The correction prompt is loaded from a separate file to keep source code
-# ASCII-only (org Rule 3).  The file ships as a runtime data asset.
-_PROMPT_PATH = os.path.join(os.path.dirname(__file__), "prompts", "correction.txt")
-CORRECTION_PROMPT: str = ""
-if os.path.exists(_PROMPT_PATH):
-    with open(_PROMPT_PATH, encoding="utf-8") as f:
-        CORRECTION_PROMPT = f.read()
+# The prompt and the single-request shape live in correction.py, so
+# bench_correction.py can run the exact request this endpoint runs against a
+# different model without importing whisper and transformers. The prompt is
+# still read from prompts/correction.txt to keep source ASCII-only (org
+# Rule 3); CORRECTION_PROMPT is re-exported by the import above for the guard
+# below and for the tests that check it.
 
 
 async def correct_with_ai(raw_text: str) -> Tuple[Optional[str], str]:
@@ -276,28 +300,27 @@ async def correct_with_ai(raw_text: str) -> Tuple[Optional[str], str]:
       "ok"      -- corrected_text is the LLM response
       "skipped" -- no LLM configured; corrected_text is None
       "failed"  -- LLM call errored after retries; corrected_text is None
+
+    The retry loop stays here rather than in correction.py because it is
+    async: asyncio.sleep yields the event loop during a 45s backoff, where a
+    sync sleep would park a worker thread for the duration.
     """
     if not llm or not CORRECTION_PROMPT:
         return None, "skipped"
     for attempt in range(3):
-        try:
-            resp = await asyncio.to_thread(
-                llm.chat.completions.create,
-                model=LLM_MODEL,
-                messages=[
-                    {"role": "user", "content": CORRECTION_PROMPT + "\n\n" + raw_text},
-                ],
-                max_tokens=4096,
-            )
-            return resp.choices[0].message.content, "ok"
-        except Exception as e:
-            if "429" in str(e) and attempt < 2:
-                wait = 45 * (attempt + 1)
-                print(f"Rate limited, waiting {wait}s (attempt {attempt + 1}/3)")
-                await asyncio.sleep(wait)
-            else:
-                print(f"AI correction failed: {e}")
-                return None, "failed"
+        result = await asyncio.to_thread(
+            correction.correct_once, raw_text, llm, LLM_MODEL,
+            extra_body=correction.default_extra_body(LLM_MODEL),
+        )
+        if result.status == "ok":
+            return result.text, "ok"
+        if correction.is_rate_limited(result.error) and attempt < 2:
+            wait = correction.RETRY_BACKOFF_SECONDS[attempt]
+            print(f"Rate limited, waiting {wait}s (attempt {attempt + 1}/3)")
+            await asyncio.sleep(wait)
+        else:
+            print(f"AI correction failed: {result.error}")
+            return None, "failed"
     return None, "failed"
 
 
