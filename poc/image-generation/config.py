@@ -4,6 +4,18 @@
 # for every pipeline listed above its section.
 import os
 
+from dotenv import load_dotenv
+
+# Before the first os.getenv() below. main.py imports this module ahead of
+# shared.vertex_client and generate.http_client, which are the ones that read
+# the POC's .env -- and load_dotenv does not override what is already set, so
+# every override documented in .env.example (IMAGE_MODEL, STYLE_MODEL,
+# BBOX_DETECTOR_MODEL, DASHSCOPE_BASE_URL) was being read before the file that
+# holds it, and silently kept its default. That includes the documented
+# "rollback is one environment variable" path, which has to work on the day
+# something is wrong rather than the day it is written.
+load_dotenv()
+
 # --------------------------------------------------------------------------- #
 # Shared across pipelines
 # --------------------------------------------------------------------------- #
