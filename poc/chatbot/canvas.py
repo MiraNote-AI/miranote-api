@@ -129,7 +129,13 @@ _CHANGE_ITEM: Dict[str, Any] = {
             "type": "number", "minimum": 11, "maximum": 48,
             "description": "New text point size. Text elements only.",
         },
-        "color": {"type": "string", "description": "New text color, a palette name from the page block."},
+        "color": {
+            "type": "string",
+            "description": (
+                "New text color: a palette name from the page block, or a "
+                "'#RRGGBB' hex, e.g. to match a color already on the page."
+            ),
+        },
         "layer": {
             "type": "string", "enum": ["front", "back"],
             "description": "Bring the element in front of, or behind, the others.",
