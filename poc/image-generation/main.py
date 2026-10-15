@@ -9,9 +9,11 @@ os.environ.setdefault("PYTORCH_ENABLE_MPS_FALLBACK", "1")
 import asyncio
 import base64
 import io
+import re
 import time
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager, contextmanager
+from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, UploadFile
@@ -53,6 +55,48 @@ def _generate_gate():
     if _generate_semaphore is None:
         _generate_semaphore = asyncio.Semaphore(GENERATE_CONCURRENCY)
     return _generate_semaphore
+
+
+# What /generate has done since boot, for /health. _dashscope_error is the boot
+# probe and never changes after it: on 2026-10-15 qwen-turbo began answering 429
+# to every expansion while /health still read clean, and the only trace was the
+# serving host's terminal. In memory, so a restart clears it.
+#
+# /health needs no token, so this holds a model id and an error code, never the
+# user's prompt or the provider's message -- those stay in the log.
+#
+# last_ok_at only moves on a request that also got its expansion: a request
+# rescued by the user's own words still succeeds, but stamping it "ok" would make
+# a broken expander look fixed a few seconds after it failed.
+_generate_status = {"last_ok_at": None, "last_error": None}
+
+_STATUS_RE = re.compile(r"-> (\d{3})")
+_CODE_RE = re.compile(r'"code"\s*:\s*"([\w.]+)"')
+
+
+def _now() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def _error_summary(error: Exception) -> str:
+    """'429 Throttling.RateQuota'-style: a status and a provider code, nothing
+    the provider wrote in prose. Falls back to the exception's type name."""
+    text = str(getattr(error, "detail", None) or error)
+    status = getattr(error, "status_code", None)
+    if status is None:
+        found = _STATUS_RE.search(text)
+        status = found.group(1) if found else None
+    code = _CODE_RE.search(text)
+    parts = [str(status)] if status else []
+    parts.append(code.group(1) if code else type(error).__name__)
+    return " ".join(parts)
+
+
+def _record_generate_error(stage: str, model: str, error: Exception) -> None:
+    _generate_status["last_error"] = {
+        "at": _now(), "stage": stage,
+        "error": f"{model}: {_error_summary(error)}"[:120],
+    }
 
 
 # Deliberately not the provider's own wording: "RESOURCE_EXHAUSTED" tells a
@@ -838,12 +882,28 @@ async def _generate(req: GenerateRequest):
         )
         return getattr(generate_presets, builder_name)(core)
 
-    prompt = await asyncio.to_thread(_fresh_prompt)
+    expanded = True
+    try:
+        prompt = await asyncio.to_thread(_fresh_prompt)
+    except Exception as error:                      # noqa: BLE001 - reported below
+        # Expansion only dresses the user's words up; losing it must not lose
+        # the image. On 2026-10-15 qwen-turbo answered 429 to every call, and
+        # because this line was unguarded all three commands turned into a bare
+        # 500 after the HTTP client's ~20s of backoff.
+        print(f"[generate] expansion failed, using the user's words: {str(error)[:200]}")
+        _record_generate_error("expand", config.PROMPT_EXPANDER_MODEL, error)
+        prompt = getattr(generate_presets, builder_name)(req.prompt)
+        expanded = False
     ratio = config.ASPECT_RATIOS.get(req.command, "1:1")
     model = config.IMAGE_MODELS_BY_MODE[req.command]
-    # Nothing to vary when the caller asked for no expansion.
-    reprompt = _fresh_prompt if req.expand else None
-    images = await asyncio.to_thread(_call_model, prompt, ratio, model, reprompt)
+    # Nothing to vary when the caller asked for no expansion -- or when the
+    # expander just failed, since a second try would only add its backoff.
+    reprompt = _fresh_prompt if req.expand and expanded else None
+    try:
+        images = await asyncio.to_thread(_call_model, prompt, ratio, model, reprompt)
+    except Exception as error:
+        _record_generate_error("image", model, error)
+        raise
 
     encoded = []
     for raw in images:
@@ -865,6 +925,8 @@ async def _generate(req: GenerateRequest):
         # Reported for "none" too, so a caller can tell "you asked me not to"
         # from "this build does not matte stickers".
         response["matte_used"] = matte
+    if expanded:
+        _generate_status["last_ok_at"] = _now()
     return response
 
 
@@ -1070,6 +1132,9 @@ async def health():
             # not stop the server or show up anywhere else until a user hits
             # /generate.
             "dashscope_error": _dashscope_error,
+            # The runtime counterpart to dashscope_error: when /generate last
+            # fully succeeded, and its last failure (stage, model, error code).
+            "generate": _generate_status,
             "describe": config.DESCRIBE_MODEL,
             # Reported for the same reason as image_models: a STYLE_MODEL
             # override is otherwise invisible from outside the process.

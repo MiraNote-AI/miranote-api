@@ -8,7 +8,9 @@ class GeneratePresetTests(unittest.TestCase):
     def test_art_prompt_keeps_subject_and_adds_the_art_suffix(self):
         prompt = generate_presets.build_art_prompt("a paper crane")
         self.assertTrue(prompt.startswith("a paper crane, "))
-        self.assertIn("standalone journal illustration", prompt)
+        self.assertIn("standalone illustration", prompt)
+        self.assertNotIn("journal", prompt,
+                         "the word drew notebooks into the picture (2026-10-15)")
         self.assertNotIn("seamless journaling background texture", prompt,
                          "art must never carry the background rule")
         self.assertNotIn("background removal", prompt,
