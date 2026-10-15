@@ -24,7 +24,7 @@ os.environ.setdefault("BETA_TOKENS", "test-token")
 _THROTTLED = ProviderError(
     'POST generation -> 429 {"code":"Throttling.RateQuota","message":'
     '"Requests rate limit exceeded, please try again later.","request_id":"r-1"}')
-_USER_WORDS = "一只戴着红围巾的小熊"
+_USER_WORDS = "a little bear wearing a red scarf"
 
 
 class ExpanderFallbackTests(unittest.IsolatedAsyncioTestCase):

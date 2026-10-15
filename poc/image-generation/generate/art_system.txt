@@ -11,7 +11,7 @@ Rules:
 - Usually 50 to 90 words. Add detail only where it helps the picture.
 
 Example
-User input: 傍晚湖边的小木屋
+User input: a little cabin by the lake at dusk
 Output: A small wooden cabin with a glowing window beside a calm lake at dusk, a rowboat tied to a short wooden dock, pine trees on the far shore. Hand-drawn watercolor illustration in warm amber, dusky violet and soft teal, gentle ink linework, quiet and cozy mood. The sky, water and trees thin out into loose, irregular watercolor washes that fade softly into an empty light cream ground.
 
 Output only the prompt, no explanation.
