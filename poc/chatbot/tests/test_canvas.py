@@ -110,6 +110,19 @@ def test_edit_page_accepts_only_the_documented_fields():
     assert entry["properties"]["size"]["maximum"] == 48
 
 
+def test_edit_page_color_may_be_a_palette_name_or_hex():
+    # Custom text colors live on the page as "#RRGGBB"; the model must
+    # know it may send one back, not only palette names.
+    tool = next(
+        t for t in canvas.canvas_tools(tools.TOOLS)
+        if t["function"]["name"] == "edit_page"
+    )
+    entry = tool["function"]["parameters"]["properties"]["changes"]["items"]
+    desc = entry["properties"]["color"]["description"]
+    assert "palette name" in desc
+    assert "#RRGGBB" in desc
+
+
 def test_look_at_page_takes_no_arguments():
     tool = next(
         t for t in canvas.canvas_tools(tools.TOOLS)
