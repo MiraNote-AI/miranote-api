@@ -62,7 +62,7 @@ Two kinds of dependencies:
    answer 404 for it.
 
 2. **Aliyun Bailian / DashScope (cloud)** -- `/generate` only. The image
-   model is `z-image-turbo` and the prompt expander is `qwen-turbo`.
+   model is `z-image-turbo` and the prompt expander is `qwen3.8-flash`.
    Needs `DASHSCOPE_API_KEY`, which is the **same key** the
    voice-to-text service uses for transcript correction.
 

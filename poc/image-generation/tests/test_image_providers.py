@@ -164,6 +164,35 @@ class QwenTextTests(unittest.TestCase):
         self.assertIsNone(dashscope_text.text_of({}))
         self.assertIsNone(dashscope_text.text_of({"output": {"choices": []}}))
 
+    def test_reads_the_openai_compatible_shape(self):
+        data = {"choices": [{"message": {"content": "expanded"}}]}
+        self.assertEqual(dashscope_text.text_of(data), "expanded")
+
+    def _sent(self, model):
+        with mock.patch.object(dashscope_text.http_client, "post_json",
+                               return_value={"choices": [{"message": {"content": "x"}}]}) as post:
+            dashscope_text.complete("p", model)
+        url, payload = post.call_args.args[:2]
+        return url, payload
+
+    def test_qwen3_goes_to_the_compatible_endpoint_with_thinking_off(self):
+        # The native path answers 400 "url error" for qwen3.x ids.
+        url, payload = self._sent("qwen3.8-flash")
+        self.assertTrue(url.endswith("/compatible-mode/v1/chat/completions"), url)
+        self.assertFalse(payload["enable_thinking"])
+        self.assertEqual(payload["messages"], [{"role": "user", "content": "p"}])
+
+    def test_older_qwen_ids_keep_the_native_endpoint(self):
+        url, payload = self._sent("qwen-plus")
+        self.assertTrue(url.endswith("/services/aigc/text-generation/generation"), url)
+        self.assertNotIn("enable_thinking", payload)
+
+    def test_the_configured_expander_is_reachable(self):
+        """Pins the pairing that broke: a qwen3 expander on the native path."""
+        url, _ = self._sent(config.PROMPT_EXPANDER_MODEL)
+        if config.PROMPT_EXPANDER_MODEL.startswith("qwen3"):
+            self.assertIn("/compatible-mode/", url)
+
 
 class RoutingTests(unittest.TestCase):
     def test_unknown_model_names_the_valid_ones(self):

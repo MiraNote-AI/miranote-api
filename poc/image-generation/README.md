@@ -9,7 +9,7 @@ It exposes four image pipelines behind one app:
 
 | Endpoint    | What it does                                            | Models used |
 |-------------|---------------------------------------------------------|-------------|
-| `/generate` | Text-to-image sticker & background generation           | `z-image-turbo` (DashScope), `qwen-turbo` (prompt expansion), Apple Vision (background removal) |
+| `/generate` | Text-to-image sticker & background generation           | `z-image-turbo` (DashScope), `qwen3.8-flash` (prompt expansion), Apple Vision (background removal) |
 | `/cutout`   | Background removal + prompt-guided subject cutout        | Apple Vision, SAM 2.1, GroundingDINO, Gemini 2.5 Flash (bbox) |
 | `/stylize`  | Image-to-image style transfer                           | Gemini 2.5 Flash Image ("Nano Banana") |
 | `/border`   | Sticker outlines / AI decorative borders                | Pillow (`outline`), Gemini 2.5 Flash Image (`ai_outline`) |
@@ -18,7 +18,7 @@ It exposes four image pipelines behind one app:
 
 ## /generate runs on DashScope
 
-The image model is `z-image-turbo` and the prompt expander is `qwen-turbo`, both
+The image model is `z-image-turbo` and the prompt expander is `qwen3.8-flash`, both
 on Aliyun Bailian. It was the fastest and cheapest of six models on a 90-image
 comparison, at `IMAGE_PRICE_CNY` 0.10 per image.
 
@@ -37,7 +37,7 @@ Three things to know:
   is actually using, so you can confirm the override took.
 
 `PROMPT_EXTEND` stays `False`, guarded by a unit test: DashScope's own prompt
-rewriting would discard what `qwen-turbo` just produced, and on `z-image-turbo`
+rewriting would discard what `qwen3.8-flash` just produced, and on `z-image-turbo`
 it is also the difference between 0.10 and 0.20 CNY an image.
 
 **A failure is a failure.** There is no fallback to a second image model -- that

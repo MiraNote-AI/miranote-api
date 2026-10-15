@@ -76,7 +76,15 @@ MODEL_ID = "gemini-3.1-flash-lite-image"
 # expansions of the same shape and length as gemini-2.5-flash at 1/14th the cost
 # and half the latency. It is about 1% of what a /generate call costs either way
 # -- the money is in the image.
-PROMPT_EXPANDER_MODEL = "qwen-turbo"
+# Moved again to qwen3.8-flash on 2026-10-15: qwen-turbo began answering 429
+# Throttling.RateQuota to the first call of the minute on two unrelated
+# accounts, the shape Bailian's retirement policy describes for a model being
+# wound down, and Bailian points its users at the newer Qwen3 line. qwen3 ids
+# are only served on the OpenAI-compatible endpoint -- dashscope_text routes
+# them there. Against qwen-plus on the 15-case bench plus 5 art cases it was a
+# draw: closer on some prompts (a pencil-sketch elephant, a film-strip border),
+# thinner on others (a stamp with an empty centre, a letter with no writing).
+PROMPT_EXPANDER_MODEL = "qwen3.8-flash"
 
 # /describe is a VISION call -- it sends image bytes -- so this model must
 # accept images. It is deliberately NOT PROMPT_EXPANDER_MODEL: the two shared
@@ -187,10 +195,13 @@ IMAGE_PRICE_CNY = {
 }
 
 # (input, output) CNY per 1M tokens, for the two text models. The Gemini row is
-# converted from $0.30 / $2.50 at the rate above, so it is an estimate; the qwen
-# row is a Bailian list price.
+# converted from $0.30 / $2.50 at the rate above, so it is an estimate; the
+# qwen-turbo row is a Bailian list price. The qwen3.8-flash row is an estimate
+# copied from qwen3.5-flash's China-region list price (poc/voice-to-text's
+# bench): no list price for qwen3.8-flash itself was checked on 2026-10-15.
 TEXT_PRICE_CNY_PER_MTOK = {
     "qwen-turbo":       (0.30, 0.60),
+    "qwen3.8-flash":    (0.20, 2.00),
     "gemini-2.5-flash": (0.30 * USD_TO_CNY, 2.50 * USD_TO_CNY),
 }
 
