@@ -21,6 +21,7 @@ in `MiraNote-AI/.github` and are synced into each code repo's
 | Skill | Purpose |
 |---|---|
 | `create-ticket` | File a GitHub issue before non-trivial work so the PR body can reference it (Rule 6). |
+| `report-issue` | Turn a tester's finding (screenshot, Discord note) into a deduped, reproduced Problem / Context / Acceptance criteria issue on the shared bug list. |
 | `create-pr` | Make a PR satisfy Rules 6 and 8 -- title/body preflight using the same scripts CI runs. |
 | `run-loop` | Contract for autonomous multi-iteration agent loops: goal, stop conditions, budgets, state persistence, terminal state. |
 | `verify-repo` | Per-repo registry of trustable verification commands, and what an agent may claim where no verifier exists. |
