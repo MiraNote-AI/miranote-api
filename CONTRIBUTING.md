@@ -98,9 +98,11 @@ grow unchecked degrade every downstream task.
 
 Any Claude Code skill, MCP server, or external tool integration adopted by
 the team must be declared in `docs/ai/skills.md` under the `## Skills` or
-`## MCP Servers` section. The day-0 check verifies only that the file
-exists with both required headers; future iterations will diff this
-registry against actual configuration.
+`## MCP Servers` section. The check verifies that the file exists with
+both required headers, and that the `## Skills` table has a row for every
+skill folder (`skills/` in `MiraNote-AI/.github`, `.claude/skills/` in the
+code repos) and a folder for every row. MCP servers are not yet diffed
+against actual configuration.
 
 **Rationale:** The "50 MCP servers running" anti-pattern destroys tool
 discovery; a deliberate registry forces every adoption to be a conscious
