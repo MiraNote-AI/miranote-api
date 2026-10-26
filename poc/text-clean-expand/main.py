@@ -10,13 +10,13 @@ import json
 import os
 import asyncio
 from pathlib import Path
-from typing import List, Literal, Optional
+from typing import Annotated, List, Literal, Optional, get_args
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, StringConstraints
 from dotenv import load_dotenv
 
 import beta_auth
@@ -62,6 +62,7 @@ POLISH_SYSTEM = (_PROMPT_DIR / "polish.txt").read_text(encoding="utf-8")
 SHORTEN_SYSTEM = (_PROMPT_DIR / "shorten.txt").read_text(encoding="utf-8")
 KEYWORDS_SYSTEM = (_PROMPT_DIR / "keywords.txt").read_text(encoding="utf-8")
 CAPTION_SYSTEM = (_PROMPT_DIR / "caption.txt").read_text(encoding="utf-8")
+MOOD_SYSTEM = (_PROMPT_DIR / "mood.txt").read_text(encoding="utf-8")
 
 
 class TextRequest(BaseModel):
@@ -121,6 +122,20 @@ class CaptionResponse(BaseModel):
     original: str
     caption: str
     style: str
+
+
+Mood = Literal["joyful", "calm", "tender", "low", "tense", "neutral"]
+MOODS = frozenset(get_args(Mood))
+
+
+class MoodRequest(BaseModel):
+    text: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)] = Field(
+        ..., description="Page words plus short photo descriptions, any language"
+    )
+
+
+class MoodResponse(BaseModel):
+    mood: Mood
 
 
 def _contains_cjk(text: str) -> bool:
@@ -381,6 +396,32 @@ async def caption_endpoint(req: CaptionRequest):
     user_msg = f"style={req.style}\n\n{req.text}"
     caption = await call_llm(CAPTION_SYSTEM, user_msg, max_tokens=512)
     return CaptionResponse(original=req.text, caption=caption, style=req.style)
+
+
+def _parse_mood(raw: str) -> Mood:
+    """The mood in `raw` (a bare word or {"mood": "..."}), or "neutral" when
+    the reply is anything else -- a mood is decoration, never worth a 502."""
+    text = raw.strip().removeprefix("```json").removeprefix("```").removesuffix("```").strip()
+    try:
+        parsed = json.loads(text)
+    except json.JSONDecodeError:
+        parsed = text
+    if isinstance(parsed, dict):
+        parsed = parsed.get("mood")
+    word = str(parsed).strip().strip("\"'`.!").strip().lower()
+    return word if word in MOODS else "neutral"
+
+
+@app.post("/mood", response_model=MoodResponse)
+async def mood_endpoint(req: MoodRequest):
+    """Classify a journal page's overall mood into one of six fixed values."""
+    # language_ref is a fixed English word: the reply is always an English
+    # label, so a Chinese page must not trigger the language-match retry
+    # (a Chinese label still gets one retry asking for English).
+    raw = await call_llm(
+        MOOD_SYSTEM, req.text, max_tokens=10, language_ref="mood", temperature=0.0
+    )
+    return MoodResponse(mood=_parse_mood(raw))
 
 
 @app.get("/health")

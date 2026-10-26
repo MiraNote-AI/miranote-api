@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 # Chinese sample text, built with chr() to keep this file ASCII-only (rule 3).
 ZH_NOTE = chr(0x4ECA) + chr(0x5929) + chr(0x5F88) + chr(0x7D2F)  # "today very tired"
 ZH_REPLY = chr(0x4ECA) + chr(0x5929) + chr(0x771F) + chr(0x7684) + chr(0x5F88) + chr(0x7D2F)
@@ -286,3 +288,79 @@ def test_expand_language_follows_text_not_context(client):
     # Composite prompt contains Chinese context, but the reply matches the
     # note's language, so no correction retry (just the grounding check).
     assert len(fake_llm.chat.completions.calls) == 2
+
+
+@pytest.mark.parametrize("mood", ["joyful", "calm", "tender", "low", "tense", "neutral"])
+def test_mood_passes_each_value_through(client, mood):
+    test_client, fake_llm = client
+    fake_llm.reply_with(mood)
+
+    r = test_client.post("/mood", json={"text": "a page about my day"})
+
+    assert r.status_code == 200
+    assert r.json() == {"mood": mood}
+    call = fake_llm.chat.completions.calls[0]
+    assert call["temperature"] <= 0.2
+    assert call["max_tokens"] <= 16
+
+
+@pytest.mark.parametrize(
+    "reply, expected",
+    [
+        ("  Calm.\n", "calm"),
+        ("JOYFUL", "joyful"),
+        ('"tender"', "tender"),
+        ('{"mood": " Low "}', "low"),
+    ],
+)
+def test_mood_normalises_case_whitespace_and_json(client, reply, expected):
+    test_client, fake_llm = client
+    fake_llm.reply_with(reply)
+
+    r = test_client.post("/mood", json={"text": "a page"})
+
+    assert r.status_code == 200
+    assert r.json() == {"mood": expected}
+
+
+@pytest.mark.parametrize("reply", ["happy", "The mood is calm", "", '{"x": 1}', "[]"])
+def test_mood_off_set_reply_maps_to_neutral(client, reply):
+    test_client, fake_llm = client
+    fake_llm.reply_with(reply)
+
+    r = test_client.post("/mood", json={"text": "a page"})
+
+    assert r.status_code == 200
+    assert r.json() == {"mood": "neutral"}
+
+
+def test_mood_chinese_page_does_not_trigger_language_retry(client):
+    test_client, fake_llm = client
+    fake_llm.reply_with("low")
+
+    r = test_client.post("/mood", json={"text": ZH_NOTE})
+
+    assert r.status_code == 200
+    assert r.json() == {"mood": "low"}
+    assert len(fake_llm.chat.completions.calls) == 1
+
+
+def test_mood_chinese_reply_gets_one_english_retry_then_neutral(client):
+    test_client, fake_llm = client
+    fake_llm.reply_with(ZH_NOTE, ZH_NOTE)
+
+    r = test_client.post("/mood", json={"text": ZH_NOTE})
+
+    assert r.status_code == 200
+    assert r.json() == {"mood": "neutral"}
+    calls = fake_llm.chat.completions.calls
+    assert len(calls) == 2
+    assert "entirely in English" in calls[1]["messages"][3]["content"]
+
+
+@pytest.mark.parametrize("text", ["", "   \n\t"])
+def test_mood_rejects_empty_or_whitespace_text(client, text):
+    test_client, fake_llm = client
+    r = test_client.post("/mood", json={"text": text})
+    assert r.status_code == 422
+    assert fake_llm.chat.completions.calls == []

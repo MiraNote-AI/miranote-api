@@ -1,7 +1,7 @@
 # Text Clean & Expand POC
 
 FastAPI service that transforms a user's free-form text using an
-OpenAI-compatible LLM. Six endpoints, each with its own prompt:
+OpenAI-compatible LLM. Seven endpoints, each with its own prompt:
 
 | Endpoint | Purpose |
 |---|---|
@@ -11,8 +11,9 @@ OpenAI-compatible LLM. Six endpoints, each with its own prompt:
 | `POST /shorten` | Produce a shorter version. `target`: 30% / 50% / tweet |
 | `POST /keywords` | Extract 5-10 keywords with salience scores (1-10) |
 | `POST /caption` | 1-2 sentence caption. `style`: instagram / diary / tweet |
+| `POST /mood` | Page mood for the star jar: `{"mood": "joyful"/"calm"/"tender"/"low"/"tense"/"neutral"}` |
 
-Bilingual: every endpoint preserves the input language (English in -> English out, any Chinese in -> Chinese out).
+Bilingual: every text endpoint preserves the input language (English in -> English out, any Chinese in -> Chinese out); `/mood` always returns an English label.
 
 ## Setup
 
@@ -49,6 +50,10 @@ curl -s -X POST http://localhost:8001/keywords \
 curl -s -X POST http://localhost:8001/caption \
   -H 'Content-Type: application/json' \
   -d '{"text":"Long journal entry...","style":"diary"}' | python3 -m json.tool
+
+curl -s -X POST http://localhost:8001/mood \
+  -H 'Content-Type: application/json' \
+  -d '{"text":"Picnic with Mia in the park. Photo: two kids laughing."}' | python3 -m json.tool
 ```
 
 ## Tests
