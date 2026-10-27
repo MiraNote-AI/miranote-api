@@ -364,3 +364,12 @@ def test_mood_rejects_empty_or_whitespace_text(client, text):
     r = test_client.post("/mood", json={"text": text})
     assert r.status_code == 422
     assert fake_llm.chat.completions.calls == []
+
+
+def test_mood_rejects_text_over_the_cap(client):
+    test_client, fake_llm = client
+    fake_llm.reply_with("calm")
+    assert test_client.post("/mood", json={"text": "a" * 4000}).status_code == 200
+    r = test_client.post("/mood", json={"text": "a" * 4001})
+    assert r.status_code == 422
+    assert len(fake_llm.chat.completions.calls) == 1

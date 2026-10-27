@@ -129,7 +129,11 @@ MOODS = frozenset(get_args(Mood))
 
 
 class MoodRequest(BaseModel):
-    text: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)] = Field(
+    # The app sends at most 2000 characters; the cap keeps a direct caller
+    # from running up the LLM bill with a huge page.
+    text: Annotated[
+        str, StringConstraints(strip_whitespace=True, min_length=1, max_length=4000)
+    ] = Field(
         ..., description="Page words plus short photo descriptions, any language"
     )
 
