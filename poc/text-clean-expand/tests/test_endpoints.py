@@ -301,7 +301,8 @@ def test_mood_passes_each_value_through(client, mood):
     assert r.json() == {"mood": mood}
     call = fake_llm.chat.completions.calls[0]
     assert call["temperature"] <= 0.2
-    assert call["max_tokens"] <= 16
+    # Room for a thinking model to reason before it answers.
+    assert call["max_tokens"] >= 256
 
 
 @pytest.mark.parametrize(
@@ -311,9 +312,13 @@ def test_mood_passes_each_value_through(client, mood):
         ("JOYFUL", "joyful"),
         ('"tender"', "tender"),
         ('{"mood": " Low "}', "low"),
+        ("**calm**", "calm"),
+        ("Calm, mostly", "calm"),
+        ("calm" + chr(0x3002), "calm"),  # fullwidth full stop
+        ("tense -- the page is about a deadline, though calm at the end", "tense"),
     ],
 )
-def test_mood_normalises_case_whitespace_and_json(client, reply, expected):
+def test_mood_takes_the_first_mood_word_in_the_reply(client, reply, expected):
     test_client, fake_llm = client
     fake_llm.reply_with(reply)
 
@@ -323,15 +328,35 @@ def test_mood_normalises_case_whitespace_and_json(client, reply, expected):
     assert r.json() == {"mood": expected}
 
 
-@pytest.mark.parametrize("reply", ["happy", "The mood is calm", "", '{"x": 1}', "[]"])
-def test_mood_off_set_reply_maps_to_neutral(client, reply):
+@pytest.mark.parametrize("reply", ["happy", "below the surface", '{"x": 1}', "[]"])
+def test_mood_reply_naming_no_mood_is_502(client, reply):
     test_client, fake_llm = client
     fake_llm.reply_with(reply)
 
     r = test_client.post("/mood", json={"text": "a page"})
 
-    assert r.status_code == 200
-    assert r.json() == {"mood": "neutral"}
+    assert r.status_code == 502
+
+
+def test_mood_empty_reply_is_502(client):
+    test_client, fake_llm = client
+    fake_llm.reply_with("")
+
+    r = test_client.post("/mood", json={"text": "a page"})
+
+    assert r.status_code == 502
+    assert len(fake_llm.chat.completions.calls) == 1
+
+
+def test_mood_length_cut_reply_is_502(client):
+    # A thinking model that spent max_tokens on reasoning: finish_reason
+    # "length", even if a fragment of an answer came back.
+    test_client, fake_llm = client
+    fake_llm.reply_with(("calm", "length"))
+
+    r = test_client.post("/mood", json={"text": "a page"})
+
+    assert r.status_code == 502
 
 
 def test_mood_chinese_page_does_not_trigger_language_retry(client):
@@ -345,14 +370,13 @@ def test_mood_chinese_page_does_not_trigger_language_retry(client):
     assert len(fake_llm.chat.completions.calls) == 1
 
 
-def test_mood_chinese_reply_gets_one_english_retry_then_neutral(client):
+def test_mood_chinese_reply_gets_one_english_retry_then_502(client):
     test_client, fake_llm = client
     fake_llm.reply_with(ZH_NOTE, ZH_NOTE)
 
     r = test_client.post("/mood", json={"text": ZH_NOTE})
 
-    assert r.status_code == 200
-    assert r.json() == {"mood": "neutral"}
+    assert r.status_code == 502
     calls = fake_llm.chat.completions.calls
     assert len(calls) == 2
     assert "entirely in English" in calls[1]["messages"][3]["content"]
@@ -366,10 +390,17 @@ def test_mood_rejects_empty_or_whitespace_text(client, text):
     assert fake_llm.chat.completions.calls == []
 
 
-def test_mood_rejects_text_over_the_cap(client):
+def test_mood_cuts_long_text_to_4000_code_points(client):
+    # A family emoji is 7 code points: 600 of them pass the app's
+    # 2000-character cap but are 4200 code points.
     test_client, fake_llm = client
-    fake_llm.reply_with("calm")
-    assert test_client.post("/mood", json={"text": "a" * 4000}).status_code == 200
-    r = test_client.post("/mood", json={"text": "a" * 4001})
-    assert r.status_code == 422
-    assert len(fake_llm.chat.completions.calls) == 1
+    fake_llm.reply_with("tender")
+    family = chr(0x1F468) + chr(0x200D) + chr(0x1F469) + chr(0x200D) + chr(0x1F467) + chr(0x200D) + chr(0x1F466)
+
+    r = test_client.post("/mood", json={"text": family * 600})
+
+    assert r.status_code == 200
+    assert r.json() == {"mood": "tender"}
+    sent = fake_llm.chat.completions.calls[0]["messages"][1]["content"]
+    assert len(sent) == 4000
+    assert sent == (family * 600)[:4000]

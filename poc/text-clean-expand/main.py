@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import asyncio
 from pathlib import Path
 from typing import Annotated, List, Literal, Optional, get_args
@@ -125,15 +126,14 @@ class CaptionResponse(BaseModel):
 
 
 Mood = Literal["joyful", "calm", "tender", "low", "tense", "neutral"]
-MOODS = frozenset(get_args(Mood))
+MOOD_WORD = re.compile(r"\b(" + "|".join(get_args(Mood)) + r")\b", re.IGNORECASE)
+MOOD_TEXT_CAP = 4000
 
 
 class MoodRequest(BaseModel):
-    # The app sends at most 2000 characters; the cap keeps a direct caller
-    # from running up the LLM bill with a huge page.
-    text: Annotated[
-        str, StringConstraints(strip_whitespace=True, min_length=1, max_length=4000)
-    ] = Field(
+    # The app sends at most 2000 characters; the endpoint cuts longer text to
+    # MOOD_TEXT_CAP code points so a direct caller can't run up the LLM bill.
+    text: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)] = Field(
         ..., description="Page words plus short photo descriptions, any language"
     )
 
@@ -205,7 +205,14 @@ def _language_correction(ref: str, reply: str) -> Optional[str]:
     return None
 
 
-async def _completion(messages: list[dict], max_tokens: int, temperature: float) -> str:
+async def _completion(
+    messages: list[dict],
+    max_tokens: int,
+    temperature: float,
+    reject_cut: bool = False,
+) -> str:
+    """One LLM call. With `reject_cut`, an empty or max_tokens-cut reply is a
+    502: a thinking model can spend the whole budget on reasoning."""
     for attempt in range(3):
         try:
             resp = await asyncio.to_thread(
@@ -215,7 +222,8 @@ async def _completion(messages: list[dict], max_tokens: int, temperature: float)
                 max_tokens=max_tokens,
                 temperature=temperature,
             )
-            return resp.choices[0].message.content.strip()
+            choice = resp.choices[0]
+            reply = choice.message.content.strip()
         except Exception as e:
             if "429" in str(e) and attempt < 2:
                 wait = 45 * (attempt + 1)
@@ -223,6 +231,10 @@ async def _completion(messages: list[dict], max_tokens: int, temperature: float)
                 await asyncio.sleep(wait)
             else:
                 raise HTTPException(status_code=502, detail=f"LLM call failed: {e}")
+        else:
+            if reject_cut and (not reply or choice.finish_reason == "length"):
+                raise HTTPException(status_code=502, detail="LLM reply was empty or cut off")
+            return reply
     raise HTTPException(status_code=502, detail="LLM call failed after retries")
 
 
@@ -264,6 +276,7 @@ async def call_llm(
     temperature: float = 1.0,
     max_output_chars: Optional[int] = None,
     grounding_check: bool = False,
+    reject_cut: bool = False,
 ) -> str:
     """Call the LLM; the reply must match the language of `language_ref`
     (defaults to `user_text`): Chinese stays Chinese (simplified stays
@@ -281,7 +294,7 @@ async def call_llm(
         {"role": "system", "content": system},
         {"role": "user", "content": user_text},
     ]
-    reply = await _completion(messages, max_tokens, temperature)
+    reply = await _completion(messages, max_tokens, temperature, reject_cut)
 
     ref = user_text if language_ref is None else language_ref
     notes = []
@@ -300,7 +313,7 @@ async def call_llm(
             {"role": "assistant", "content": reply},
             {"role": "user", "content": "\n\n".join(notes)},
         ]
-        reply = await _completion(messages, max_tokens, temperature)
+        reply = await _completion(messages, max_tokens, temperature, reject_cut)
 
     # Fabrication is checked last, on whatever reply survived the retry:
     # a fact-checker pass lists invented specifics, one rewrite removes them.
@@ -403,17 +416,13 @@ async def caption_endpoint(req: CaptionRequest):
 
 
 def _parse_mood(raw: str) -> Mood:
-    """The mood in `raw` (a bare word or {"mood": "..."}), or "neutral" when
-    the reply is anything else -- a mood is decoration, never worth a 502."""
-    text = raw.strip().removeprefix("```json").removeprefix("```").removesuffix("```").strip()
-    try:
-        parsed = json.loads(text)
-    except json.JSONDecodeError:
-        parsed = text
-    if isinstance(parsed, dict):
-        parsed = parsed.get("mood")
-    word = str(parsed).strip().strip("\"'`.!").strip().lower()
-    return word if word in MOODS else "neutral"
+    """The first of the six mood words in `raw`, whatever markdown,
+    punctuation or explanation surrounds it. A reply with none is a 502, so
+    the app retries later instead of caching a guessed "neutral"."""
+    match = MOOD_WORD.search(raw)
+    if match is None:
+        raise HTTPException(status_code=502, detail="LLM reply named no mood")
+    return match.group(1).lower()
 
 
 @app.post("/mood", response_model=MoodResponse)
@@ -422,8 +431,14 @@ async def mood_endpoint(req: MoodRequest):
     # language_ref is a fixed English word: the reply is always an English
     # label, so a Chinese page must not trigger the language-match retry
     # (a Chinese label still gets one retry asking for English).
+    # max_tokens leaves a thinking model room to reason before it answers.
     raw = await call_llm(
-        MOOD_SYSTEM, req.text, max_tokens=10, language_ref="mood", temperature=0.0
+        MOOD_SYSTEM,
+        req.text[:MOOD_TEXT_CAP],
+        max_tokens=256,
+        language_ref="mood",
+        temperature=0.0,
+        reject_cut=True,
     )
     return MoodResponse(mood=_parse_mood(raw))
 
