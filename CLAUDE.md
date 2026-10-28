@@ -20,7 +20,9 @@ the `sync-ai-docs.yml` workflow propagates changes to every code repo.
 2. **CONTRIBUTING.md format** -- registry structure is mechanically
    parseable.
 3. **No CJK/emoji** -- committed text stays in ASCII-compatible
-   ranges. Text-presentation symbols are OK.
+   ranges. Text-presentation symbols are OK. App localization files
+   (`*.xcstrings`, `*.lproj/*.strings`, `*.lproj/*.stringsdict`) may
+   hold CJK, never emoji.
 4. **CLAUDE.md <= 80 lines** -- entry point stays tight.
 5. **Skills/MCP registry** -- every adopted skill/MCP listed in
    `docs/ai/skills.md`.
