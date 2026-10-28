@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 # Chinese sample text, built with chr() to keep this file ASCII-only (rule 3).
 ZH_NOTE = chr(0x4ECA) + chr(0x5929) + chr(0x5F88) + chr(0x7D2F)  # "today very tired"
 ZH_REPLY = chr(0x4ECA) + chr(0x5929) + chr(0x771F) + chr(0x7684) + chr(0x5F88) + chr(0x7D2F)
@@ -286,3 +288,140 @@ def test_expand_language_follows_text_not_context(client):
     # Composite prompt contains Chinese context, but the reply matches the
     # note's language, so no correction retry (just the grounding check).
     assert len(fake_llm.chat.completions.calls) == 2
+
+
+@pytest.mark.parametrize("mood", ["joyful", "calm", "tender", "low", "tense", "neutral"])
+def test_mood_passes_each_value_through(client, mood):
+    test_client, fake_llm = client
+    fake_llm.reply_with(mood)
+
+    r = test_client.post("/mood", json={"text": "a page about my day"})
+
+    assert r.status_code == 200
+    assert r.json() == {"mood": mood}
+    call = fake_llm.chat.completions.calls[0]
+    assert call["temperature"] <= 0.2
+    # Room for a thinking model to reason before it answers.
+    assert call["max_tokens"] >= 256
+
+
+@pytest.mark.parametrize(
+    "reply, expected",
+    [
+        ("  Calm.\n", "calm"),
+        ("JOYFUL", "joyful"),
+        ('"tender"', "tender"),
+        ('{"mood": " Low "}', "low"),
+        ("**calm**", "calm"),
+        ("Calm, mostly", "calm"),
+        ("calm" + chr(0x3002), "calm"),  # fullwidth full stop
+        ("tense -- the page is about a deadline, though calm at the end", "tense"),
+    ],
+)
+def test_mood_takes_the_first_mood_word_in_the_reply(client, reply, expected):
+    test_client, fake_llm = client
+    fake_llm.reply_with(reply)
+
+    r = test_client.post("/mood", json={"text": "a page"})
+
+    assert r.status_code == 200
+    assert r.json() == {"mood": expected}
+
+
+@pytest.mark.parametrize("reply", ["happy", "below the surface", '{"x": 1}', "[]"])
+def test_mood_reply_naming_no_mood_is_502(client, reply):
+    test_client, fake_llm = client
+    fake_llm.reply_with(reply)
+
+    r = test_client.post("/mood", json={"text": "a page"})
+
+    assert r.status_code == 502
+
+
+def test_mood_turns_thinking_off(client):
+    # A thinking model can reason past any max_tokens on a mixed-feelings
+    # page, so /mood asks for no reasoning at all.
+    test_client, fake_llm = client
+    fake_llm.reply_with("calm")
+
+    test_client.post("/mood", json={"text": "a page"})
+
+    call = fake_llm.chat.completions.calls[0]
+    assert call["extra_body"] == {"thinking": {"type": "disabled"}}
+
+
+def test_other_endpoints_leave_thinking_alone(client):
+    test_client, fake_llm = client
+    fake_llm.reply_with("A clean note.")
+
+    test_client.post("/clean", json={"text": "a note"})
+
+    assert "extra_body" not in fake_llm.chat.completions.calls[0]
+
+
+def test_mood_empty_reply_is_502(client):
+    test_client, fake_llm = client
+    fake_llm.reply_with("")
+
+    r = test_client.post("/mood", json={"text": "a page"})
+
+    assert r.status_code == 502
+    assert len(fake_llm.chat.completions.calls) == 1
+
+
+def test_mood_length_cut_reply_is_502(client):
+    # A thinking model that spent max_tokens on reasoning: finish_reason
+    # "length", even if a fragment of an answer came back.
+    test_client, fake_llm = client
+    fake_llm.reply_with(("calm", "length"))
+
+    r = test_client.post("/mood", json={"text": "a page"})
+
+    assert r.status_code == 502
+
+
+def test_mood_chinese_page_does_not_trigger_language_retry(client):
+    test_client, fake_llm = client
+    fake_llm.reply_with("low")
+
+    r = test_client.post("/mood", json={"text": ZH_NOTE})
+
+    assert r.status_code == 200
+    assert r.json() == {"mood": "low"}
+    assert len(fake_llm.chat.completions.calls) == 1
+
+
+def test_mood_chinese_reply_gets_one_english_retry_then_502(client):
+    test_client, fake_llm = client
+    fake_llm.reply_with(ZH_NOTE, ZH_NOTE)
+
+    r = test_client.post("/mood", json={"text": ZH_NOTE})
+
+    assert r.status_code == 502
+    calls = fake_llm.chat.completions.calls
+    assert len(calls) == 2
+    assert "entirely in English" in calls[1]["messages"][3]["content"]
+
+
+@pytest.mark.parametrize("text", ["", "   \n\t"])
+def test_mood_rejects_empty_or_whitespace_text(client, text):
+    test_client, fake_llm = client
+    r = test_client.post("/mood", json={"text": text})
+    assert r.status_code == 422
+    assert fake_llm.chat.completions.calls == []
+
+
+def test_mood_cuts_long_text_to_4000_code_points(client):
+    # A family emoji is 7 code points: 600 of them pass the app's
+    # 2000-character cap but are 4200 code points.
+    test_client, fake_llm = client
+    fake_llm.reply_with("tender")
+    family = chr(0x1F468) + chr(0x200D) + chr(0x1F469) + chr(0x200D) + chr(0x1F467) + chr(0x200D) + chr(0x1F466)
+
+    r = test_client.post("/mood", json={"text": family * 600})
+
+    assert r.status_code == 200
+    assert r.json() == {"mood": "tender"}
+    sent = fake_llm.chat.completions.calls[0]["messages"][1]["content"]
+    assert len(sent) == 4000
+    assert sent == (family * 600)[:4000]

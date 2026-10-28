@@ -8,15 +8,16 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import asyncio
 from pathlib import Path
-from typing import List, Literal, Optional
+from typing import Annotated, List, Literal, Optional, get_args
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, StringConstraints
 from dotenv import load_dotenv
 
 import beta_auth
@@ -62,6 +63,7 @@ POLISH_SYSTEM = (_PROMPT_DIR / "polish.txt").read_text(encoding="utf-8")
 SHORTEN_SYSTEM = (_PROMPT_DIR / "shorten.txt").read_text(encoding="utf-8")
 KEYWORDS_SYSTEM = (_PROMPT_DIR / "keywords.txt").read_text(encoding="utf-8")
 CAPTION_SYSTEM = (_PROMPT_DIR / "caption.txt").read_text(encoding="utf-8")
+MOOD_SYSTEM = (_PROMPT_DIR / "mood.txt").read_text(encoding="utf-8")
 
 
 class TextRequest(BaseModel):
@@ -121,6 +123,23 @@ class CaptionResponse(BaseModel):
     original: str
     caption: str
     style: str
+
+
+Mood = Literal["joyful", "calm", "tender", "low", "tense", "neutral"]
+MOOD_WORD = re.compile(r"\b(" + "|".join(get_args(Mood)) + r")\b", re.IGNORECASE)
+MOOD_TEXT_CAP = 4000
+
+
+class MoodRequest(BaseModel):
+    # The app sends at most 2000 characters; the endpoint cuts longer text to
+    # MOOD_TEXT_CAP code points so a direct caller can't run up the LLM bill.
+    text: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)] = Field(
+        ..., description="Page words plus short photo descriptions, any language"
+    )
+
+
+class MoodResponse(BaseModel):
+    mood: Mood
 
 
 def _contains_cjk(text: str) -> bool:
@@ -186,7 +205,18 @@ def _language_correction(ref: str, reply: str) -> Optional[str]:
     return None
 
 
-async def _completion(messages: list[dict], max_tokens: int, temperature: float) -> str:
+async def _completion(
+    messages: list[dict],
+    max_tokens: int,
+    temperature: float,
+    reject_cut: bool = False,
+    thinking_off: bool = False,
+) -> str:
+    """One LLM call. With `reject_cut`, an empty or max_tokens-cut reply is a
+    502: a thinking model can spend the whole budget on reasoning.
+    `thinking_off` asks the model to skip reasoning (DeepSeek's switch;
+    deepseek-chat accepts and ignores it)."""
+    extra = {"extra_body": {"thinking": {"type": "disabled"}}} if thinking_off else {}
     for attempt in range(3):
         try:
             resp = await asyncio.to_thread(
@@ -195,8 +225,10 @@ async def _completion(messages: list[dict], max_tokens: int, temperature: float)
                 messages=messages,
                 max_tokens=max_tokens,
                 temperature=temperature,
+                **extra,
             )
-            return resp.choices[0].message.content.strip()
+            choice = resp.choices[0]
+            reply = choice.message.content.strip()
         except Exception as e:
             if "429" in str(e) and attempt < 2:
                 wait = 45 * (attempt + 1)
@@ -204,6 +236,10 @@ async def _completion(messages: list[dict], max_tokens: int, temperature: float)
                 await asyncio.sleep(wait)
             else:
                 raise HTTPException(status_code=502, detail=f"LLM call failed: {e}")
+        else:
+            if reject_cut and (not reply or choice.finish_reason == "length"):
+                raise HTTPException(status_code=502, detail="LLM reply was empty or cut off")
+            return reply
     raise HTTPException(status_code=502, detail="LLM call failed after retries")
 
 
@@ -245,6 +281,8 @@ async def call_llm(
     temperature: float = 1.0,
     max_output_chars: Optional[int] = None,
     grounding_check: bool = False,
+    reject_cut: bool = False,
+    thinking_off: bool = False,
 ) -> str:
     """Call the LLM; the reply must match the language of `language_ref`
     (defaults to `user_text`): Chinese stays Chinese (simplified stays
@@ -262,7 +300,7 @@ async def call_llm(
         {"role": "system", "content": system},
         {"role": "user", "content": user_text},
     ]
-    reply = await _completion(messages, max_tokens, temperature)
+    reply = await _completion(messages, max_tokens, temperature, reject_cut, thinking_off)
 
     ref = user_text if language_ref is None else language_ref
     notes = []
@@ -281,7 +319,7 @@ async def call_llm(
             {"role": "assistant", "content": reply},
             {"role": "user", "content": "\n\n".join(notes)},
         ]
-        reply = await _completion(messages, max_tokens, temperature)
+        reply = await _completion(messages, max_tokens, temperature, reject_cut, thinking_off)
 
     # Fabrication is checked last, on whatever reply survived the retry:
     # a fact-checker pass lists invented specifics, one rewrite removes them.
@@ -381,6 +419,36 @@ async def caption_endpoint(req: CaptionRequest):
     user_msg = f"style={req.style}\n\n{req.text}"
     caption = await call_llm(CAPTION_SYSTEM, user_msg, max_tokens=512)
     return CaptionResponse(original=req.text, caption=caption, style=req.style)
+
+
+def _parse_mood(raw: str) -> Mood:
+    """The first of the six mood words in `raw`, whatever markdown,
+    punctuation or explanation surrounds it. A reply with none is a 502, so
+    the app retries later instead of caching a guessed "neutral"."""
+    match = MOOD_WORD.search(raw)
+    if match is None:
+        raise HTTPException(status_code=502, detail="LLM reply named no mood")
+    return match.group(1).lower()
+
+
+@app.post("/mood", response_model=MoodResponse)
+async def mood_endpoint(req: MoodRequest):
+    """Classify a journal page's overall mood into one of six fixed values."""
+    # language_ref is a fixed English word: the reply is always an English
+    # label, so a Chinese page must not trigger the language-match retry
+    # (a Chinese label still gets one retry asking for English).
+    # Thinking is off: on a mixed-feelings page a reasoning model can spend
+    # any max_tokens before answering. The answer itself is one word.
+    raw = await call_llm(
+        MOOD_SYSTEM,
+        req.text[:MOOD_TEXT_CAP],
+        max_tokens=256,
+        language_ref="mood",
+        temperature=0.0,
+        reject_cut=True,
+        thinking_off=True,
+    )
+    return MoodResponse(mood=_parse_mood(raw))
 
 
 @app.get("/health")

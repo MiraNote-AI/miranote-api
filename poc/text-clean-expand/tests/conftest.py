@@ -10,16 +10,22 @@ import pytest
 
 class FakeChatCompletions:
     def __init__(self):
-        self.scripted: List[str] = []
+        self.scripted: list = []
         self.calls: list = []
 
     def create(self, **kwargs):
         self.calls.append(kwargs)
         if not self.scripted:
             raise AssertionError("FakeChatCompletions: no more scripted responses")
+        # An entry is the reply text, or (text, finish_reason) for a cut reply.
         content = self.scripted.pop(0)
+        content, finish_reason = content if isinstance(content, tuple) else (content, "stop")
         return SimpleNamespace(
-            choices=[SimpleNamespace(message=SimpleNamespace(content=content))]
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(content=content), finish_reason=finish_reason
+                )
+            ]
         )
 
 
@@ -27,7 +33,7 @@ class FakeOpenAI:
     def __init__(self):
         self.chat = SimpleNamespace(completions=FakeChatCompletions())
 
-    def reply_with(self, *responses: str):
+    def reply_with(self, *responses):
         """Queue scripted responses for the next N calls."""
         self.chat.completions.scripted.extend(responses)
 
