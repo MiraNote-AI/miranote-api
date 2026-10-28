@@ -79,6 +79,14 @@ The beta check scans the file set returned by
 `git ls-files --cached --others --exclude-standard` -- including
 locally-staged-but-untracked files, so local results match CI.
 
+Exception (approved 2026-10-27 for the iOS Simplified Chinese localization):
+app localization resources may contain CJK text, because translated UI
+strings are the whole point of those files. This covers String Catalogs
+(`*.xcstrings`, any path) and `.strings` / `.stringsdict` files placed
+directly inside a `<lang>.lproj` directory (e.g. `zh-Hans.lproj`). Emoji
+remain forbidden there, and a `.strings` file outside `.lproj`, Swift
+source, and every other file stay strict.
+
 **Rationale:** A multilingual team can easily leak input-method residue
 into committed source. DASGPT was bitten by this in production.
 **Enforced by:** `checks/no_cjk_or_emoji.py`
