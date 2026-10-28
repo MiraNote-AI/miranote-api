@@ -210,9 +210,13 @@ async def _completion(
     max_tokens: int,
     temperature: float,
     reject_cut: bool = False,
+    thinking_off: bool = False,
 ) -> str:
     """One LLM call. With `reject_cut`, an empty or max_tokens-cut reply is a
-    502: a thinking model can spend the whole budget on reasoning."""
+    502: a thinking model can spend the whole budget on reasoning.
+    `thinking_off` asks the model to skip reasoning (DeepSeek's switch;
+    deepseek-chat accepts and ignores it)."""
+    extra = {"extra_body": {"thinking": {"type": "disabled"}}} if thinking_off else {}
     for attempt in range(3):
         try:
             resp = await asyncio.to_thread(
@@ -221,6 +225,7 @@ async def _completion(
                 messages=messages,
                 max_tokens=max_tokens,
                 temperature=temperature,
+                **extra,
             )
             choice = resp.choices[0]
             reply = choice.message.content.strip()
@@ -277,6 +282,7 @@ async def call_llm(
     max_output_chars: Optional[int] = None,
     grounding_check: bool = False,
     reject_cut: bool = False,
+    thinking_off: bool = False,
 ) -> str:
     """Call the LLM; the reply must match the language of `language_ref`
     (defaults to `user_text`): Chinese stays Chinese (simplified stays
@@ -294,7 +300,7 @@ async def call_llm(
         {"role": "system", "content": system},
         {"role": "user", "content": user_text},
     ]
-    reply = await _completion(messages, max_tokens, temperature, reject_cut)
+    reply = await _completion(messages, max_tokens, temperature, reject_cut, thinking_off)
 
     ref = user_text if language_ref is None else language_ref
     notes = []
@@ -313,7 +319,7 @@ async def call_llm(
             {"role": "assistant", "content": reply},
             {"role": "user", "content": "\n\n".join(notes)},
         ]
-        reply = await _completion(messages, max_tokens, temperature, reject_cut)
+        reply = await _completion(messages, max_tokens, temperature, reject_cut, thinking_off)
 
     # Fabrication is checked last, on whatever reply survived the retry:
     # a fact-checker pass lists invented specifics, one rewrite removes them.
@@ -431,7 +437,8 @@ async def mood_endpoint(req: MoodRequest):
     # language_ref is a fixed English word: the reply is always an English
     # label, so a Chinese page must not trigger the language-match retry
     # (a Chinese label still gets one retry asking for English).
-    # max_tokens leaves a thinking model room to reason before it answers.
+    # Thinking is off: on a mixed-feelings page a reasoning model can spend
+    # any max_tokens before answering. The answer itself is one word.
     raw = await call_llm(
         MOOD_SYSTEM,
         req.text[:MOOD_TEXT_CAP],
@@ -439,6 +446,7 @@ async def mood_endpoint(req: MoodRequest):
         language_ref="mood",
         temperature=0.0,
         reject_cut=True,
+        thinking_off=True,
     )
     return MoodResponse(mood=_parse_mood(raw))
 

@@ -338,6 +338,27 @@ def test_mood_reply_naming_no_mood_is_502(client, reply):
     assert r.status_code == 502
 
 
+def test_mood_turns_thinking_off(client):
+    # A thinking model can reason past any max_tokens on a mixed-feelings
+    # page, so /mood asks for no reasoning at all.
+    test_client, fake_llm = client
+    fake_llm.reply_with("calm")
+
+    test_client.post("/mood", json={"text": "a page"})
+
+    call = fake_llm.chat.completions.calls[0]
+    assert call["extra_body"] == {"thinking": {"type": "disabled"}}
+
+
+def test_other_endpoints_leave_thinking_alone(client):
+    test_client, fake_llm = client
+    fake_llm.reply_with("A clean note.")
+
+    test_client.post("/clean", json={"text": "a note"})
+
+    assert "extra_body" not in fake_llm.chat.completions.calls[0]
+
+
 def test_mood_empty_reply_is_502(client):
     test_client, fake_llm = client
     fake_llm.reply_with("")
