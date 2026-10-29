@@ -27,6 +27,34 @@ class GeneratePresetTests(unittest.TestCase):
         self.assertEqual(config.ASPECT_RATIOS["background"], "9:16")
 
 
+class StickerPromptTests(unittest.TestCase):
+    """The sticker prompt must not ask for a sticker.
+
+    Told "sticker", z-image-turbo draws a die-cut sticker: the art on white
+    paper, with that paper inside every hole too, so a donut's hole or the gap
+    in a mug handle came out white and could not be told from an eye's white.
+    Stickers now come out with no edge (the Outline tool adds one), so the art
+    is drawn straight on a flat backdrop that shows through its holes, and the
+    expander names that backdrop. Bench (2026-10-28, 48 prompts): a white rim on
+    5 of 48 instead of 14 of 15, and every hole empty after the cut.
+    """
+
+    def test_the_built_prompt_never_says_sticker(self):
+        prompt = generate_presets.build_sticker_prompt("a donut").lower()
+        self.assertNotIn("sticker", prompt)
+        self.assertIn("shows through every gap and hole", prompt)
+
+    def test_the_expander_names_the_backdrop_and_avoids_the_word(self):
+        from generate import prompt_expander
+        system = prompt_expander.SYSTEM_PROMPT
+        self.assertIn("on a solid flat [background color] background", system)
+        self.assertIn("Never use the words sticker", system)
+        for line in system.splitlines():
+            if line.startswith("Output: "):
+                self.assertNotIn("sticker", line.lower(), line)
+                self.assertIn("background.", line)
+
+
 class BackgroundRuleTests(unittest.TestCase):
     """The background rule must not forbid a border, a margin or rounded corners.
 
