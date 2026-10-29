@@ -71,13 +71,38 @@ The agent that wrote a change does not get to declare it done:
 - Run the `verify-repo` commands from a clean state and record the results
   in the iteration ledger.
 - Before SUCCESS, a fresh-context subagent reviews the work. It receives
-  ONLY the acceptance criteria and `git diff <base>...HEAD` -- not the
-  conversation that produced them. Record its verdict in the ledger. A
+  ONLY the acceptance criteria, the repo's `REVIEW.md` (if it has one) and
+  `git diff <base>...HEAD` -- not the conversation that produced them. Record its verdict in the ledger. A
   "not done" verdict means the iteration failed: iterate again (it counts
   against the cap) or hand off.
 - Only exception: changes that touch no application code (docs/plan-only)
   may skip the subagent; `verify-repo` alone gates those.
 - "Looks right" is not a signal. Only command output is.
+
+## Pre-merge review
+
+Runs after the fresh-context check passes and before SUCCESS. Changes
+that touch no application code skip it, as they skip the subagent. Both
+commands run report-only: no `--comment`, no `--fix`.
+
+1. Tier the diff against the sensitive-path list in the repo's
+   `REVIEW.md` (a repo without one has no sensitive paths yet): touches a
+   sensitive path -> `/code-review high <branch>`, then
+   `/security-review`; otherwise -> `/code-review medium <branch>`. A diff
+   over ~1,000 changed lines (lockfiles and generated files not counted)
+   is split first; if it cannot be split, the PR body says why and the
+   review runs at `high`.
+2. Answer every finding in the iteration ledger: `FIXED <sha>` or
+   `ANSWERED <one-line reason>`. A finding this diff did not introduce is
+   `PRE-EXISTING`: list it in the PR body as a follow-up for its own
+   issue, not a fix on this branch.
+3. Fixes are a new iteration (they count against the cap); re-run the
+   review on the new HEAD. A finding already answered is not re-raised.
+4. Review cap: if the third review round still returns an IMPORTANT
+   finding that is neither fixed nor answered, stop and write the
+   handoff -- the approach needs rethinking, not a fourth patch.
+5. The PR body states `Pre-merge review: N findings -- M fixed, K
+   answered`, with the answered reasons.
 
 ## State persistence
 
@@ -123,11 +148,14 @@ The loop's memory lives on disk, never only in the context window:
 
 Every loop ends in exactly one of two states:
 
-1. **SUCCESS**: all criteria pass, fresh-context check passed ->
+1. **SUCCESS**: all criteria pass, fresh-context check passed, pre-merge
+   review settled (every finding fixed or answered) ->
    `create-pr` -> PR open with CI green -> STOP. A human reviews and
    merges. Never `gh pr merge --admin`, never self-approve, never merge
    your own PR. The PR body must say, in plain language: what changed, why
-   this approach, and what was NOT verified (every `HUMAN:` criterion). If
+   this approach, and what was NOT verified (every `HUMAN:` criterion),
+   plus the pre-merge review line and the org template's Risk and How to
+   revert sections. If
    the diff is too large to review in one sitting, split it -- an
    unreviewable PR is a failed loop, not a finished one.
 2. **HANDOFF**: a stop condition fired -> handoff file written -> STOP and
@@ -149,5 +177,8 @@ Never, in any state:
 - Two loops sharing one checkout.
 - A PR merged by the loop that opened it.
 - A PR that cannot be understood from its body plus the plan file.
+- SUCCESS with a pre-merge review finding neither fixed nor answered.
+- A PR body without Risk and How to revert.
+- A diff over ~1,000 changed lines with no split and no stated reason.
 
 Any of these = stop the loop, write the handoff, escalate to a human.
