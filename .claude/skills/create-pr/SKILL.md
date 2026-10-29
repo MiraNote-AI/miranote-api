@@ -63,7 +63,7 @@ PR body must contain at least one of:
 
 1. **Branch name:** `<type>/<short-slug>`, e.g. `feat/user-signup`. Do not embed internal indices (`f-2`, `phase-3`).
 2. **Draft the title** matching the format above.
-3. **Draft the body** with at least one valid reference.
+3. **Draft the body** from the org PR template (`.github/pull_request_template.md` in `MiraNote-AI/.github`): Summary; Why, with at least one valid reference; Verification, including what was NOT verified; Risk (`low` / `medium` / `high`, and why); How to revert. `gh pr create --body` does not apply the template, so write the sections yourself.
 4. **Pre-check locally** before `gh pr create`. From a clone of `MiraNote-AI/.github`:
 
    ```bash
