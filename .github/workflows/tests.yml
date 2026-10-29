@@ -20,9 +20,13 @@ jobs:
         include:
           # chatbot and retrieval run from the repo root, the other two from
           # their POC directory -- the same commands verify-repo gives.
+          # chatbot's main.py refuses to import without LLM_API_KEY (a local
+          # run reads it from poc/chatbot/.env); its tests stub every call,
+          # so CI gives it a placeholder that is never sent anywhere.
           - suite: chatbot
             workdir: .
             tests: poc/chatbot/tests
+            llm_key_placeholder: true
           - suite: retrieval
             workdir: .
             tests: poc/retrieval/tests
@@ -51,5 +55,11 @@ jobs:
       - name: Run pytest
         working-directory: ${{ matrix.workdir }}
         env:
-          PYTHONPATH: .
-        run: python -m pytest ${{ matrix.tests }} -v
+          # The working directory, plus the repo root: every service
+          # imports beta_auth from there.
+          PYTHONPATH: .:${{ github.workspace }}
+        run: |
+          if [ "${{ matrix.llm_key_placeholder }}" = "true" ]; then
+            export LLM_API_KEY=ci-placeholder-not-a-real-key
+          fi
+          python -m pytest ${{ matrix.tests }} -v
