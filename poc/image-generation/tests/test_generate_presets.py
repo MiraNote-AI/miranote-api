@@ -13,7 +13,7 @@ class GeneratePresetTests(unittest.TestCase):
                          "the word drew notebooks into the picture (2026-10-15)")
         self.assertNotIn("seamless journaling background texture", prompt,
                          "art must never carry the background rule")
-        self.assertNotIn("background removal", prompt,
+        self.assertNotIn("shows through every gap and hole", prompt,
                          "art must never carry the sticker suffix")
 
     def test_art_aspect_is_square(self):
@@ -37,12 +37,25 @@ class StickerPromptTests(unittest.TestCase):
     is drawn straight on a flat backdrop that shows through its holes, and the
     expander names that backdrop. Bench (2026-10-28, 48 prompts): a white rim on
     5 of 48 instead of 14 of 15, and every hole empty after the cut.
+
+    Open question: the suffix still says "no white outline and no paper
+    backing", and BackgroundRuleTests below records that negations put those
+    things INTO z-image-turbo's backgrounds. The bench measured the whole
+    change at once, so whether the 5 remaining rims come despite or because
+    of those words is untested; a one-variable A/B should settle it.
     """
 
-    def test_the_built_prompt_never_says_sticker(self):
+    def test_the_suffix_never_says_sticker(self):
         prompt = generate_presets.build_sticker_prompt("a donut").lower()
         self.assertNotIn("sticker", prompt)
         self.assertIn("shows through every gap and hole", prompt)
+
+    def test_the_suffix_stands_alone_when_the_expander_is_skipped(self):
+        # expand=false, or the expander failed and the user's words came
+        # through raw: no colour was named, so the suffix must ask for one
+        # that contrasts on its own.
+        prompt = generate_presets.build_sticker_prompt("a white bunny sticker")
+        self.assertIn("one solid flat saturated background color that contrasts strongly", prompt)
 
     def test_the_expander_names_the_backdrop_and_avoids_the_word(self):
         from generate import prompt_expander

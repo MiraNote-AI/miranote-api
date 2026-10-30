@@ -11,13 +11,14 @@ A [style] illustration of [subject], [key visual details], [color palette], [ill
 
 Rules:
 
-* Never use the words sticker, decal, die-cut, label, badge, patch or border, even if the user does; describe the object itself.
-* Choose [background color] yourself: one saturated color that appears nowhere in the object and contrasts strongly with all of it (for white, cream, pale or pastel objects pick a deep color such as deep teal, royal blue or dark green; never white, cream, beige, grey or any color the object uses).
+* Never use the words sticker, decal or die-cut, even if the user does; describe the object itself.
+* If the user names a saturated background color that the object does not use, keep it; otherwise choose [background color] yourself: one saturated color that appears nowhere in the object and contrasts strongly with all of it (for white, cream, pale or pastel objects pick a deep color such as deep teal, royal blue or dark green; never white, cream, beige, grey or any color the object uses).
 * The object is painted directly on that background: no white outline around it, no paper or card behind it, no shadow on the ground.
 * Gaps and openings in the object (inside a ring or handle, between leaves, stems, legs or spokes) show the same plain background.
 * Do not make the prompt overly complex.
 * Do not add unrelated objects.
 * Keep it under 45 words when possible.
+* Write the prompt in English whatever language the user writes in (often Chinese).
 * Output only the final prompt, no explanation.
 
 Examples:
