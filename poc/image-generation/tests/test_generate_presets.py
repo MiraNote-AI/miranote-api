@@ -37,12 +37,6 @@ class StickerPromptTests(unittest.TestCase):
     is drawn straight on a flat backdrop that shows through its holes, and the
     expander names that backdrop. Bench (2026-10-28, 48 prompts): a white rim on
     5 of 48 instead of 14 of 15, and every hole empty after the cut.
-
-    Open question: the suffix still says "no white outline and no paper
-    backing", and BackgroundRuleTests below records that negations put those
-    things INTO z-image-turbo's backgrounds. The bench measured the whole
-    change at once, so whether the 5 remaining rims come despite or because
-    of those words is untested; a one-variable A/B should settle it.
     """
 
     def test_the_suffix_never_says_sticker(self):
