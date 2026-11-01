@@ -90,6 +90,10 @@ Both fallbacks (`json_object`) also worked and can be switched to with
 
 Cost uses the token counts the provider returns: input 0.2, output 0.8 CNY
 per million tokens (thinking tokens are output).
+A call cut at its time limit returns no token counts, so it is logged at
+cost 0, but the provider may still bill it (the request is abandoned, not
+cancelled upstream). Expect real spend to run slightly above the log when
+timeouts happen.
 
 A result that completes after the job cap is not delivered: it is
 answered and logged as `timeout` (the log adds `lateResult: true` and the

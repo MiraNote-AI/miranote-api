@@ -123,3 +123,26 @@ def test_slow_non_stream_reply_is_cut_at_wall_clock_timeout(monkeypatch):
     with pytest.raises(llm.ModelTimeout):
         llm.complete([{"role": "user", "content": "x"}], call="b", timeout=0.1)
     assert _time.monotonic() - started < 0.4
+
+
+def test_timed_out_call_future_is_cancelled(monkeypatch):
+    from concurrent.futures import TimeoutError as FutureTimeout
+
+    class Future:
+        cancelled = False
+
+        def result(self, timeout=None):
+            raise FutureTimeout()
+
+        def cancel(self):
+            Future.cancelled = True
+            return False
+
+    class Pool:
+        def submit(self, fn):
+            return Future()
+
+    monkeypatch.setattr(llm, "_calls", Pool())
+    with pytest.raises(llm.ModelTimeout):
+        llm.complete([{"role": "user", "content": "x"}], call="b", timeout=30)
+    assert Future.cancelled is True

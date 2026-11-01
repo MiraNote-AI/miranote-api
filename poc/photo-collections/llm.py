@@ -136,9 +136,14 @@ def complete(messages: List[dict], *, call: str, timeout: float) -> LlmReply:
         return "".join(parts), usage
 
     try:
+        future = _calls.submit(_do)
         try:
-            text, usage = _calls.submit(_do).result(timeout=timeout)
+            text, usage = future.result(timeout=timeout)
         except FutureTimeout:
+            # Stops a request still queued; one already sent runs on until its
+            # own read timeout. Its tokens are never seen, so the call is
+            # logged at cost 0 although the provider may bill it.
+            future.cancel()
             raise ModelTimeout("no complete reply within {:.0f}s".format(timeout)) from None
     except ModelTimeout:
         raise
