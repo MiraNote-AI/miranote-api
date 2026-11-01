@@ -90,6 +90,26 @@ Both fallbacks (`json_object`) also worked and can be switched to with
 Cost uses the token counts the provider returns: input 0.2, output 0.8 CNY
 per million tokens (thinking tokens are output).
 
+## Readings of the spec (decided from the first real runs)
+
+AI doc 4 is followed as written; where it is silent the code reads it so:
+
+- **Nouns** are grounded when they are a substring of any subject, detail or
+  text of the selected photos (jieba splits the same phrase differently in
+  different contexts, so token-set membership rejected the spec's own good
+  examples).
+- **uses**: the particles 的 / 了 / 着 are dropped on both sides, and the
+  `name(type)` / `文字：` labels the B prompt itself prints are removed before
+  matching.
+- **Peak bonus (+2)** scores only the photo ids the model cited; templates
+  T1 / T2 are fallback levels (AI doc 6) and never take it.
+- **A photo id in a model sentence** ("P1, P3, ...") is rejected -- a sanity
+  check, not an AI doc 4 rule.
+- **skip=true** from call A is a verdict (`skip_screenshots`, or `sensitive`
+  when any photo has a sensitive flag), even with nothing selected.
+- **T1's n** sums `represents` over every sent photo showing X, so "you took
+  n" is true of the whole group.
+
 ## Log
 
 One JSON line per job in `logs/photo-collections/compose.jsonl` (repo root,
