@@ -245,3 +245,19 @@ def test_a4_hidden_when_no_sight():
         _p("P3", [("舞台", "object")], []),
     ])
     assert "A4" not in _by_id(_cands(a=a))
+
+
+def test_moment_questions_need_a_peak_phrase():
+    # H1 round 4 (9.20): the peak (a floor painting) had no action phrase, so
+    # A1 could only be filled with another photo's everyday "交通灯亮着红灯".
+    a = _a([
+        _p("P1", [("街道", "scenery")], ["交通灯亮着红灯"]),
+        _p("P2", [("建筑", "object")], ["灰白色的外墙"]),
+        _p("P3", [("地画", "object")], ["地面有峡谷状3D画"]),
+    ], peak="P3")
+    ids = _by_id(_cands(a=a))
+    assert "A1" not in ids
+    assert ids["A2"].menu[0] == "地画"
+    # With a peak phrase, other photos' phrases stay in the menu after it.
+    a.photos["P3"].details.append("灯光照在地画上")
+    assert _by_id(_cands(a=a))["A1"].menu == ["灯光照在地画上", "交通灯亮着红灯"]

@@ -114,6 +114,10 @@ AI doc 4 is followed as written; where it is silent the code reads it so:
   details with a sight verb (`prompts/sight_verbs.txt`: light, things,
   change), not people's actions; the prompt alone did not stop fills like
   "站在蓝色幕布前". A1 keeps every action phrase.
+- **{画面} questions (A1 / A4) need a phrase from the peak** (program-side,
+  after H1 round 4): when the peak photo has no action phrase they are not
+  offered, so the fill cannot be only other photos' everyday scenes while
+  the peak's own subject is on the {物} menus. Menu order stays peak first.
 - **skip=true** from call A is a verdict (`skip_screenshots`, or `sensitive`
   when any photo has a sensitive flag), even with nothing selected.
 - **T1's n** sums `represents` over every sent photo showing X, so "you took

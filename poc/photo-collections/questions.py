@@ -94,12 +94,18 @@ def _thing_menu(a: AResult, types: List[str], drop_common: bool) -> List[str]:
 
 
 def _moment_menu(a: AResult, words: str = "action_verbs") -> List[str]:
+    """Action phrases of the selected photos, the peak's first. Empty (so
+    the question is not offered) when the peak has none: a program-side
+    narrowing added after H1 round 4 -- without it the only fills were other
+    photos' everyday scenes while the peak's own thing was left out."""
     verbs = texts.words(words)
     out: List[str] = []
     for pid in _peak_first(a):
         for d in a.photos[pid].details:
             if any(v in d for v in verbs) and d not in out:
                 out.append(d)
+        if pid == a.peak and not out:
+            return []
     return out
 
 
