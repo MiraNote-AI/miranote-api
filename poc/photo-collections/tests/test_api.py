@@ -297,3 +297,18 @@ def test_png_and_heic_uploads_accepted(client, fake_model):
     assert urls[0].startswith("data:image/png;base64,")
     assert urls[1].startswith("data:image/heic;base64,")
     assert urls[2].startswith("data:image/jpeg;base64,")
+
+
+def test_job_finishing_after_cap_reads_timeout():
+    clock = _Clock()
+    store = jobs.JobStore(ttl=900, cap=300, clock=clock)
+
+    def late(deadline):
+        clock.now += 301
+        return {"status": "ok", "memory": {}}
+
+    job_id = store.submit(late)
+    end = time.monotonic() + 2
+    while store.get(job_id) == {"status": "running"} and time.monotonic() < end:
+        time.sleep(0.01)
+    assert store.get(job_id) == {"status": "error", "reason": "timeout", "message": "AI 超时"}

@@ -86,7 +86,10 @@ def fake_model(monkeypatch):
     fake = FakeModel()
     monkeypatch.setattr(llm, "complete", fake)
     monkeypatch.setattr(llm, "probe", lambda: "ok")
-    return fake
+    yield fake
+    # The pipeline turns unexpected exceptions into model_error, so an
+    # unscripted call would otherwise pass silently.
+    assert fake.unexpected == [], "unscripted model calls: {}".format(fake.unexpected)
 
 
 @pytest.fixture

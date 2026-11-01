@@ -14,6 +14,7 @@ import base64
 import json
 import threading
 import time
+import traceback
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -317,6 +318,13 @@ class _Job:
         return None, last
 
     def finish(self, result: dict) -> dict:
+        # A result completed after the job deadline is not delivered: the
+        # phone has been told (or will be told) "timeout" by then.
+        if time.monotonic() > self.deadline and not (
+                result.get("status") == "error" and result.get("reason") == "timeout"):
+            self.log["lateResult"] = True
+            self.log["lateStatus"] = result.get("status")
+            result = _result("error", "timeout")
         self.log.update(
             ts=datetime.now(timezone.utc).isoformat(timespec="seconds"),
             status=result["status"],
@@ -353,8 +361,19 @@ def _facts_line(p: check_a.PhotoFacts, names: dict) -> str:
 
 
 def run(meta: dict, images: Dict[str, bytes], deadline: float) -> dict:
-    """Compose one memory. meta and images are already validated."""
+    """Compose one memory. meta and images are already validated. Never
+    raises: an unexpected error still writes the log line (raw output and
+    cost of the calls made so far) and answers error / model_error."""
     job = _Job(meta, deadline)
+    try:
+        return _compose(job, meta, images)
+    except Exception as error:  # noqa: BLE001 -- a bug must not lose the log
+        traceback.print_exc()
+        job.log["exception"] = "{}: {}".format(type(error).__name__, str(error)[:300])
+        return job.finish(_result("error", "model_error"))
+
+
+def _compose(job: "_Job", meta: dict, images: Dict[str, bytes]) -> dict:
     names = texts.json("names")
 
     photos = sorted(meta["photos"], key=lambda p: _sort_key(parse_time(p.get("taken_at"))))

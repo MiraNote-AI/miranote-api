@@ -91,6 +91,12 @@ Both fallbacks (`json_object`) also worked and can be switched to with
 Cost uses the token counts the provider returns: input 0.2, output 0.8 CNY
 per million tokens (thinking tokens are output).
 
+A result that completes after the job cap is not delivered: it is
+answered and logged as `timeout` (the log adds `lateResult: true` and the
+status it would have had). An unexpected error inside the pipeline still
+writes the log line, with the raw output and cost of the calls made, and
+answers `error` / `model_error`.
+
 ## Readings of the spec (decided from the first real runs)
 
 AI doc 4 is followed as written; where it is silent the code reads it so:

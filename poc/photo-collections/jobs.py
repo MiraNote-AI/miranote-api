@@ -54,6 +54,11 @@ class JobStore:
         with self._lock:
             job = self._jobs.get(job_id)
             if job is not None and job["result"] is None:
+                if self._clock() - job["created"] > self._cap:
+                    # Finished past the cap: the answer is "timeout", as it
+                    # would have been for anyone polling in between.
+                    result = {"status": "error", "reason": "timeout",
+                              "message": texts.message("timeout")}
                 job["result"] = result
 
     def get(self, job_id: str) -> Optional[dict]:

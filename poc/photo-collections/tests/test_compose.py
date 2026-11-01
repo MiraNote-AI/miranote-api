@@ -412,10 +412,11 @@ def test_rewrite_counts_cost_and_respects_deadline(fake_model, tmp_log):
 
     fake_model.respond("b", slow_b)
     out = _run(deadline=time.monotonic() + 0.3)
-    assert out["status"] == "ok"
     assert fake_model.count("b") == 3  # 2 from the first job, 1 here: no rewrite
-    assert out["memory"]["generation"]["peakRewrite"] is False
-    assert out["memory"]["push"]["coverPhotoId"] == "P2"
+    # Finished past the deadline: answered as a timeout, logged as late.
+    assert (out["status"], out["reason"]) == ("error", "timeout")
+    entry = json.loads(tmp_log.read_text(encoding="utf-8").splitlines()[-1])
+    assert entry["peakRewrite"] is False and entry["lateResult"] is True
 
 
 def test_time_limits():
@@ -468,3 +469,30 @@ def test_questions_rebuilt_for_switched_cover(fake_model, tmp_log):
     entry = json.loads(tmp_log.read_text(encoding="utf-8").splitlines()[-1])
     assert "A1" in entry["question"]["offered"]
     assert "A1" not in entry["question"]["offered_after_switch"]
+
+
+def test_unexpected_exception_still_logs_and_answers_model_error(fake_model, tmp_log, monkeypatch):
+    def boom(*args, **kwargs):
+        raise RuntimeError("bug in the pick")
+
+    monkeypatch.setattr(compose.body, "pick", boom)
+    fake_model.reply("a", _a_json(), 1000, 500).reply("b", _b_json(), 1000, 500)
+    assert _run() == {"status": "error", "reason": "model_error", "message": "AI 出错了"}
+    entry = json.loads(tmp_log.read_text(encoding="utf-8").splitlines()[-1])
+    assert (entry["status"], entry["reason"]) == ("error", "model_error")
+    assert "RuntimeError" in entry["exception"]
+    assert entry["calls"][0]["raw"].startswith("{")
+    assert entry["costCny"] == pytest.approx(2 * config.cost_cny(1000, 500))
+
+
+def test_result_after_deadline_is_a_logged_timeout(fake_model, tmp_log):
+    def slow_b(messages):
+        time.sleep(0.4)
+        return _b_json()
+
+    fake_model.reply("a", _a_json()).respond("b", slow_b)
+    out = _run(deadline=time.monotonic() + 0.3)
+    assert out == {"status": "error", "reason": "timeout", "message": "AI 超时"}
+    entry = json.loads(tmp_log.read_text(encoding="utf-8").splitlines()[-1])
+    assert (entry["status"], entry["reason"], entry["lateResult"], entry["lateStatus"]) == (
+        "error", "timeout", True, "ok")
