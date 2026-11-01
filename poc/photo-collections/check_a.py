@@ -95,8 +95,10 @@ def parse_json(text: Optional[str]) -> dict:
     except json.JSONDecodeError as ex:
         first = "JSON decode error: {}".format(ex)
         # The model sometimes opens/closes a string value with Chinese quotes.
-        fixed = re.sub(r"(:\s*)" + _LQ, r'\1"', t)
-        fixed = re.sub(_RQ + r'(\s*[,}\]]\s*(?:\n|$|"|\}))', r'"\1', fixed)
+        # An opening quote right after ':' '[' or ',', a closing one right
+        # before ',' '}' or ']' (spaces allowed) is a string delimiter.
+        fixed = re.sub(r"([:\[,]\s*)" + _LQ, r'\1"', t)
+        fixed = re.sub(_RQ + r"(\s*[,}\]])", r'"\1', fixed)
         try:
             value = json.loads(fixed)
         except json.JSONDecodeError:

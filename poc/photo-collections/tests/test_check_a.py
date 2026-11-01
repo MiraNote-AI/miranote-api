@@ -226,3 +226,12 @@ def test_skip_true_still_needs_every_photo_described():
     raw["photos"] = raw["photos"][:-1]
     with pytest.raises(check_a.CheckFailed):
         check_a.validate(raw, IDS)
+
+
+def test_chinese_quotes_repaired_inside_objects_and_arrays():
+    text = '{"subjects": [{"name":“拿铁”,"type":“drink”}]}'
+    assert check_a.parse_json(text)["subjects"] == [{"name": "拿铁", "type": "drink"}]
+    text = '{"text": [“x”, “y”]}'
+    assert check_a.parse_json(text)["text"] == ["x", "y"]
+    text = '{"details": [“猫睡在长椅上” ], "keep": true}'
+    assert check_a.parse_json(text)["details"] == ["猫睡在长椅上"]
