@@ -248,3 +248,52 @@ def test_two_jobs_do_not_mix(client, fake_model):
     assert r2["ending"]["factLine"] == "10.18 · 休斯敦"
     assert all(p["id"].startswith("P") for p in r1["story"]["photos"])
     assert all(p["id"].startswith("Q") for p in r2["story"]["photos"])
+
+
+@pytest.mark.parametrize("field,value", [
+    ("weekday", 0), ("weekday", 8), ("weekday", "7"), ("weekday", True),
+    ("raw_count", 0), ("raw_count", "23"),
+    ("start_time", 1403), ("end_time", None),
+    ("recent_question_ids", ["B4", 2]), ("recent_question_ids", "B4"),
+])
+def test_bad_meta_types_400(client, fake_model, field, value):
+    _assert_400(_submit(client, _meta(**{field: value})), fake_model)
+
+
+@pytest.mark.parametrize("field,value", [
+    ("labels", ["food_drink", 3]), ("labels", "food_drink"),
+    ("faces", "2"), ("faces", True),
+    ("favorite", "yes"), ("edited", 1),
+    ("represents", 0), ("represents", "1"),
+])
+def test_bad_photo_types_400(client, fake_model, field, value):
+    meta = _meta()
+    meta["photos"][0][field] = value
+    _assert_400(_submit(client, meta), fake_model)
+
+
+def test_optional_photo_fields_may_be_null(client, fake_model):
+    meta = _meta()
+    meta["photos"][0].update(faces=None, favorite=None, edited=None)
+    fake_model.reply("a", _a_json()).reply("b", _b_json())
+    r = _submit(client, meta)
+    assert r.status_code == 202
+    assert _poll(client, r.json()["job_id"]).json()["status"] == "ok"
+
+
+def test_non_image_upload_400(client, fake_model):
+    _assert_400(_submit(client, files=_files(data={"P1": b"hello, not a photo"})), fake_model)
+
+
+def test_png_and_heic_uploads_accepted(client, fake_model):
+    png = b"\x89PNG\r\n\x1a\n" + b"0" * 32
+    heic = b"\x00\x00\x00\x18ftypheic" + b"0" * 32
+    fake_model.reply("a", _a_json()).reply("b", _b_json())
+    r = _submit(client, files=_files(data={"P1": png, "P2": heic}))
+    assert r.status_code == 202
+    _poll(client, r.json()["job_id"])
+    content = fake_model.calls[0]["messages"][1]["content"]
+    urls = [p["image_url"]["url"] for p in content if p["type"] == "image_url"]
+    assert urls[0].startswith("data:image/png;base64,")
+    assert urls[1].startswith("data:image/heic;base64,")
+    assert urls[2].startswith("data:image/jpeg;base64,")

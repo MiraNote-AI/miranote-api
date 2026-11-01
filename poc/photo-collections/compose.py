@@ -70,6 +70,21 @@ def _sort_key(dt: Optional[datetime]) -> float:
     return dt.timestamp()
 
 
+_HEIC_BRANDS = (b"heic", b"heix", b"hevc", b"hevx", b"heim", b"heis", b"mif1", b"msf1")
+
+
+def image_mime(data: bytes) -> Optional[str]:
+    """The media type of an upload by its magic bytes; None if not an image
+    we accept (JPEG, PNG, HEIC)."""
+    if data[:3] == b"\xff\xd8\xff":
+        return "image/jpeg"
+    if data[:8] == b"\x89PNG\r\n\x1a\n":
+        return "image/png"
+    if data[4:8] == b"ftyp" and data[8:12] in _HEIC_BRANDS:
+        return "image/heic"
+    return None
+
+
 def daypart_of(hour: int) -> str:
     """5-11 morning, 11-14 noon, 14-17 afternoon, 17-19 evening, else night."""
     if 5 <= hour < 11:
@@ -152,7 +167,9 @@ def _messages_a(meta: dict, photos: List[dict], images: Dict[str, bytes]) -> Lis
             "merged": names["a_merged"] if represents > 1 else "",
         })})
         content.append({"type": "image_url", "image_url": {
-            "url": "data:image/jpeg;base64," + base64.b64encode(images[p["id"]]).decode("ascii")}})
+            "url": "data:{};base64,{}".format(
+                image_mime(images[p["id"]]) or "image/jpeg",
+                base64.b64encode(images[p["id"]]).decode("ascii"))}})
     content.append({"type": "text", "text": task.format_map(
         {"schema_a": texts.raw("schema_a_example").strip()})})
     return [

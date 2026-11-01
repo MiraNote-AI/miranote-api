@@ -80,6 +80,28 @@ def _is_int(value) -> bool:
     return isinstance(value, int) and not isinstance(value, bool)
 
 
+def _is_str_list(value) -> bool:
+    return isinstance(value, list) and all(isinstance(v, str) for v in value)
+
+
+def _check_photo(p) -> bool:
+    """One meta.photos entry: types as handoff 5.1 sends them."""
+    if not isinstance(p, dict) or not isinstance(p.get("id"), str) or not p["id"]:
+        return False
+    if compose.parse_time(p.get("taken_at")) is None:
+        return False
+    if p.get("labels") is not None and not _is_str_list(p["labels"]):
+        return False
+    if p.get("faces") is not None and not _is_int(p["faces"]):
+        return False
+    for flag in ("favorite", "edited"):
+        if p.get(flag) is not None and not isinstance(p[flag], bool):
+            return False
+    if p.get("represents") is not None and not (_is_int(p["represents"]) and p["represents"] >= 1):
+        return False
+    return True
+
+
 def _check_meta(raw) -> Optional[dict]:
     """The parsed meta when it matches handoff 5.1, else None."""
     if not isinstance(raw, str):
@@ -92,26 +114,24 @@ def _check_meta(raw) -> Optional[dict]:
         return None
     if not isinstance(meta["group_key"], str) or not meta["group_key"].strip():
         return None
-    if not isinstance(meta["date"], str) or not _is_int(meta["raw_count"]):
+    if not isinstance(meta["date"], str):
         return None
-    if not isinstance(meta["covers_all"], bool) or not isinstance(meta["recent_question_ids"], list):
+    if not (_is_int(meta["weekday"]) and 1 <= meta["weekday"] <= 7):
+        return None
+    if not isinstance(meta["start_time"], str) or not isinstance(meta["end_time"], str):
+        return None
+    if not (_is_int(meta["raw_count"]) and meta["raw_count"] >= 1):
+        return None
+    if not isinstance(meta["covers_all"], bool) or not _is_str_list(meta["recent_question_ids"]):
         return None
     if meta.get("place") is not None and not isinstance(meta["place"], str):
         return None
     photos = meta["photos"]
     if not isinstance(photos, list) or not 1 <= len(photos) <= config.MAX_PHOTOS:
         return None
-    ids = []
-    for p in photos:
-        if not isinstance(p, dict) or not isinstance(p.get("id"), str) or not p["id"]:
-            return None
-        if compose.parse_time(p.get("taken_at")) is None:
-            return None
-        if p.get("labels") is not None and not isinstance(p["labels"], list):
-            return None
-        if p.get("represents") is not None and not _is_int(p["represents"]):
-            return None
-        ids.append(p["id"])
+    if not all(_check_photo(p) for p in photos):
+        return None
+    ids = [p["id"] for p in photos]
     if len(set(ids)) != len(ids):
         return None
     return meta
@@ -133,6 +153,8 @@ async def _read_photos(form, ids) -> Optional[Dict[str, bytes]]:
         data = await f.read(config.MAX_PHOTO_BYTES + 1)
         await f.close()
         if not data or len(data) > config.MAX_PHOTO_BYTES:
+            return None
+        if compose.image_mime(data) is None:  # JPEG, PNG or HEIC only
             return None
         images[stem] = data
     if set(images) != set(ids):

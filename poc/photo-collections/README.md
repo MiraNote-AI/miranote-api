@@ -67,7 +67,7 @@ curl -s -H "Authorization: Bearer $TOKEN" localhost:8006/collections/jobs/<job_i
 | 200 | `{"status": "ok", "memory": {...}}` (shape: handoff section 5.2) |
 | 200 | `{"status": "rejected", "reason": "sensitive" \| "skip_screenshots" \| "too_few_selected" \| "check_failed", "message": "..."}` |
 | 200 | `{"status": "error", "reason": "timeout" \| "model_error", "message": "..."}` |
-| 400 | `{"status": "error", "reason": "bad_request", "message": "..."}` on submit: meta not JSON / missing field / 0 or > 10 photos / filename stems != meta ids / a file > 5 MB. No job, no model call. |
+| 400 | `{"status": "error", "reason": "bad_request", "message": "..."}` on submit: meta not JSON / missing field / a wrong type (weekday 1-7, raw_count >= 1, start/end time strings, string lists for labels and recent_question_ids, faces int, favorite/edited bool, represents >= 1, taken_at ISO 8601) / 0 or > 10 photos / filename stems != meta ids / a file > 5 MB or not a JPEG, PNG or HEIC. No job, no model call. |
 | 404 | `{"status": "expired"}`: unknown job, or older than 15 min. Resubmit. |
 
 Limits: call A 120 s, call B 30 s, each retried once; a job is capped at
