@@ -167,7 +167,12 @@ def test_daypart_uses_photo_offset_not_server_tz(fake_model, tmp_log, monkeypatc
     meta = _meta()
     meta["photos"][3]["taken_at"] = "2026-10-19T09:13:00+09:00"  # 00:13 UTC
     fake_model.reply("a", _a_json()).reply("b", _b_json())
-    assert _run(meta)["memory"]["daypart"] == "morning"
+    try:
+        assert _run(meta)["memory"]["daypart"] == "morning"
+    finally:
+        monkeypatch.undo()
+        if hasattr(time, "tzset"):
+            time.tzset()
 
 
 @pytest.mark.parametrize("hour,part", [(4, "night"), (5, "morning"), (10, "morning"), (11, "noon"),
