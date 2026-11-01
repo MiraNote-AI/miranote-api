@@ -1,6 +1,20 @@
 {
-  "weekdays": {"1": "周一", "2": "周二", "3": "周三", "4": "周四", "5": "周五", "6": "周六", "7": "周日"},
-  "dayparts": {"morning": "上午", "noon": "中午", "afternoon": "下午", "evening": "傍晚", "night": "夜晚"},
+  "weekdays": {
+    "1": "周一",
+    "2": "周二",
+    "3": "周三",
+    "4": "周四",
+    "5": "周五",
+    "6": "周六",
+    "7": "周日"
+  },
+  "dayparts": {
+    "morning": "上午",
+    "noon": "中午",
+    "afternoon": "下午",
+    "evening": "傍晚",
+    "night": "夜晚"
+  },
   "buckets": {
     "food": "美食饮品",
     "sky": "天空与日落",
@@ -12,7 +26,14 @@
     "event": "活动与演出",
     "other": "其他"
   },
-  "subject_types": {"food": "吃的", "drink": "喝的", "person": "人", "animal": "动物", "object": "物件", "scenery": "景色"},
+  "subject_types": {
+    "food": "吃的",
+    "drink": "喝的",
+    "person": "人",
+    "animal": "动物",
+    "object": "物件",
+    "scenery": "景色"
+  },
   "fact_line": "{md} · {place}",
   "push_title": "{fact} · {daypart}",
   "cta": "留住这个{daypart}",
@@ -30,10 +51,52 @@
   "b_count": "{name}出现在 {n} 张里",
   "b_question_a": "{id}｜{text}｜菜单：{menu}",
   "b_question_b": "{id}｜{text}",
-  "person_nouns": ["人", "个人", "一个人", "两个人", "三个人", "四个人", "几个人", "一群人", "人群"],
-  "numerals": {"零": 0, "一": 1, "二": 2, "两": 2, "三": 3, "四": 4, "五": 5, "六": 6, "七": 7, "八": 8, "九": 9, "十": 10, "百": 100},
-  "forbidden_question_words": ["又", "一直没", "好久没", "别忘了", "该", "错过", "再也", "还没"],
+  "person_nouns": [
+    "人",
+    "个人",
+    "一个人",
+    "两个人",
+    "三个人",
+    "四个人",
+    "几个人",
+    "一群人",
+    "人群"
+  ],
+  "numerals": {
+    "零": 0,
+    "一": 1,
+    "二": 2,
+    "两": 2,
+    "三": 3,
+    "四": 4,
+    "五": 5,
+    "六": 6,
+    "七": 7,
+    "八": 8,
+    "九": 9,
+    "十": 10,
+    "百": 100
+  },
+  "forbidden_question_words": [
+    "又",
+    "一直没",
+    "好久没",
+    "别忘了",
+    "该",
+    "错过",
+    "再也",
+    "还没"
+  ],
   "lianpai": "连拍",
   "body_strip_end": "。",
-  "uses_strip": ["的", "了", "着"]
+  "uses_strip": [
+    "的",
+    "了",
+    "着"
+  ],
+  "slot_tokens": {
+    "thing": "{物}",
+    "moment": "{画面}",
+    "daypart": "{时段}"
+  }
 }
