@@ -228,3 +228,21 @@ def test_coloured_sky_not_penalised():
 def test_program_counts_counts_selected_photos():
     a = _a(STAGE, peak="P2", selected=["P2", "P3"])
     assert body.program_counts(a) == {"舞台": 2, "灯光": 1}
+
+
+def test_uses_with_particle_on_both_sides_matches():
+    a = _a([_p("P1", [("交通灯", "object")], ["交通灯亮着红灯"]), STAGE[1], STAGE[2]], peak="P1")
+    pick = _pick([_ai("街道旁，交通灯亮着红灯", ["P1"], ["交通灯亮着红灯"])], a=a)
+    # 街道 is not in the facts, so it fails later -- but not on uses.
+    assert _reason(pick, "街道旁，交通灯亮着红灯") == "unknown_noun:街道"
+
+
+def test_uses_copied_with_prompt_labels_matches():
+    # The B prompt shows facts as "name(type)" and "文字：..."; the model
+    # echoes that format in uses. The label is ours, not the model's word.
+    pick = _pick([_ai("ABCDEFGHIJKLMNOP", ["P3"], ["文字：ABCDEFGHIJKLMNOP"])])
+    assert pick.text == "ABCDEFGHIJKLMNOP"
+    pick = _pick([_ai("长椅上，猫睡着", ["P1"], ["长椅(物件)"])])
+    assert pick.text == "长椅上，猫睡着"
+    pick = _pick([_ai("长椅上，猫睡着", ["P1"], ["长椅（物件）"])])
+    assert pick.text == "长椅上，猫睡着"

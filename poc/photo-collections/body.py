@@ -205,14 +205,29 @@ def _lexicon_hit(t: str, c: Candidate, a: AResult) -> Optional[str]:
     return None
 
 
+def _squeeze(s: str, strip: List[str]) -> str:
+    for ch in strip:
+        s = s.replace(ch, "")
+    return re.sub(r"\s+", "", s)
+
+
 def _uses_ok(t: str, uses: List[str]) -> bool:
-    strip = _names()["uses_strip"]
+    """Some uses fragment, without the particles de/le/zhe, is in t.
+
+    Particles are dropped on both sides (a fragment keeping "zhe" must still
+    match a sentence keeping it), and the labels the B prompt itself puts
+    around facts -- a "(type)" suffix, a "text:" prefix -- are removed first:
+    they are our formatting echoed back, not words the model used."""
+    names = _names()
+    strip = names["uses_strip"]
+    labels = names["b_fact_labels"]
+    target = _squeeze(t, strip)
     for u in uses:
-        frag = u.strip()
-        for ch in strip:
-            frag = frag.replace(ch, "")
-        frag = re.sub(r"\s+", "", frag)
-        if frag and frag in re.sub(r"\s+", "", t):
+        frag = re.sub(r"[(\uff08][^()\uff08\uff09]*[)\uff09]\s*$", "", u.strip())
+        for label in labels:
+            frag = re.sub("^" + re.escape(label) + r"\s*[:\uff1a]\s*", "", frag)
+        frag = _squeeze(frag, strip)
+        if frag and frag in target:
             return True
     return False
 
