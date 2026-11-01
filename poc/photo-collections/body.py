@@ -328,7 +328,9 @@ def _has_feature(t: str, a: AResult) -> bool:
 
 def _score(c: Candidate, t: str, a: AResult, counts: Dict[str, int]) -> float:
     score = 0.0
-    if a.peak in c.photo_ids:
+    # Only the model cites photos; templates are fallback levels (AI doc 6),
+    # so the peak bonus is the model's alone.
+    if c.source == "llm" and a.peak in c.photo_ids:
         score += 2
     feature = _has_feature(t, a)
     if feature:

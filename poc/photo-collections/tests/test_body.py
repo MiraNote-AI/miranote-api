@@ -246,3 +246,15 @@ def test_uses_copied_with_prompt_labels_matches():
     assert pick.text == "长椅上，猫睡着"
     pick = _pick([_ai("长椅上，猫睡着", ["P1"], ["长椅（物件）"])])
     assert pick.text == "长椅上，猫睡着"
+
+
+def test_template_gets_no_peak_bonus():
+    # "+2 if it cites peak_id" scores the model's own photo_ids. A template
+    # cites nothing (AI doc 6 counts templates as fallback levels), so a
+    # grounded model sentence about the peak beats T1 on the peak's subject.
+    a = _a(STAGE, peak="P2")
+    t1 = body.Candidate(text="那天的舞台，你拍了 5 张", source="template_T1", photo_ids=["P2", "P3"])
+    ai = _ai("台中央，一束光", ["P2"], ["一束光"])
+    ai.rank = 2  # no rank bonus: 2 (peak) + 1 (number) = 3 vs template 1 + 1 = 2
+    pick = body.pick([ai], [t1], a, body.program_counts(a), raw_count=9)
+    assert pick.source == "llm"
