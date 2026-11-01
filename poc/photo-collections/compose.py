@@ -400,12 +400,22 @@ def run(meta: dict, images: Dict[str, bytes], deadline: float) -> dict:
                                    rejected=first_rejected + second.rejected,
                                    photo_ids=second.photo_ids, score=second.score)
     if not body.cites_peak(detail, a) and detail.source == "llm":
-        new_peak = next((pid for pid in detail.photo_ids
+        # Only a model sentence citing a usable photo (selected, unflagged)
+        # can take the cover; the rest give way to the next survivor, and a
+        # template winner keeps the cover. F0 only when nothing is left.
+        def usable(c) -> Optional[str]:
+            return next((pid for pid in c.photo_ids
                          if pid in a.selected and not a.photos[pid].flags), None)
-        if new_peak is None:
-            detail = body.BodyPick(text=body.f0_text(raw_count), source="fallback_F0",
-                                   rejected=detail.rejected + [(detail.text, "no_cover_photo")])
-        else:
+
+        dropped = [(c.text, "no_cover_photo") for c in ai if usable(c) is None]
+        detail = body.pick([c for c in ai if usable(c) is not None], tpls, a, counts,
+                           raw_count=raw_count)
+        detail.rejected = first_rejected + [d for d in dropped if d not in first_rejected]
+        new_peak = None
+        if detail.source == "llm":
+            new_peak = next((pid for pid in detail.photo_ids
+                             if pid in a.selected and not a.photos[pid].flags), None)
+        if new_peak is not None:
             a.peak = new_peak
             peak_switched = True
             peak_time = parse_time(by_id[a.peak].get("taken_at"))

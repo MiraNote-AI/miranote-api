@@ -426,3 +426,29 @@ def test_time_limits():
     assert config.JOB_CAP_SECONDS == 300
     assert config.JOB_TTL_SECONDS == 900
     assert compose.ATTEMPTS == 2
+
+
+def test_unusable_photo_ids_fall_back_to_survivors_not_f0(fake_model, tmp_log):
+    # Code review repro: the winning model sentence cites no usable photo
+    # (photo_ids empty), the cover rewrite cannot write, a valid T2 exists.
+    no_ids = [{"text": "长椅上，猫睡着", "photo_ids": [], "uses": ["长椅"]}]
+    fake_model.reply("a", _a_json()).reply("b", _b_json(candidates=no_ids)).reply(
+        "b", _b_json(candidates=[], ranked=[], cannot_write=True))
+    m = _run()["memory"]
+    assert m["generation"]["bodySource"] == "template_T2"
+    assert m["push"]["body"] == "从花丛拍到了舞台"
+    assert m["push"]["coverPhotoId"] == "P4"
+    assert m["generation"]["peakSwitched"] is False
+
+
+def test_unusable_winner_gives_way_to_next_model_sentence(fake_model, tmp_log):
+    # The first scores 2 (rank 1 + number 1) and would win, but P9 is not a
+    # photo of this group; the second scores 1.5 (rank 0.5 + colour 1).
+    cands = [{"text": "长椅上，一只猫睡着", "photo_ids": ["P9"], "uses": ["长椅"]},
+             {"text": "红色的花开满花坛", "photo_ids": ["P1"], "uses": ["花坛"]}]
+    fake_model.reply("a", _a_json()).reply("b", _b_json(candidates=cands)).reply(
+        "b", _b_json(candidates=[], ranked=[], cannot_write=True))
+    m = _run()["memory"]
+    assert m["push"]["body"] == "红色的花开满花坛"
+    assert m["push"]["coverPhotoId"] == "P1"
+    assert m["generation"]["peakSwitched"] is True
