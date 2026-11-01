@@ -420,9 +420,9 @@ def test_rewrite_counts_cost_and_respects_deadline(fake_model, tmp_log):
 
 
 def test_time_limits():
-    # Call A 120 s and the job 300 s are a user decision (2026-11-01);
+    # Call A 180 s and the job 300 s are a user decision (2026-11-01);
     # call B (and the cover rewrite) stays 30 s; jobs are kept 15 min.
-    assert config.CALL_A_TIMEOUT == 120
+    assert config.CALL_A_TIMEOUT == 180
     assert config.CALL_B_TIMEOUT == 30
     assert config.JOB_CAP_SECONDS == 300
     assert config.JOB_TTL_SECONDS == 900
