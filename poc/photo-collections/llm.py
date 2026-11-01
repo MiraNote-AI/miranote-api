@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FutureTimeout
 from dataclasses import dataclass
 from typing import List, Optional
 
@@ -37,6 +39,12 @@ class LlmReply:
 
 _client: Optional[OpenAI] = None
 _client_lock = threading.Lock()
+
+# The SDK's timeout bounds each network read, not the whole call: a reply
+# trickling in can run well past it (call B took 35 s against 30 on the real
+# model). Requests run here so the caller waits on the wall clock instead.
+# An abandoned request finishes or fails on its own read timeout.
+_calls = ThreadPoolExecutor(max_workers=8, thread_name_prefix="llm")
 
 
 def _get_client() -> OpenAI:
@@ -108,25 +116,30 @@ def complete(messages: List[dict], *, call: str, timeout: float) -> LlmReply:
         raise ModelTimeout("no time left for the call")
     kwargs = _request(call, messages, timeout)
     started = time.monotonic()
-    usage = None
-    try:
+
+    def _do() -> tuple:
         client = _get_client()
         result = client.chat.completions.create(**kwargs)
-        if kwargs.get("stream"):
-            parts: List[str] = []
-            for chunk in result:
-                if time.monotonic() - started > timeout:
-                    raise ModelTimeout("stream ran past {:.0f}s".format(timeout))
-                if getattr(chunk, "usage", None):
-                    usage = chunk.usage
-                for choice in getattr(chunk, "choices", None) or []:
-                    content = getattr(choice.delta, "content", None)
-                    if content:
-                        parts.append(content)
-            text = "".join(parts)
-        else:
-            usage = getattr(result, "usage", None)
-            text = result.choices[0].message.content or ""
+        if not kwargs.get("stream"):
+            return result.choices[0].message.content or "", getattr(result, "usage", None)
+        parts: List[str] = []
+        usage = None
+        for chunk in result:
+            if time.monotonic() - started > timeout:
+                raise ModelTimeout("stream ran past {:.0f}s".format(timeout))
+            if getattr(chunk, "usage", None):
+                usage = chunk.usage
+            for choice in getattr(chunk, "choices", None) or []:
+                content = getattr(choice.delta, "content", None)
+                if content:
+                    parts.append(content)
+        return "".join(parts), usage
+
+    try:
+        try:
+            text, usage = _calls.submit(_do).result(timeout=timeout)
+        except FutureTimeout:
+            raise ModelTimeout("no complete reply within {:.0f}s".format(timeout)) from None
     except ModelTimeout:
         raise
     except ModelError:

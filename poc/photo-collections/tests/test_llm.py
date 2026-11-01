@@ -102,3 +102,24 @@ def test_stream_over_deadline_is_timeout(monkeypatch):
     _install(monkeypatch, FakeCompletions(result=iter(chunks)))
     with pytest.raises(llm.ModelTimeout):
         llm.complete([{"role": "user", "content": "x"}], call="a", timeout=90)
+
+
+def test_slow_non_stream_reply_is_cut_at_wall_clock_timeout(monkeypatch):
+    # Seen on the real model: call B answered after 35 s with timeout=30.
+    # The SDK timeout is per network read, so the wall clock is enforced here.
+    import time as _time
+
+    class Slow(FakeCompletions):
+        def create(self, **kwargs):
+            _time.sleep(0.5)
+            return SimpleNamespace(
+                choices=[SimpleNamespace(message=SimpleNamespace(content="{}"))],
+                usage=SimpleNamespace(prompt_tokens=1, completion_tokens=1),
+            )
+
+    monkeypatch.setattr(config, "CALL_B_MODE", "json_schema")
+    _install(monkeypatch, Slow())
+    started = _time.monotonic()
+    with pytest.raises(llm.ModelTimeout):
+        llm.complete([{"role": "user", "content": "x"}], call="b", timeout=0.1)
+    assert _time.monotonic() - started < 0.4
