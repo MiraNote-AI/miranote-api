@@ -36,6 +36,9 @@ jobs:
           - suite: text-clean-expand
             workdir: poc/text-clean-expand
             tests: tests/
+          - suite: photo-collections
+            workdir: poc/photo-collections
+            tests: tests/
     steps:
       - uses: actions/checkout@v4
 
