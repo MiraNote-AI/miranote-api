@@ -302,6 +302,11 @@ def _reject_reason(c: Candidate, t: str, a: AResult, counts: Dict[str, int]) -> 
     if hit:
         return "lexicon:" + hit
     if c.source == "llm":
+        # Not an AI doc 4 rule: a sanity check on broken output. A photo id
+        # leaked into the sentence is never copy a person should see.
+        for pid in a.order:
+            if re.search(r"(?<![A-Za-z0-9])" + re.escape(pid) + r"(?![A-Za-z0-9])", t):
+                return "photo_id:" + pid
         if not _uses_ok(t, c.uses):
             return "uses_not_in_text"
         noun = _unknown_noun(t, a)

@@ -258,3 +258,13 @@ def test_template_gets_no_peak_bonus():
     ai.rank = 2  # no rank bonus: 2 (peak) + 1 (number) = 3 vs template 1 + 1 = 2
     pick = body.pick([ai], [t1], a, body.program_counts(a), raw_count=9)
     assert pick.source == "llm"
+
+
+def test_photo_id_in_text_rejected():
+    # Seen on the real model: "P1, P3, 橙黄色的晚霞". A photo id is never copy.
+    a = _a([_p("P1", [("晚霞", "scenery")], ["橙黄色的晚霞"]), STAGE[1], STAGE[2]], peak="P1")
+    pick = _pick([_ai("P1, P3, 橙黄色的晚霞", ["P1"], ["橙黄色的晚霞"])], a=a)
+    assert _reason(pick, "P1, P3, 橙黄色的晚霞") == "photo_id:P1"
+    # Letters and digits that are not an id stay allowed.
+    pick = _pick([_ai("ABCDEFGHIJKLMNOP", ["P3"], ["ABCDEFGHIJKLMNOP"])])
+    assert pick.text == "ABCDEFGHIJKLMNOP"
