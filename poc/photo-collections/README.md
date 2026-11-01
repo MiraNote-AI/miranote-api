@@ -119,8 +119,10 @@ AI doc 4 is followed as written; where it is silent the code reads it so:
   asks for sentences about the peak only. If none of those survives either
   and the winner is a model sentence about another photo, that photo (first
   selected, unflagged id it cites) becomes the cover: `story.photos`,
-  `isPeak`, the daypart, the push title, `ctaLabel` and the question's
-  {时段} follow it, and the question is re-checked. A template or F0 winner
+  `isPeak`, the daypart, the push title and `ctaLabel` follow it, and the
+  offered questions are rebuilt for the new cover (menus, conditions,
+  daypart); the model's ranked ids are checked again against them, and one
+  no longer offered falls through to B1 -> B2 -> B3. A template or F0 winner
   keeps the cover. `generation.peakRewrite` / `peakSwitched` (and the log)
   say what happened.
 - **A photo id in a model sentence** ("P1, P3, ...") is rejected -- a sanity

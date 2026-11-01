@@ -426,13 +426,17 @@ def run(meta: dict, images: Dict[str, bytes], deadline: float) -> dict:
     if peak_switched:
         job.log["peak_switch"] = {"from": old_peak, "to": a.peak, "daypart": daypart}
 
-    # ---- question (daypart from the final cover) ----
-    final_cands = questions.with_daypart(cands, daypart)
+    # ---- question (offered questions rebuilt for a switched cover: menus,
+    # conditions and the daypart all follow the new peak; a ranked id that
+    # is no longer offered falls through to B1-B3) ----
+    final_cands = questions.candidates(a, meta, daypart) if peak_switched else cands
     q = questions.pick(ranked, final_cands, list(meta.get("recent_question_ids") or []),
                        daypart_name)
     job.log["body"] = {"rejected": detail.rejected, "chosen": detail.text,
                        "source": detail.source, "templates": [t.text for t in tpls]}
-    job.log["question"] = {"offered": [c.id for c in cands], "ranked": ranked,
+    job.log["question"] = {"offered": [c.id for c in cands],
+                           "offered_after_switch": [c.id for c in final_cands],
+                           "ranked": ranked,
                            "rejected": q.rejected, "chosen_id": q.id, "chosen": q.text,
                            "fill": q.fill, "source": q.source}
     job.log["bodySource"] = detail.source

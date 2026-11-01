@@ -452,3 +452,19 @@ def test_unusable_winner_gives_way_to_next_model_sentence(fake_model, tmp_log):
     assert m["push"]["body"] == "红色的花开满花坛"
     assert m["push"]["coverPhotoId"] == "P1"
     assert m["generation"]["peakSwitched"] is True
+
+
+def test_questions_rebuilt_for_switched_cover(fake_model, tmp_log):
+    # The cover moves to P1, which has no action phrase, so A1 is no longer
+    # offered for the new cover: the model's A1 falls through to B1.
+    on_p1 = [{"text": "红色的花开满花坛", "photo_ids": ["P1"], "uses": ["花坛"]}]
+    ranked = [{"id": "A1", "fill": "一束光落在台中央", "why": "x"}]
+    fake_model.reply("a", _a_json()).reply("b", _b_json(candidates=on_p1, ranked=ranked)).reply(
+        "b", _b_json(candidates=[], ranked=[], cannot_write=True))
+    m = _run()["memory"]
+    assert m["push"]["coverPhotoId"] == "P1"
+    assert (m["ending"]["questionId"], m["generation"]["questionSource"]) == ("B1", "fallback_B1")
+    assert m["ending"]["question"] == "那个下午的三个关键词：＿＿、＿＿、＿＿"
+    entry = json.loads(tmp_log.read_text(encoding="utf-8").splitlines()[-1])
+    assert "A1" in entry["question"]["offered"]
+    assert "A1" not in entry["question"]["offered_after_switch"]
