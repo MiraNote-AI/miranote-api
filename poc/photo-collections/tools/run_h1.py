@@ -311,7 +311,10 @@ def recheck(meta: dict, entry: dict, memory: dict) -> List[str]:
     if word:
         problems.append("question forbidden word")
     if memory["generation"]["questionSource"] == "llm":
-        daypart = memory["daypart"]
+        # Questions were offered for the cover before any switch.
+        peak_time = compose.parse_time(
+            next(p["taken_at"] for p in meta["photos"] if p["id"] == a.peak))
+        daypart = compose.daypart_of(peak_time.hour) if peak_time else memory["daypart"]
         offered = {c.id: c for c in questions.candidates(a, meta, daypart)}
         qid = memory["ending"]["questionId"]
         if qid not in offered:
@@ -416,6 +419,9 @@ def main(argv=None) -> int:
                 question_id=memory["ending"]["questionId"],
                 question_source=memory["generation"]["questionSource"],
                 service_latency_ms=memory["generation"]["latencyMs"],
+                peak_rewrite=memory["generation"].get("peakRewrite"),
+                peak_switched=memory["generation"].get("peakSwitched"),
+                peak_switch=entry.get("peak_switch"),
                 h2_problems=recheck(meta, entry, memory),
                 body_rejected=(entry.get("body") or {}).get("rejected"),
                 question_rejected=(entry.get("question") or {}).get("rejected"),
@@ -441,6 +447,8 @@ def main(argv=None) -> int:
         "rejected": [(r["group"], r["reason"]) for r in pushable if r["status"] != "ok"],
         "a_class": a_class, "a_share": round(a_class / len(ok), 3) if ok else None,
         "h2_problems": h2, "total_cost_cny": round(spent, 5),
+        "peak_rewrite_calls": sum(1 for r in ok if r.get("peak_rewrite")),
+        "peak_switched": sum(1 for r in ok if r.get("peak_switched")),
         "run_cost_cny": round(spent - args.spent, 5),
     }
 
@@ -468,6 +476,8 @@ def main(argv=None) -> int:
         "- pushable groups rejected by the rules: {}".format(summary["rejected"] or "none"),
         "- A-class questions: {} / {} = {}".format(a_class, len(ok), summary["a_share"]),
         "- H2 program re-check problems: {}".format(h2 or "none"),
+        "- cover rewrite call made: {} / {}; cover switched to the body's photo: {} / {}".format(
+            summary["peak_rewrite_calls"], len(ok), summary["peak_switched"], len(ok)),
         "- cost this run: {} CNY; cumulative: {} CNY".format(summary["run_cost_cny"], summary["total_cost_cny"]),
     ]
     stem = "h1_" + args.label

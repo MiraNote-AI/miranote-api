@@ -355,6 +355,11 @@ def _score(c: Candidate, t: str, a: AResult, counts: Dict[str, int]) -> float:
     return score
 
 
+def cites_peak(p: "BodyPick", a: AResult) -> bool:
+    """The picked sentence is a model sentence about the cover photo."""
+    return p.source == "llm" and a.peak in p.photo_ids
+
+
 def f0_text(raw_count: int) -> str:
     return _names()["f0"].format(n=raw_count)
 

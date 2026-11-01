@@ -198,6 +198,44 @@ def _messages_b(meta: dict, a: check_a.AResult, daypart: str, counts: Dict[str, 
     ]
 
 
+def _messages_b_peak(meta: dict, a: check_a.AResult, daypart: str,
+                     counts: Dict[str, int]) -> List[dict]:
+    """The extra call B: detail sentences about the cover photo only."""
+    names = texts.json("names")
+    none = names["none"]
+    type_names = names["subject_types"]
+    p = a.photos[a.peak]
+    subjects = names["list_sep"].join(
+        names["b_subject"].format(name=s.name, type=type_names.get(s.type, s.type))
+        for s in p.subjects)
+    peak_line = names["b_photo_line"].format(
+        id=a.peak, subjects=subjects or none,
+        details=names["list_sep"].join(p.details) or none,
+        text=names["list_sep"].join(p.text) or none, people=p.people_count)
+    ordered = sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))
+    count_text = names["sep"].join(names["b_count"].format(name=k, n=v) for k, v in ordered)
+    user = texts.render(
+        "collect_b_peak_user",
+        date=meta.get("date"),
+        daypart=names["dayparts"][daypart],
+        place=_place(meta) or none,
+        peak_id=a.peak,
+        counts=count_text or none,
+        peak_line=peak_line,
+    )
+    return [
+        {"role": "system", "content": texts.raw("collect_b_system").strip()},
+        {"role": "user", "content": user},
+    ]
+
+
+def _check_rewrite(text: str) -> dict:
+    b = check_a.parse_json(text)
+    if not isinstance(b.get("candidates", []), list):
+        raise check_a.CheckFailed("candidates is not a list")
+    return b
+
+
 def _check_b(text: str) -> dict:
     b = check_a.parse_json(text)
     if not isinstance(b.get("candidates", []), list):
@@ -225,11 +263,11 @@ class _Job:
         return sum(c["cost_cny"] for c in self.calls)
 
     def call(self, which: str, messages: List[dict], per_call: float,
-             check) -> Tuple[Optional[Any], str]:
-        """Try a call up to ATTEMPTS times. Returns (checked value, "") or
+             check, attempts: int = ATTEMPTS) -> Tuple[Optional[Any], str]:
+        """Try a call up to `attempts` times. Returns (checked value, "") or
         (None, last failure: timeout | model_error | check_failed)."""
         last = "model_error"
-        for attempt in range(1, ATTEMPTS + 1):
+        for attempt in range(1, attempts + 1):
             left = self.remaining()
             if left <= 0:
                 return None, "deadline"
@@ -337,9 +375,51 @@ def run(meta: dict, images: Dict[str, bytes], deadline: float) -> dict:
     ai = body.from_b(b)
     ranked = (b or {}).get("question", {}).get("ranked") or []
 
-    # ---- picks ----
-    detail = body.pick(ai, tpls, a, counts, raw_count=int(meta.get("raw_count") or 0))
-    q = questions.pick(ranked, cands, list(meta.get("recent_question_ids") or []), daypart_name)
+    # ---- detail sentence ----
+    raw_count = int(meta.get("raw_count") or 0)
+    detail = body.pick(ai, tpls, a, counts, raw_count=raw_count)
+    first_rejected = list(detail.rejected)
+
+    # The body must describe the cover (user decision 2026-10-31): no model
+    # sentence about the peak survived -> one extra call B for the peak only
+    # (no retry, inside the job deadline); still none -> a model sentence
+    # about another photo makes that photo the cover; a template or F0
+    # keeps the cover.
+    peak_rewrite = False
+    peak_switched = False
+    old_peak = a.peak
+    if not body.cites_peak(detail, a) and job.remaining() > 0:
+        peak_rewrite = True
+        rb, _ = job.call("b", _messages_b_peak(meta, a, daypart, counts),
+                         config.CALL_B_TIMEOUT, _check_rewrite, attempts=1)
+        second = body.pick(body.from_b(rb), [], a, counts, raw_count=raw_count)
+        job.log["peak_rewrite"] = {"rejected": second.rejected, "chosen": second.text,
+                                   "source": second.source}
+        if body.cites_peak(second, a):
+            detail = body.BodyPick(text=second.text, source="llm",
+                                   rejected=first_rejected + second.rejected,
+                                   photo_ids=second.photo_ids, score=second.score)
+    if not body.cites_peak(detail, a) and detail.source == "llm":
+        new_peak = next((pid for pid in detail.photo_ids
+                         if pid in a.selected and not a.photos[pid].flags), None)
+        if new_peak is None:
+            detail = body.BodyPick(text=body.f0_text(raw_count), source="fallback_F0",
+                                   rejected=detail.rejected + [(detail.text, "no_cover_photo")])
+        else:
+            a.peak = new_peak
+            peak_switched = True
+            peak_time = parse_time(by_id[a.peak].get("taken_at"))
+            daypart = daypart_of(peak_time.hour if peak_time else 12)
+            daypart_name = names["dayparts"][daypart]
+    job.log["peakRewrite"] = peak_rewrite
+    job.log["peakSwitched"] = peak_switched
+    if peak_switched:
+        job.log["peak_switch"] = {"from": old_peak, "to": a.peak, "daypart": daypart}
+
+    # ---- question (daypart from the final cover) ----
+    final_cands = questions.with_daypart(cands, daypart)
+    q = questions.pick(ranked, final_cands, list(meta.get("recent_question_ids") or []),
+                       daypart_name)
     job.log["body"] = {"rejected": detail.rejected, "chosen": detail.text,
                        "source": detail.source, "templates": [t.text for t in tpls]}
     job.log["question"] = {"offered": [c.id for c in cands], "ranked": ranked,
@@ -382,6 +462,8 @@ def run(meta: dict, images: Dict[str, bytes], deadline: float) -> dict:
             "model": config.LLM_MODEL,
             "costCny": round(job.cost(), 4),
             "latencyMs": int((time.monotonic() - job.started) * 1000),
+            "peakSwitched": peak_switched,
+            "peakRewrite": peak_rewrite,
         },
     }
     return job.finish({"status": "ok", "memory": memory})

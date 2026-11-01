@@ -122,7 +122,9 @@ def test_happy_path_matches_handoff_example_shape(fake_model, tmp_log):
         "ctaLabel": "留住这个傍晚",
     }
     g = m["generation"]
-    assert set(g) == {"bodySource", "questionSource", "model", "costCny", "latencyMs"}
+    assert set(g) == {"bodySource", "questionSource", "model", "costCny", "latencyMs",
+                      "peakSwitched", "peakRewrite"}
+    assert (g["peakSwitched"], g["peakRewrite"]) == (False, False)
     assert (g["bodySource"], g["questionSource"], g["model"]) == ("llm", "llm", config.LLM_MODEL)
     assert isinstance(g["latencyMs"], int)
 
@@ -208,7 +210,8 @@ def test_f0_empties_detail(fake_model, tmp_log):
     a = json.loads(_a_json())
     a["photos"][0]["subjects"] = [{"name": "舞台", "type": "object"}]
     fake_model.reply("a", json.dumps(a, ensure_ascii=False)).reply(
-        "b", _b_json(candidates=[], cannot_write=True))
+        "b", _b_json(candidates=[], cannot_write=True)).reply(
+        "b", _b_json(candidates=[], ranked=[], cannot_write=True))  # cover rewrite
     m = _run()["memory"]
     assert m["push"]["body"] == "那天你拍了 23 张照片"
     assert m["ending"]["detail"] == ""
@@ -239,7 +242,8 @@ def test_a_retry_then_ok(fake_model, tmp_log):
 
 
 def test_b_fails_twice_uses_templates_and_b1(fake_model, tmp_log):
-    fake_model.reply("a", _a_json()).reply("b", "坏的").fail("b", llm.ModelError("500"))
+    fake_model.reply("a", _a_json()).reply("b", "坏的").fail("b", llm.ModelError("500")).fail(
+        "b", llm.ModelError("500"))  # the cover rewrite fails too
     m = _run()["memory"]
     assert m["push"]["body"] == "从花丛拍到了舞台"
     assert m["generation"]["bodySource"] == "template_T2"
@@ -339,3 +343,76 @@ def test_cost_sums_retries(fake_model, tmp_log):
     fake_model.reply("a", "x", 1000, 500).reply("a", _a_json(), 1000, 500).reply("b", _b_json(), 1000, 500)
     cost = _run()["memory"]["generation"]["costCny"]
     assert cost == round(3 * config.cost_cny(1000, 500), 4)
+
+
+# ---------- the body describes the cover (user decision 2026-10-31) ----------
+
+NON_PEAK = [{"text": "长椅上，猫睡着", "photo_ids": ["P2"], "uses": ["长椅"]}]
+ON_PEAK = [{"text": "台中央，落下一束光", "photo_ids": ["P4"], "uses": ["一束光"]}]
+
+
+def test_peak_rewrite_used_when_first_round_has_none(fake_model, tmp_log):
+    fake_model.reply("a", _a_json()).reply("b", _b_json(candidates=NON_PEAK)).reply(
+        "b", _b_json(candidates=ON_PEAK, ranked=[]))
+    m = _run()["memory"]
+    assert m["push"]["body"] == "台中央，落下一束光"
+    assert m["push"]["coverPhotoId"] == "P4"
+    assert (m["generation"]["peakRewrite"], m["generation"]["peakSwitched"]) == (True, False)
+    assert fake_model.count("b") == 2
+    rewrite_user = fake_model.calls[2]["messages"][1]["content"]
+    assert "P4" in rewrite_user and "峰值照" in rewrite_user
+    entry = json.loads(tmp_log.read_text(encoding="utf-8").splitlines()[-1])
+    assert (entry["peakRewrite"], entry["peakSwitched"]) == (True, False)
+
+
+def test_cover_switches_to_body_photo_when_rewrite_fails(fake_model, tmp_log):
+    fake_model.reply("a", _a_json()).reply("b", _b_json(candidates=NON_PEAK)).reply(
+        "b", _b_json(candidates=[], ranked=[], cannot_write=True))
+    m = _run()["memory"]
+    assert m["push"]["body"] == "长椅上，猫睡着"
+    assert m["push"]["coverPhotoId"] == "P2"
+    assert [(p["id"], p["isPeak"]) for p in m["story"]["photos"]] == [
+        ("P2", True), ("P1", False), ("P3", False), ("P4", False)]
+    assert (m["generation"]["peakRewrite"], m["generation"]["peakSwitched"]) == (True, True)
+
+
+def test_daypart_follows_switched_peak(fake_model, tmp_log):
+    fake_model.reply("a", _a_json()).reply(
+        "b", _b_json(candidates=NON_PEAK, ranked=[{"id": "B2", "fill": "", "why": "x"}])).reply(
+        "b", _b_json(candidates=[], ranked=[], cannot_write=True))
+    m = _run()["memory"]  # old peak P4 at 17:13 (evening); P2 at 14:05
+    assert m["daypart"] == "afternoon"
+    assert m["push"]["title"] == "10.18 · 达拉斯植物园 · 下午"
+    assert m["ending"]["ctaLabel"] == "留住这个下午"
+    assert m["ending"]["question"] == "满分 10 分，那个下午几分？"
+
+
+def test_template_winner_keeps_peak(fake_model, tmp_log):
+    bad = [{"text": "和朋友度过的温馨午后", "photo_ids": ["P2"], "uses": ["朋友"]}]
+    fake_model.reply("a", _a_json()).reply("b", _b_json(candidates=bad)).reply(
+        "b", _b_json(candidates=[], ranked=[], cannot_write=True))
+    m = _run()["memory"]
+    assert m["generation"]["bodySource"] == "template_T2"
+    assert m["push"]["coverPhotoId"] == "P4" and m["daypart"] == "evening"
+    assert (m["generation"]["peakRewrite"], m["generation"]["peakSwitched"]) == (True, False)
+
+
+def test_rewrite_counts_cost_and_respects_deadline(fake_model, tmp_log):
+    fake_model.reply("a", _a_json(), 1000, 500).reply("b", _b_json(candidates=NON_PEAK), 1000, 500).reply(
+        "b", _b_json(candidates=ON_PEAK, ranked=[]), 1000, 500)
+    m = _run(deadline=time.monotonic() + 20)["memory"]
+    assert m["generation"]["costCny"] == round(3 * config.cost_cny(1000, 500), 4)
+    assert fake_model.calls[2]["timeout"] <= 20
+    # No time left after call B: the extra call is skipped, the job still answers.
+    fake_model.reply("a", _a_json())
+
+    def slow_b(messages):
+        time.sleep(0.4)
+        return _b_json(candidates=NON_PEAK)
+
+    fake_model.respond("b", slow_b)
+    out = _run(deadline=time.monotonic() + 0.3)
+    assert out["status"] == "ok"
+    assert fake_model.count("b") == 3  # 2 from the first job, 1 here: no rewrite
+    assert out["memory"]["generation"]["peakRewrite"] is False
+    assert out["memory"]["push"]["coverPhotoId"] == "P2"

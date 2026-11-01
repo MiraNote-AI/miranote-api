@@ -112,6 +112,16 @@ AI doc 4 is followed as written; where it is silent the code reads it so:
   number in a model sentence also passes when it appears verbatim in a
   selected photo's subject name (subject 三个人 grounds 三). Program counts,
   details and text work as before; nothing else is loosened.
+- **The push body describes the cover (user decision, 2026-10-31):** when
+  no model sentence about the peak survives the checks, one extra call B
+  (`prompts/collect_b_peak_user.txt`, no retry, inside the job deadline)
+  asks for sentences about the peak only. If none of those survives either
+  and the winner is a model sentence about another photo, that photo (first
+  selected, unflagged id it cites) becomes the cover: `story.photos`,
+  `isPeak`, the daypart, the push title, `ctaLabel` and the question's
+  {时段} follow it, and the question is re-checked. A template or F0 winner
+  keeps the cover. `generation.peakRewrite` / `peakSwitched` (and the log)
+  say what happened.
 - **A photo id in a model sentence** ("P1, P3, ...") is rejected -- a sanity
   check, not an AI doc 4 rule.
 - **A4's {画面} menu** (program-side, added after H1 round 4) only takes

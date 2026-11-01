@@ -39,6 +39,7 @@ class QCandidate:
     text: str  # daypart filled in; the A slot token kept
     menu: List[str] = field(default_factory=list)
     slot: Optional[str] = None  # thing | moment | None
+    raw: str = ""  # bank text, daypart token kept
 
 
 @dataclass
@@ -162,9 +163,17 @@ def candidates(a: AResult, meta: dict, daypart: str) -> List[QCandidate]:
             continue
         out.append(QCandidate(
             id=q["id"], kind=q["kind"], text=_fill_daypart(q["text"], daypart_name),
-            menu=menu, slot=q["slot"],
+            menu=menu, slot=q["slot"], raw=q["text"],
         ))
     return out
+
+
+def with_daypart(cands: List[QCandidate], daypart: str) -> List[QCandidate]:
+    """The same offered questions with the daypart re-rendered (the cover,
+    and so the daypart, can change after call B)."""
+    name = texts.json("names")["dayparts"].get(daypart, daypart)
+    return [QCandidate(id=c.id, kind=c.kind, text=_fill_daypart(c.raw or c.text, name),
+                       menu=list(c.menu), slot=c.slot, raw=c.raw) for c in cands]
 
 
 def prompt_block(cands: List[QCandidate]) -> str:

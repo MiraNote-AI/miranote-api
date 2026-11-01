@@ -227,7 +227,12 @@ def test_two_jobs_do_not_mix(client, fake_model):
         raw["peak_id"] = ids[3]
         return json.dumps(raw, ensure_ascii=False)
 
-    fake_model.respond("a", a_for, times=2).respond("b", lambda m: _b_json(), times=2)
+    def b_for(messages):
+        peak = re.search(r"峰值照 (\w+)", messages[1]["content"]).group(1)
+        return _b_json(candidates=[{"text": "台中央，落下一束光", "photo_ids": [peak],
+                                    "uses": ["一束光"]}])
+
+    fake_model.respond("a", a_for, times=2).respond("b", b_for, times=2)
     m1 = _meta(group_key="g1")
     m2 = _meta(group_key="g2", place="休斯敦")
     for p in m2["photos"]:
