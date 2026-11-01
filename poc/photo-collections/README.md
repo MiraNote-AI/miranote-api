@@ -38,6 +38,42 @@ PYTHONPATH=../.. .venv/bin/uvicorn main:app --host 127.0.0.1 --port 8006
 `GET /health` (no token) reports the startup probe: `llm` is `ok`,
 `unconfigured` (no key) or `unreachable` (key / URL / model wrong).
 
+## Deploy (the beta Mac behind the Cloudflare tunnel)
+
+Once this service is merged into `dev`, on the Mac that runs the beta
+(design: `docs/specs/2026-09-03-testflight-beta-deploy-design.md` 4.2):
+
+1. Pull, then create `poc/photo-collections/.venv` and `.env` as in
+   Setup (`LLM_API_KEY`, `LLM_BASE_URL`, `LLM_MODEL`). The beta token is
+   the existing `BETA_TOKENS` in the repo-root `.env`.
+2. Start it with the others: `scripts/start_backends.sh` (8006 is in its
+   list; it binds 127.0.0.1 only).
+3. In `~/.cloudflared/miranote.yml` (outside the repo -- never
+   `config.yml`, which belongs to another tunnel on that machine) add an
+   ingress rule before the final 404 rule:
+
+   ```yaml
+     - hostname: beta-collections.miranote.app
+       service: http://127.0.0.1:8006
+     - service: http_status:404
+   ```
+
+   `127.0.0.1`, not `localhost`: `localhost` can resolve to `::1` and
+   answer 502.
+4. Create the DNS record with the MiraNote account's certificate:
+
+   ```bash
+   cloudflared --config ~/.cloudflared/miranote.yml \
+     --origincert <path to the MiraNote account cert.pem> \
+     tunnel route dns miranote-beta beta-collections.miranote.app
+   ```
+
+5. Restart the tunnel: `launchctl kickstart -k gui/$(id -u)/ai.miranote.beta-tunnel`
+   (or `scripts/stop_tunnel.sh && scripts/start_tunnel.sh` when it is not
+   run by launchd; `start_tunnel.sh` already checks `beta-collections`).
+6. Check `https://beta-collections.miranote.app/health`: `status: ok` and
+   `llm: ok`.
+
 ## API
 
 Submit (multipart, `Authorization: Bearer <token>`):
