@@ -70,8 +70,9 @@ curl -s -H "Authorization: Bearer $TOKEN" localhost:8006/collections/jobs/<job_i
 | 400 | `{"status": "error", "reason": "bad_request", "message": "..."}` on submit: meta not JSON / missing field / 0 or > 10 photos / filename stems != meta ids / a file > 5 MB. No job, no model call. |
 | 404 | `{"status": "expired"}`: unknown job, or older than 15 min. Resubmit. |
 
-Limits: call A 90 s, call B 30 s, each retried once; a job is capped at
-240 s (`timeout`). Jobs live in memory for 15 min. Photos are never written
+Limits: call A 120 s, call B 30 s, each retried once; a job is capped at
+300 s (`timeout`). (User decision 2026-11-01: the spec's 90 s / 240 s were
+too tight for 10-photo groups, whose call A took 58-90 s.) Jobs live in memory for 15 min. Photos are never written
 to disk by this service.
 
 ## Model call modes

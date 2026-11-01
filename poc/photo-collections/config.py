@@ -55,9 +55,9 @@ def cost_cny(prompt_tokens: int, completion_tokens: int) -> float:
 
 
 # ---------- Time limits (seconds) ----------
-CALL_A_TIMEOUT = 90.0
+CALL_A_TIMEOUT = 120.0  # user decision 2026-11-01 (spec said 90)
 CALL_B_TIMEOUT = 30.0
-JOB_CAP_SECONDS = 240.0
+JOB_CAP_SECONDS = 300.0  # user decision 2026-11-01 (spec said 240)
 JOB_TTL_SECONDS = 900.0
 WORKERS = 4
 

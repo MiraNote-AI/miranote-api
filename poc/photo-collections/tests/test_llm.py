@@ -47,7 +47,7 @@ def test_stream_reply_is_assembled_and_reasoning_dropped(monkeypatch):
         _chunk(usage=SimpleNamespace(prompt_tokens=10, completion_tokens=20)),
     ]
     comp = _install(monkeypatch, FakeCompletions(result=iter(chunks)))
-    reply = llm.complete([{"role": "user", "content": "x"}], call="a", timeout=90)
+    reply = llm.complete([{"role": "user", "content": "x"}], call="a", timeout=120)
     assert reply.text == '{"a": 1}'
     assert reply.prompt_tokens == 10 and reply.completion_tokens == 20
     assert comp.kwargs["stream"] is True
@@ -84,7 +84,7 @@ def test_sdk_timeout_maps_to_model_timeout(monkeypatch):
     error = openai.APITimeoutError(request=httpx.Request("POST", "http://example.invalid"))
     _install(monkeypatch, FakeCompletions(error=error))
     with pytest.raises(llm.ModelTimeout):
-        llm.complete([{"role": "user", "content": "x"}], call="a", timeout=90)
+        llm.complete([{"role": "user", "content": "x"}], call="a", timeout=120)
 
 
 def test_sdk_error_maps_to_model_error(monkeypatch):
@@ -96,12 +96,12 @@ def test_sdk_error_maps_to_model_error(monkeypatch):
 
 def test_stream_over_deadline_is_timeout(monkeypatch):
     monkeypatch.setattr(config, "CALL_A_MODE", "thinking_stream")
-    ticks = iter([0.0, 0.0, 100.0, 100.0, 100.0])
+    ticks = iter([0.0, 0.0, 200.0, 200.0, 200.0])
     monkeypatch.setattr(llm.time, "monotonic", lambda: next(ticks))
     chunks = [_chunk(content="{"), _chunk(content="}")]
     _install(monkeypatch, FakeCompletions(result=iter(chunks)))
     with pytest.raises(llm.ModelTimeout):
-        llm.complete([{"role": "user", "content": "x"}], call="a", timeout=90)
+        llm.complete([{"role": "user", "content": "x"}], call="a", timeout=120)
 
 
 def test_slow_non_stream_reply_is_cut_at_wall_clock_timeout(monkeypatch):

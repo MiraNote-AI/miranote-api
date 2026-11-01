@@ -90,7 +90,7 @@ def _b_json(candidates=None, ranked=None, cannot_write=False):
 
 
 def _run(meta=None, deadline=None):
-    return compose.run(meta or _meta(), dict(IMAGES), deadline or time.monotonic() + 240)
+    return compose.run(meta or _meta(), dict(IMAGES), deadline or time.monotonic() + 300)
 
 
 def test_happy_path_matches_handoff_example_shape(fake_model, tmp_log):
@@ -416,3 +416,13 @@ def test_rewrite_counts_cost_and_respects_deadline(fake_model, tmp_log):
     assert fake_model.count("b") == 3  # 2 from the first job, 1 here: no rewrite
     assert out["memory"]["generation"]["peakRewrite"] is False
     assert out["memory"]["push"]["coverPhotoId"] == "P2"
+
+
+def test_time_limits():
+    # Call A 120 s and the job 300 s are a user decision (2026-11-01);
+    # call B (and the cover rewrite) stays 30 s; jobs are kept 15 min.
+    assert config.CALL_A_TIMEOUT == 120
+    assert config.CALL_B_TIMEOUT == 30
+    assert config.JOB_CAP_SECONDS == 300
+    assert config.JOB_TTL_SECONDS == 900
+    assert compose.ATTEMPTS == 2

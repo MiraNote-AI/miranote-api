@@ -84,7 +84,7 @@ class _Clock:
 
 def test_job_expires_after_ttl():
     clock = _Clock()
-    store = jobs.JobStore(ttl=900, cap=240, clock=clock)
+    store = jobs.JobStore(ttl=900, cap=300, clock=clock)
     job_id = store.submit(lambda deadline: {"status": "ok", "memory": {}})
     deadline = time.monotonic() + 2
     while store.get(job_id) == {"status": "running"} and time.monotonic() < deadline:
@@ -97,11 +97,11 @@ def test_job_expires_after_ttl():
 
 def test_job_over_cap_reads_timeout():
     clock = _Clock()
-    store = jobs.JobStore(ttl=900, cap=240, clock=clock)
+    store = jobs.JobStore(ttl=900, cap=300, clock=clock)
     release = threading.Event()
     job_id = store.submit(lambda deadline: release.wait(5) and {"status": "ok", "memory": {}})
     assert store.get(job_id) == {"status": "running"}
-    clock.now += 241
+    clock.now += 301
     assert store.get(job_id) == {"status": "error", "reason": "timeout", "message": "AI 超时"}
     release.set()
     time.sleep(0.05)
