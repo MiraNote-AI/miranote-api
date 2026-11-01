@@ -1,11 +1,11 @@
 {
-  "_note": "题库-V1.md 转成 JSON。slot：thing = {物}，moment = {画面}，null = B 类不填空。cond 由程序判断（questions.py）：menu_types = {物} 菜单收的主体类型；drop_common = 去掉 common_objects.txt 里的常见物；people = 入选照片里有人；group_face = 有合照（某张入选照片 2-4 或 5+ 人且有清楚正脸）；scenes = 入选照片至少一半是这些场景；not_night = 时段不是夜晚；min_selected = 入选至少几张；min_span_minutes = 整组时间跨度至少几分钟；min_food_photos = 至少几张入选照片有吃的。",
+  "_note": "题库-V1.md 转成 JSON。slot：thing = {物}，moment = {画面}，null = B 类不填空。cond 由程序判断（questions.py）：menu_types = {物} 菜单收的主体类型；drop_common = 去掉 common_objects.txt 里的常见物；people = 入选照片里有人；group_face = 有合照（某张入选照片 2-4 或 5+ 人且有清楚正脸）；scenes = 入选照片至少一半是这些场景；not_night = 时段不是夜晚；min_selected = 入选至少几张；min_span_minutes = 整组时间跨度至少几分钟；min_food_photos = 至少几张入选照片有吃的；moment_words = {画面} 菜单用哪个词表（默认 action_verbs）。",
   "fallback_order": ["B1", "B2", "B3"],
   "questions": [
     {"id": "A1", "kind": "A", "text": "{画面}的时候，旁边在发生什么？", "slot": "moment", "cond": {}},
     {"id": "A2", "kind": "A", "text": "{物}哪一点，让你停下来拍它？", "slot": "thing", "cond": {"menu_types": ["object", "animal", "scenery"], "drop_common": true}},
     {"id": "A3", "kind": "A", "text": "{物}旁边，还有什么没拍进去？", "slot": "thing", "cond": {"menu_types": ["food", "drink", "animal", "object", "scenery"]}},
-    {"id": "A4", "kind": "A", "text": "{画面}，是谁先注意到的？", "slot": "moment", "cond": {"people": true}},
+    {"id": "A4", "kind": "A", "text": "{画面}，是谁先注意到的？", "slot": "moment", "cond": {"people": true, "moment_words": "sight_verbs"}},
     {"id": "A5", "kind": "A", "text": "{物}，下次还会点吗？", "slot": "thing", "cond": {"menu_types": ["food", "drink"]}},
     {"id": "A6", "kind": "A", "text": "如果{物}会说话，它会怎么说那天？", "slot": "thing", "cond": {"menu_types": ["food", "drink", "animal", "object", "scenery"]}},
     {"id": "B1", "kind": "B", "text": "那个{时段}的三个关键词：＿＿、＿＿、＿＿", "slot": null, "cond": {}},

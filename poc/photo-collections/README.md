@@ -110,6 +110,10 @@ AI doc 4 is followed as written; where it is silent the code reads it so:
   two sentences about the peak.
 - **A photo id in a model sentence** ("P1, P3, ...") is rejected -- a sanity
   check, not an AI doc 4 rule.
+- **A4's {画面} menu** (program-side, added after H1 round 4) only takes
+  details with a sight verb (`prompts/sight_verbs.txt`: light, things,
+  change), not people's actions; the prompt alone did not stop fills like
+  "站在蓝色幕布前". A1 keeps every action phrase.
 - **skip=true** from call A is a verdict (`skip_screenshots`, or `sensitive`
   when any photo has a sensitive flag), even with nothing selected.
 - **T1's n** sums `represents` over every sent photo showing X, so "you took

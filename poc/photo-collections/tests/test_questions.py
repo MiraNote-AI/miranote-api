@@ -105,7 +105,7 @@ def test_b16_needs_group_face():
 def test_people_conditions():
     assert "B17" not in _by_id(_cands())
     assert "A4" not in _by_id(_cands())
-    one = DINNER[:3] + [_p("P4", [("女孩", "person")], ["女孩站在桥上"], people="1")]
+    one = DINNER[:3] + [_p("P4", [("女孩", "person")], ["女孩站在桥上", "灯笼挂在桥边"], people="1")]
     ids = _by_id(_cands(a=_a(one)))
     assert "B17" in ids and "A4" in ids
 
@@ -222,3 +222,26 @@ def test_all_fail_falls_back_b1_then_b2_skipping_recent():
 def test_b1_text_fills_daypart():
     q = _pick([], daypart_name="下午")
     assert q.text == "那个下午的三个关键词：＿＿、＿＿、＿＿"
+
+
+def test_a4_menu_only_noticeable_sights():
+    # H1 round 4: A4 filled with "站在蓝色幕布前" -- what people do reads
+    # wrong in "{画面}，是谁先注意到的？". A4 keeps only sights (light, things).
+    a = _a([
+        _p("P1", [("三个人", "person")], ["站在蓝色幕布前", "蓝色灯光照亮幕布"], people="2-4"),
+        _p("P2", [("招牌", "object")], ["霓虹灯招牌亮着", "有人走上台阶"], people="2-4"),
+        _p("P3", [("舞台", "object")], ["一人站在舞台中央"], people="1"),
+    ], peak="P1")
+    ids = _by_id(_cands(a=a))
+    assert ids["A4"].menu == ["蓝色灯光照亮幕布", "霓虹灯招牌亮着"]
+    # A1 keeps every action phrase.
+    assert "站在蓝色幕布前" in ids["A1"].menu and "一人站在舞台中央" in ids["A1"].menu
+
+
+def test_a4_hidden_when_no_sight():
+    a = _a([
+        _p("P1", [("三个人", "person")], ["站在蓝色幕布前"], people="2-4"),
+        _p("P2", [("舞台", "object")], ["一人站在舞台中央"], people="1"),
+        _p("P3", [("舞台", "object")], []),
+    ])
+    assert "A4" not in _by_id(_cands(a=a))

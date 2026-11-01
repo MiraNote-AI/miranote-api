@@ -13,6 +13,10 @@ Condition encoding (the plan's reading of the bank's condition column):
   min_food_photos  at least this many selected photos with a food subject
   menu_types       subject types that may fill {thing}
   drop_common      {thing} menu drops prompts/common_objects.txt
+  moment_words     word list for the {moment} menu (default action_verbs);
+                   A4 uses sight_verbs -- a program-side narrowing added
+                   after H1 round 4, not a bank rule: "who noticed it first"
+                   needs a sight (light, a thing), not what people are doing
 """
 
 from __future__ import annotations
@@ -89,8 +93,8 @@ def _thing_menu(a: AResult, types: List[str], drop_common: bool) -> List[str]:
     return out
 
 
-def _moment_menu(a: AResult) -> List[str]:
-    verbs = texts.words("action_verbs")
+def _moment_menu(a: AResult, words: str = "action_verbs") -> List[str]:
+    verbs = texts.words(words)
     out: List[str] = []
     for pid in _peak_first(a):
         for d in a.photos[pid].details:
@@ -147,7 +151,7 @@ def candidates(a: AResult, meta: dict, daypart: str) -> List[QCandidate]:
         if q["slot"] == "thing":
             menu = _thing_menu(a, cond.get("menu_types") or [], bool(cond.get("drop_common")))
         elif q["slot"] == "moment":
-            menu = _moment_menu(a)
+            menu = _moment_menu(a, cond.get("moment_words") or "action_verbs")
         if q["kind"] == "A" and not menu:
             continue
         out.append(QCandidate(
