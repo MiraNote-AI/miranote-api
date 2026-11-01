@@ -32,8 +32,8 @@ MIN_SELECTED = 3
 MAX_SELECTED = 8
 
 # Chinese curly quotes, written as escapes so this file stays ASCII.
-_LQ = "“"
-_RQ = "”"
+_LQ = "\u201c"
+_RQ = "\u201d"
 
 
 class CheckFailed(Exception):
