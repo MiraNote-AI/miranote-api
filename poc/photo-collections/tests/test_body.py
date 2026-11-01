@@ -268,3 +268,35 @@ def test_photo_id_in_text_rejected():
     # Letters and digits that are not an id stay allowed.
     pick = _pick([_ai("ABCDEFGHIJKLMNOP", ["P3"], ["ABCDEFGHIJKLMNOP"])])
     assert pick.text == "ABCDEFGHIJKLMNOP"
+
+
+# ---------- peak first (user decision 2026-10-31) ----------
+
+def test_peak_candidate_beats_higher_scoring_non_peak():
+    a = _a(STAGE, peak="P2")
+    # Non-peak, rank 0: 1 (rank) + 1 (number) + 1 (舞台 in 2 photos) = 3.
+    strong = _ai("舞台拍了 2 张", ["P3"], ["舞台"])
+    # Peak, rank 3: 2 (peak) only = 2.
+    weak = _ai("台中央，落下光", ["P2"], ["台中央"])
+    t1 = body.Candidate(text="那天的舞台，你拍了 5 张", source="template_T1", photo_ids=["P2", "P3"])
+    cands = [strong, _ai("x" * 20, ["P1"], ["x"]), _ai("y" * 20, ["P1"], ["y"]), weak]
+    for i, c in enumerate(cands):
+        c.rank = i
+    pick = body.pick(cands, [t1], a, body.program_counts(a), raw_count=9)
+    assert (pick.text, pick.source) == ("台中央，落下光", "llm")
+
+
+def test_falls_back_when_no_peak_candidate_survives():
+    a = _a(STAGE, peak="P2")
+    bad_peak = _ai("台中央，温馨的一束光", ["P2"], ["一束光"])  # lexicon: rejected
+    other = _ai("长椅上，猫睡着", ["P1"], ["长椅"])
+    t2 = body.Candidate(text="从长椅拍到了舞台", source="template_T2", photo_ids=["P1", "P3"])
+    cands = [bad_peak, other]
+    for i, c in enumerate(cands):
+        c.rank = i
+    pick = body.pick(cands, [t2], a, body.program_counts(a), raw_count=9)
+    assert dict(pick.rejected)["台中央，温馨的一束光"].startswith("lexicon")
+    # other: 0.5 (rank 1); T2: 1 (舞台 in 2 photos) -> the existing scoring picks T2
+    assert pick.source == "template_T2"
+    pick = body.pick([bad_peak], [], a, body.program_counts(a), raw_count=9)
+    assert pick.source == "fallback_F0"

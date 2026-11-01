@@ -103,6 +103,11 @@ AI doc 4 is followed as written; where it is silent the code reads it so:
   matching.
 - **Peak bonus (+2)** scores only the photo ids the model cited; templates
   T1 / T2 are fallback levels (AI doc 6) and never take it.
+- **Peak first (user decision, 2026-10-31):** after every check, if any
+  surviving model sentence cites the peak photo, the detail is picked among
+  those only (same scoring and tie-breaks); otherwise among all survivors,
+  model sentences and T1 / T2 alike; then F0. Call B is asked for at least
+  two sentences about the peak.
 - **A photo id in a model sentence** ("P1, P3, ...") is rejected -- a sanity
   check, not an AI doc 4 rule.
 - **skip=true** from call A is a verdict (`skip_screenshots`, or `sensitive`

@@ -374,7 +374,11 @@ def pick(ai: List[Candidate], templates: List[Candidate], a: AResult,
         alive.append((s, 1 if c.source == "llm" else 0, -char_len(t), -order, c, t))
     if not alive:
         return BodyPick(text=f0_text(raw_count), source="fallback_F0", rejected=rejected)
-    best = max(alive, key=lambda x: x[:4])
+    # Peak first (user decision 2026-10-31): when a surviving model sentence
+    # cites the cover photo, the pick is made among those only; otherwise
+    # among every survivor (model sentences and templates), as before.
+    on_peak = [x for x in alive if x[4].source == "llm" and a.peak in x[4].photo_ids]
+    best = max(on_peak or alive, key=lambda x: x[:4])
     return BodyPick(
         text=best[5], source=best[4].source, rejected=rejected,
         photo_ids=list(best[4].photo_ids), score=best[0],
