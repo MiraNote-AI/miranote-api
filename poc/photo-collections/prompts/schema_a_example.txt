@@ -1,0 +1,22 @@
+{
+  "photos": [
+    {
+      "id": "P1",
+      "subjects": [{"name": "拿铁", "type": "drink"}, {"name": "木桌", "type": "object"}],
+      "details": ["拉花是一片叶子"],
+      "text": [],
+      "people": {"count": "0", "face_prominent": false},
+      "scene": "restaurant_cafe",
+      "flags": [],
+      "keep": true,
+      "drop_reason": ""
+    }
+  ],
+  "selected_ids": ["P1", "P4", "P6", "P9"],
+  "peak_id": "P9",
+  "skip": false,
+  "skip_reason": ""
+}
+- type ∈ food, drink, person, animal, object, scenery
+- flags ∈ screenshot, document, unrecognizable, hospital, funeral, accident, injury, nudity
+- drop_reason ∈ "", duplicate, unclear, screenshot_doc, sensitive, memo
