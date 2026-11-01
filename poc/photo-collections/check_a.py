@@ -206,6 +206,18 @@ def validate(raw, input_ids: List[str]) -> AResult:
     if extra:
         raise CheckFailed("photos has unknown ids {}".format(extra))
 
+    skip_reason = raw.get("skip_reason") if isinstance(raw.get("skip_reason"), str) else ""
+
+    # Rule 4 (skip): the model declining the whole group is a verdict, not a
+    # malformed answer -- it may leave selected_ids and peak_id empty.
+    if raw.get("skip") is True:
+        sensitive = any(SENSITIVE_FLAGS.intersection(p.flags) for p in photos.values())
+        return AResult(
+            photos=photos, selected=[], peak="",
+            verdict="sensitive" if sensitive else "skip_screenshots",
+            order=list(input_ids), skip_reason=skip_reason,
+        )
+
     # Rule 2: selected ids are input ids, 3-8 after dedupe, each keep=true.
     sel_raw = raw.get("selected_ids")
     if not isinstance(sel_raw, list) or not all(isinstance(s, str) for s in sel_raw):
@@ -227,7 +239,6 @@ def validate(raw, input_ids: List[str]) -> AResult:
     if peak not in selected:
         raise CheckFailed("peak_id {!r} is not in selected_ids".format(peak))
 
-    skip_reason = raw.get("skip_reason") if isinstance(raw.get("skip_reason"), str) else ""
     result = AResult(
         photos=photos, selected=selected, peak=peak, verdict="ok",
         order=list(input_ids), skip_reason=skip_reason,
@@ -236,9 +247,6 @@ def validate(raw, input_ids: List[str]) -> AResult:
     # Rule 4: any sensitive flag on a selected photo, or skip=true -> not pushed.
     if any(SENSITIVE_FLAGS.intersection(photos[pid].flags) for pid in selected):
         result.verdict = "sensitive"
-        return result
-    if raw.get("skip") is True:
-        result.verdict = "skip_screenshots"
         return result
 
     # Rule 3 continued: a flagged peak is replaced by the unflagged selected

@@ -204,3 +204,25 @@ def test_not_a_dict_fails():
     raw["photos"][0] = "P1"
     with pytest.raises(check_a.CheckFailed):
         check_a.validate(raw, IDS)
+
+
+def test_skip_true_with_empty_selection_rejects():
+    # Seen on the real model with the lecture-slides group: skip=true and
+    # nothing selected is a valid answer, not a malformed one.
+    raw = _raw(skip=True, skip_reason="都是幻灯片", selected_ids=[], peak_id="")
+    for i, pid in enumerate(IDS):
+        raw["photos"][i] = _photo(pid, flags=["document"], keep=False, drop_reason="memo")
+    assert check_a.validate(raw, IDS).verdict == "skip_screenshots"
+
+
+def test_skip_true_with_sensitive_flag_is_sensitive():
+    raw = _raw(skip=True, selected_ids=[], peak_id="")
+    raw["photos"][0] = _photo("P1", flags=["funeral"], keep=False, drop_reason="sensitive")
+    assert check_a.validate(raw, IDS).verdict == "sensitive"
+
+
+def test_skip_true_still_needs_every_photo_described():
+    raw = _raw(skip=True, selected_ids=[], peak_id="")
+    raw["photos"] = raw["photos"][:-1]
+    with pytest.raises(check_a.CheckFailed):
+        check_a.validate(raw, IDS)
