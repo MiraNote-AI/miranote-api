@@ -8,7 +8,6 @@ replaces it: tests script the replies of call "a" (look) and call "b"
 from __future__ import annotations
 
 import importlib.util
-import os
 import sys
 import threading
 from pathlib import Path
@@ -30,6 +29,7 @@ class FakeModel:
         self.calls: List[dict] = []
         self.unexpected: List[str] = []
         self._script: Dict[str, list] = {"a": [], "b": []}
+        self._lock = threading.Lock()
 
     def reply(self, call: str, text: str, prompt_tokens: int = 1000,
               completion_tokens: int = 500, gate: Optional[threading.Event] = None):
@@ -40,16 +40,26 @@ class FakeModel:
         self._script[call].append(("fail", error, 0, 0, None))
         return self
 
+    def respond(self, call: str, fn, times: int = 1):
+        """Reply with fn(messages) -- for concurrent jobs, where the order
+        of calls between threads is not fixed."""
+        for _ in range(times):
+            self._script[call].append(("fn", fn, 1000, 500, None))
+        return self
+
     def __call__(self, messages, *, call: str, timeout: float):
         self.calls.append({"call": call, "messages": messages, "timeout": timeout})
-        if not self._script.get(call):
-            self.unexpected.append(call)
-            raise AssertionError("FakeModel: no scripted reply for call " + call)
-        kind, payload, pt, ct, gate = self._script[call].pop(0)
+        with self._lock:
+            if not self._script.get(call):
+                self.unexpected.append(call)
+                raise AssertionError("FakeModel: no scripted reply for call " + call)
+            kind, payload, pt, ct, gate = self._script[call].pop(0)
         if gate is not None:
             gate.wait(10)
         if kind == "fail":
             raise payload
+        if kind == "fn":
+            payload = payload(messages)
         return llm.LlmReply(
             text=payload,
             prompt_tokens=pt,

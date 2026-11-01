@@ -4,7 +4,6 @@ memory assembly and the log line (handoff 5.2, AI doc 0 and 6)."""
 from __future__ import annotations
 
 import base64
-import copy
 import json
 import time
 
