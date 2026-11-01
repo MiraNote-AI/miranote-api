@@ -300,3 +300,15 @@ def test_falls_back_when_no_peak_candidate_survives():
     assert pick.source == "template_T2"
     pick = body.pick([bad_peak], [], a, body.program_counts(a), raw_count=9)
     assert pick.source == "fallback_F0"
+
+
+def test_number_in_subject_allowed():
+    # User decision 2026-10-31: a subject name like 三个人 grounds 三.
+    a = _a([_p("P1", [("三个人", "person"), ("幕布", "object")], ["手持麦克风", "蓝色幕布"], people="2-4"),
+            STAGE[1], STAGE[2]], peak="P1")
+    pick = _pick([_ai("蓝色幕布前，三人拿着麦克风", ["P1"], ["蓝色幕布"])], a=a)
+    assert _reason(pick, "蓝色幕布前，三人拿着麦克风") is None
+    assert pick.text == "蓝色幕布前，三人拿着麦克风"
+    # Still strict elsewhere: 五 is in no subject, detail, text or count.
+    pick = _pick([_ai("蓝色幕布前，五人拿着麦克风", ["P1"], ["蓝色幕布"])], a=a)
+    assert _reason(pick, "蓝色幕布前，五人拿着麦克风") == "number:五"

@@ -283,7 +283,9 @@ def _number_tokens(t: str) -> List[str]:
 def _bad_number(t: str, a: AResult, counts: Dict[str, int]) -> Optional[str]:
     numerals = _names()["numerals"]
     allowed_values: Set[int] = set(counts.values())
-    sources = _details(a) + _texts(a)
+    # Subject names count as a source too (user decision 2026-10-31): the
+    # subject "three people" grounds "three" in the sentence.
+    sources = _details(a) + _texts(a) + _subject_names(a)
     for token in _number_tokens(t):
         if any(token in s for s in sources):
             continue
