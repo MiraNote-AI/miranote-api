@@ -72,6 +72,15 @@ class FakeModel:
         return sum(1 for c in self.calls if c["call"] == call)
 
 
+@pytest.fixture(scope="session", autouse=True)
+def _warm_jieba():
+    """Build jieba's dictionary once, up front: done lazily inside the first
+    job it can take seconds on a loaded machine and time out a poll."""
+    import jieba
+
+    jieba.initialize()
+
+
 @pytest.fixture
 def fake_model(monkeypatch):
     fake = FakeModel()

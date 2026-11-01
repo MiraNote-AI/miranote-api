@@ -27,7 +27,7 @@ def _submit(client, meta=None, files=None):
                        files=files if files is not None else _files())
 
 
-def _poll(client, job_id, until=("ok", "rejected", "error"), seconds=5.0):
+def _poll(client, job_id, until=("ok", "rejected", "error"), seconds=15.0):
     end = time.monotonic() + seconds
     while time.monotonic() < end:
         r = client.get("/collections/jobs/" + job_id)
