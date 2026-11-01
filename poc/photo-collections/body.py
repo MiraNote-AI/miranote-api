@@ -10,7 +10,7 @@ from __future__ import annotations
 import logging
 import re
 import threading
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Dict, Iterable, List, Optional, Set, Tuple
 
 import jieba
@@ -211,7 +211,7 @@ def _squeeze(s: str, strip: List[str]) -> str:
     return re.sub(r"\s+", "", s)
 
 
-def _uses_ok(t: str, uses: List[str]) -> bool:
+def _uses_ok(t: str, uses: List[str], facts: Optional[List[str]] = None) -> bool:
     """Some uses fragment, without the particles de/le/zhe, is in t.
 
     Particles are dropped on both sides (a fragment keeping "zhe" must still
@@ -228,7 +228,8 @@ def _uses_ok(t: str, uses: List[str]) -> bool:
             frag = re.sub("^" + re.escape(label) + r"\s*[:\uff1a]\s*", "", frag)
         frag = _squeeze(frag, strip)
         if frag and frag in target:
-            return True
+            if facts is None or any(frag in _squeeze(f, strip) for f in facts):
+                return True
     return False
 
 
@@ -295,7 +296,8 @@ def _bad_number(t: str, a: AResult, counts: Dict[str, int]) -> Optional[str]:
     return None
 
 
-def _reject_reason(c: Candidate, t: str, a: AResult, counts: Dict[str, int]) -> Optional[str]:
+def _reject_reason(c: Candidate, t: str, a: AResult, counts: Dict[str, int],
+                   scoped: bool = False) -> Optional[str]:
     if not t:
         return "empty"
     if char_len(t) > MAX_CHARS:
@@ -311,6 +313,8 @@ def _reject_reason(c: Candidate, t: str, a: AResult, counts: Dict[str, int]) -> 
                 return "photo_id:" + pid
         if not _uses_ok(t, c.uses):
             return "uses_not_in_text"
+        if scoped and not _uses_ok(t, c.uses, _subject_names(a) + _details(a) + _texts(a)):
+            return "uses_not_in_facts"
         noun = _unknown_noun(t, a)
         if noun:
             return "unknown_noun:" + noun
@@ -365,14 +369,18 @@ def f0_text(raw_count: int) -> str:
 
 
 def pick(ai: List[Candidate], templates: List[Candidate], a: AResult,
-         counts: Dict[str, int], *, raw_count: int) -> BodyPick:
+         counts: Dict[str, int], *, raw_count: int,
+         scope: Optional[List[str]] = None) -> BodyPick:
     """Check every candidate, score the survivors, return the best one; F0
-    when none survives."""
+    when none survives. With `scope` (the cover rewrite, which saw only the
+    cover's facts), the checks use those photos' facts only, and a uses
+    fragment must also be one of those facts; scoring is unchanged."""
+    view = replace(a, selected=list(scope)) if scope else a
     rejected: List[Tuple[str, str]] = []
     alive: List[Tuple[float, int, int, int, Candidate, str]] = []
     for order, c in enumerate(list(ai) + list(templates)):
         t = _clean(c.text)
-        reason = _reject_reason(c, t, a, counts)
+        reason = _reject_reason(c, t, view, counts, scoped=bool(scope))
         if reason:
             rejected.append((c.text, reason))
             continue

@@ -392,7 +392,8 @@ def run(meta: dict, images: Dict[str, bytes], deadline: float) -> dict:
         peak_rewrite = True
         rb, _ = job.call("b", _messages_b_peak(meta, a, daypart, counts),
                          config.CALL_B_TIMEOUT, _check_rewrite, attempts=1)
-        second = body.pick(body.from_b(rb), [], a, counts, raw_count=raw_count)
+        second = body.pick(body.from_b(rb), [], a, counts, raw_count=raw_count,
+                           scope=[a.peak])
         job.log["peak_rewrite"] = {"rejected": second.rejected, "chosen": second.text,
                                    "source": second.source}
         if body.cites_peak(second, a):

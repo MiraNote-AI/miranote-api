@@ -312,3 +312,24 @@ def test_number_in_subject_allowed():
     # Still strict elsewhere: 五 is in no subject, detail, text or count.
     pick = _pick([_ai("蓝色幕布前，五人拿着麦克风", ["P1"], ["蓝色幕布"])], a=a)
     assert _reason(pick, "蓝色幕布前，五人拿着麦克风") == "number:五"
+
+
+# ---------- cover rewrite: grounded in the cover photo only ----------
+
+def _scoped(c, scope):
+    a = _a(STAGE, peak="P2")
+    c.rank = 0
+    return body.pick([c], [], a, body.program_counts(a), raw_count=9, scope=scope)
+
+
+def test_rewrite_scope_rejects_noun_from_other_photo():
+    text = "长椅旁，落下一束光"  # 长椅 belongs to P1, not to the cover P2
+    assert _scoped(_ai(text, ["P2"], ["一束光"]), None).text == text
+    assert dict(_scoped(_ai(text, ["P2"], ["一束光"]), ["P2"]).rejected)[text] == "unknown_noun:长椅"
+
+
+def test_rewrite_scope_uses_must_be_cover_facts():
+    text = "台中央，落下一束光"
+    pick = _scoped(_ai(text, ["P2"], ["落下"]), ["P2"])  # in the sentence, not a P2 fact
+    assert dict(pick.rejected)[text] == "uses_not_in_facts"
+    assert _scoped(_ai(text, ["P2"], ["一束光"]), ["P2"]).text == text
