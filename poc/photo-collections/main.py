@@ -77,7 +77,7 @@ STORE = jobs.JobStore()
 
 REQUIRED_META = (
     "group_key", "date", "weekday", "start_time", "end_time", "raw_count",
-    "covers_all", "recent_question_ids", "photos",
+    "covers_all", "recent_question_ids", "photos", "bucket",
 )
 
 
@@ -128,6 +128,11 @@ def _check_meta(raw) -> Optional[dict]:
     if not (_is_int(meta["raw_count"]) and meta["raw_count"] >= 1):
         return None
     if not isinstance(meta["covers_all"], bool) or not _is_str_list(meta["recent_question_ids"]):
+        return None
+    if not isinstance(meta["bucket"], str) or meta["bucket"] not in config.BUCKET_IDS:
+        return None
+    tz = meta.get("tz")
+    if tz is not None and not (isinstance(tz, str) and len(tz) <= config.MAX_TZ_CHARS):
         return None
     if meta.get("place") is not None and not isinstance(meta["place"], str):
         return None

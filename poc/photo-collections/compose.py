@@ -27,24 +27,6 @@ import texts
 
 ATTEMPTS = 2  # each call is tried once more after a failure
 
-# Phone label (15 broad categories) -> push bucket key, handoff 7.3.
-_LABEL_BUCKET = {
-    "food_drink": "food",
-    "sky": "sky",
-    "plant": "nature",
-    "water": "nature",
-    "animal": "animal",
-    "people": "people",
-    "built": "city",
-    "street": "city",
-    "vehicle": "city",
-    "interior": "home",
-    "tableware": "home",
-    "event": "event",
-    "recreation": "event",
-}
-_BUCKET_ORDER = ["food", "sky", "nature", "animal", "people", "city", "home", "event", "other"]
-
 _log_lock = threading.Lock()
 
 
@@ -110,20 +92,9 @@ def date_label(date: str) -> str:
     return str(date)
 
 
-def bucket(photos: List[dict]) -> str:
-    """Push bucket by majority of the sent photos' labels (each bucket counted
-    once per photo); ties go to the earlier bucket in handoff 7.3's order."""
-    counts: Dict[str, int] = {}
-    for p in photos:
-        seen = set()
-        for label in p.get("labels") or []:
-            seen.add(_LABEL_BUCKET.get(label, "other"))
-        for b in seen:
-            counts[b] = counts.get(b, 0) + 1
-    key = "other"
-    if counts:
-        key = max(_BUCKET_ORDER, key=lambda b: (counts.get(b, 0), -_BUCKET_ORDER.index(b)))
-    return texts.json("names")["buckets"][key]
+def bucket_name(meta: dict) -> str:
+    """The Chinese push bucket name for the id the phone sent in meta.bucket."""
+    return texts.json("names")["buckets"][meta["bucket"]]
 
 
 def _place(meta: dict) -> Optional[str]:
@@ -272,7 +243,8 @@ class _Job:
         self.deadline = deadline
         self.started = time.monotonic()
         self.calls: List[dict] = []
-        self.log: Dict[str, Any] = {"group_key": meta.get("group_key")}
+        self.log: Dict[str, Any] = {"group_key": meta.get("group_key"),
+                                    "bucket": meta.get("bucket"), "tz": meta.get("tz")}
 
     def remaining(self) -> float:
         return self.deadline - time.monotonic()
@@ -492,7 +464,7 @@ def _compose(job: "_Job", meta: dict, images: Dict[str, bytes]) -> dict:
         "mode": "life_fragment",
         "date": meta.get("date"),
         "daypart": daypart,
-        "bucket": bucket(photos),
+        "bucket": bucket_name(meta),
         "push": {
             "title": names["push_title"].format(fact=fact_line, daypart=daypart_name),
             "body": detail.text,

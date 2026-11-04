@@ -368,3 +368,41 @@ def test_batch_poll_duplicates_do_not_count_toward_limit(client):
     ids = ",".join(["same"] * 30)
     r = client.get("/collections/jobs", params={"ids": ids})
     assert r.status_code == 200 and list(r.json()["jobs"]) == ["same"]
+
+
+@pytest.mark.parametrize("bucket_id", ["food", "scenery", "animal", "city", "indoor", "event", "other"])
+def test_meta_bucket_accepts_each_of_seven(client, fake_model, bucket_id):
+    fake_model.reply("a", _a_json()).reply("b", _b_json())
+    r = _submit(client, _meta(bucket=bucket_id))
+    assert r.status_code == 202
+
+
+@pytest.mark.parametrize("value", ["sky", "people", "", None, 3, True, ["food"], "Food"])
+def test_meta_bucket_must_be_one_of_seven(client, fake_model, value):
+    _assert_400(_submit(client, _meta(bucket=value)), fake_model)
+
+
+def test_meta_bucket_missing_400(client, fake_model):
+    meta = _meta()
+    del meta["bucket"]
+    _assert_400(_submit(client, meta), fake_model)
+
+
+def test_tz_is_optional_and_logged(client, fake_model, tmp_log):
+    fake_model.reply("a", _a_json()).reply("b", _b_json())
+    job_id = _submit(client, _meta(tz="America/Chicago")).json()["job_id"]
+    assert _poll(client, job_id).json()["status"] == "ok"
+    entry = json.loads(tmp_log.read_text(encoding="utf-8").splitlines()[-1])
+    assert entry["tz"] == "America/Chicago" and entry["bucket"] == "event"
+    fake_model.reply("a", _a_json()).reply("b", _b_json())
+    assert _submit(client, _meta()).status_code == 202  # missing tz is fine
+
+
+@pytest.mark.parametrize("value", [3, ["UTC"], "x" * 65])
+def test_bad_tz_400(client, fake_model, value):
+    _assert_400(_submit(client, _meta(tz=value)), fake_model)
+
+
+def test_tz_of_64_chars_accepted(client, fake_model):
+    fake_model.reply("a", _a_json()).reply("b", _b_json())
+    assert _submit(client, _meta(tz="x" * 64)).status_code == 202

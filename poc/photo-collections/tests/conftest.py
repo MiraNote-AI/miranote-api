@@ -122,6 +122,9 @@ def load_main(fake_model, tmp_log, monkeypatch):
 def client(load_main, fake_model):
     from fastapi.testclient import TestClient
 
+    import beta_auth
+
+    beta_auth._limiter._hits.clear()  # the gate's rate limit is per process
     main = load_main()
     with TestClient(main.app, headers={"Authorization": "Bearer test-token"}) as c:
         c.main = main

@@ -17,13 +17,11 @@
   },
   "buckets": {
     "food": "美食饮品",
-    "sky": "天空与日落",
-    "nature": "自然与植物",
+    "scenery": "自然风光",
     "animal": "宠物与动物",
-    "people": "人物与聚会",
-    "city": "城市与建筑",
-    "home": "室内与居家",
-    "event": "活动与演出",
+    "city": "城市街头",
+    "indoor": "室内居家",
+    "event": "活动演出",
     "other": "其他"
   },
   "subject_types": {

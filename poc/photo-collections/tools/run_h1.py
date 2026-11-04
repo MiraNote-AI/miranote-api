@@ -80,6 +80,27 @@ MOMENT_GAP_MIN = 20
 SEND_MAX = 10
 
 
+# ---------- bucket ----------
+# The phone picks the bucket itself; this stand-in maps the prototype's broad
+# categories to the seven ids by simple majority (ties: list order).
+_BUCKET_OF = {
+    "food_drink": "food", "sky": "scenery", "plant": "scenery", "water": "scenery",
+    "animal": "animal", "built": "city", "street": "city", "vehicle": "city",
+    "interior": "indoor", "tableware": "indoor", "event": "event", "recreation": "event",
+}
+_BUCKET_ORDER = ["food", "scenery", "animal", "city", "indoor", "event", "other"]
+
+
+def guess_bucket(photos) -> str:
+    counts = {}
+    for p in photos:
+        for b in {_BUCKET_OF.get(c, "other") for c in p["labels"]}:
+            counts[b] = counts.get(b, 0) + 1
+    if not counts:
+        return "other"
+    return max(_BUCKET_ORDER, key=lambda b: (counts.get(b, 0), -_BUCKET_ORDER.index(b)))
+
+
 # ---------- data ----------
 
 class Data:
@@ -243,6 +264,7 @@ def build(data: Data, name: str, files: List[str], dup_of: Dict[str, str],
         "raw_count": len(files),
         "covers_all": covers_all,
         "recent_question_ids": list(recent[-5:]),
+        "bucket": guess_bucket(meta_photos),
         "photos": meta_photos,
     }
     mapping = {p["id"]: f for p, f in zip(meta_photos, send)}

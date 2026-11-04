@@ -12,6 +12,7 @@ import pytest
 import compose
 import config
 import llm
+import texts
 
 
 def _meta(**over):
@@ -25,6 +26,7 @@ def _meta(**over):
         "raw_count": 23,
         "covers_all": False,
         "recent_question_ids": ["B4", "A2"],
+        "bucket": "event",
         "photos": [
             {"id": "P1", "taken_at": "2026-10-18T14:03:00-05:00", "labels": ["plant"], "faces": 0,
              "favorite": True, "edited": False, "represents": 1},
@@ -104,7 +106,7 @@ def test_happy_path_matches_handoff_example_shape(fake_model, tmp_log):
     assert m["mode"] == "life_fragment"
     assert m["date"] == "2026-10-18"
     assert m["daypart"] == "evening"
-    assert m["bucket"] == "活动与演出"
+    assert m["bucket"] == "活动演出"
     assert m["push"] == {"title": "10.18 · 达拉斯植物园 · 傍晚", "body": "台中央，落下一束光",
                          "coverPhotoId": "P4"}
     assert m["story"]["firstFrameLabel"] == "10.18 · 达拉斯植物园"
@@ -285,17 +287,23 @@ def test_too_few_selected_rejects(fake_model, tmp_log):
     assert _run() == {"status": "rejected", "reason": "too_few_selected", "message": "精选不到 3 张"}
 
 
-def test_bucket_majority_and_tie_order():
-    def photos(*labels):
-        return [{"id": "P{}".format(i), "labels": list(ls)} for i, ls in enumerate(labels)]
+BUCKET_NAMES = {"food": "美食饮品", "scenery": "自然风光", "animal": "宠物与动物",
+                "city": "城市街头", "indoor": "室内居家", "event": "活动演出", "other": "其他"}
 
-    assert compose.bucket(photos(["food_drink"], ["sky"], ["sky"])) == "天空与日落"
-    # tie between food (1) and city (1): food comes first in the list order
-    assert compose.bucket(photos(["street"], ["food_drink"])) == "美食饮品"
-    assert compose.bucket(photos(["plant"], ["water"], ["people"])) == "自然与植物"
-    assert compose.bucket(photos(["document"], ["document"], ["sky"])) == "其他"
-    assert compose.bucket(photos([], [])) == "其他"
-    assert compose.bucket(photos(["interior", "tableware"], ["event"])) == "室内与居家"
+
+@pytest.mark.parametrize("bucket_id", list(BUCKET_NAMES))
+def test_memory_bucket_is_chinese_name_of_meta_bucket(fake_model, tmp_log, bucket_id):
+    fake_model.reply("a", _a_json()).reply("b", _b_json())
+    out = _run(_meta(bucket=bucket_id))
+    assert out["status"] == "ok"
+    assert out["memory"]["bucket"] == BUCKET_NAMES[bucket_id]
+    assert texts.json("names")["buckets"] == BUCKET_NAMES
+
+
+def test_labels_do_not_decide_the_bucket(fake_model, tmp_log):
+    # The phone's bucket wins whatever the labels say.
+    fake_model.reply("a", _a_json()).reply("b", _b_json())
+    assert _run(_meta(bucket="food"))["memory"]["bucket"] == "美食饮品"
 
 
 def test_facts_only_selected(fake_model, tmp_log):
