@@ -27,7 +27,7 @@ import texts
 
 ATTEMPTS = 2  # each call is tried once more after a failure
 
-_log_lock = threading.Lock()
+LOG_LOCK = threading.Lock()  # shared with logclean's purge
 
 
 # ---------- small helpers ----------
@@ -315,7 +315,7 @@ def _write_log(entry: dict) -> None:
         if config.LLM_API_KEY:
             line = line.replace(config.LLM_API_KEY, "<LLM_API_KEY>")
         path = config.LOG_PATH
-        with _log_lock:
+        with LOG_LOCK:
             path.parent.mkdir(parents=True, exist_ok=True)
             with open(path, "a", encoding="utf-8") as fh:
                 fh.write(line + "\n")

@@ -15,7 +15,10 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import threading
+import time
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from pathlib import PurePath
 from typing import Dict, Optional
 
@@ -28,6 +31,7 @@ import compose
 import config
 import jobs
 import llm
+import logclean
 import texts
 
 _llm_status = llm.LLM_UNCONFIGURED
@@ -41,6 +45,12 @@ async def lifespan(app: FastAPI):
         print("[collections] warning: PHOTO_LLM_WORKERS={} is below 2 x PHOTO_WORKERS={}; "
               "jobs may queue behind each other's model calls".format(
                   config.LLM_WORKERS, config.WORKERS))
+    threading.Thread(
+        target=logclean.run_daily,
+        args=(config.LOG_PATH, lambda: datetime.now(timezone.utc), time.sleep),
+        name="logclean",
+        daemon=True,
+    ).start()
     _llm_status = await asyncio.to_thread(llm.probe)
     yield
 
