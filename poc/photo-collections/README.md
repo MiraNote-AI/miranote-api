@@ -83,6 +83,7 @@ curl -s -H "Authorization: Bearer $TOKEN" \
   -F 'meta={"group_key":"2026-10-18_8F3A","date":"2026-10-18","weekday":7,
             "start_time":"14:03","end_time":"17:40","place":"达拉斯植物园",
             "raw_count":23,"covers_all":true,"recent_question_ids":["B4"],
+            "bucket":"scenery","tz":"America/Chicago",
             "photos":[{"id":"P1","taken_at":"2026-10-18T14:03:00-05:00",
                        "labels":["food_drink"],"faces":0,"favorite":false,
                        "edited":false,"represents":1}]}' \
@@ -90,6 +91,15 @@ curl -s -H "Authorization: Bearer $TOKEN" \
   localhost:8006/collections/compose
 # -> 202 {"job_id": "..."}
 ```
+
+`meta.bucket` is required and must be one of the seven ids, in tie order:
+`food` (美食饮品), `scenery` (自然风光), `animal` (宠物与动物), `city`
+(城市街头), `indoor` (室内居家), `event` (活动演出), `other` (其他). The
+phone decides it; `memory.bucket` is the Chinese name of that id. Labels
+no longer pick a bucket (they still feed call A). A missing, non-string or
+unknown `bucket` answers 400. `meta.tz` (an IANA zone name such as
+`America/Chicago`) is optional, a string of at most 64 characters, and is
+only written to the log; anything else answers 400.
 
 Poll every 5 s:
 
@@ -123,6 +133,14 @@ decision 2026-11-01: the spec's 90 s / 240 s, and then 120 s for call A,
 were too tight for 10-photo groups, whose call A with thinking took
 80-120 s and sometimes more.) Jobs live in memory for 1 h. Photos are never written
 to disk by this service.
+
+## Concurrency and retention
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `PHOTO_WORKERS` | 40 | jobs running at once (35 groups = 5 phones x 7) |
+| `PHOTO_LLM_WORKERS` | 80 | model calls in flight; keep at least 2 x `PHOTO_WORKERS`, or startup logs a warning |
+| `PHOTO_JOB_TTL_SECONDS` | 3600 | how long a job can be polled before it reads 404 `expired` |
 
 ## Model call modes
 
@@ -207,7 +225,13 @@ AI doc 4 is followed as written; where it is silent the code reads it so:
 One JSON line per job in `logs/photo-collections/compose.jsonl` (repo root,
 git-ignored): raw A/B output, every rejected candidate and question with its
 reason, the final picks, `bodySource` / `questionSource`, per-call latency,
-tokens and cost. No image bytes, no key.
+tokens and cost, plus `bucket` and `tz` from meta. No image bytes, no key.
+
+Lines older than 30 days are purged at startup and then every 24 h
+(`logclean.py`; the file is rewritten atomically under the same lock the
+writer uses). A line with no readable `ts` is never deleted.
+`tools/log_stats.py [path]` prints counts by status and reason, mean latency
+and total cost, skipping test entries whose `group_key` starts with `cc_`.
 
 ## Tests
 
@@ -220,6 +244,7 @@ Offline: every model call is the `fake_model` fixture in `tests/conftest.py`.
 
 ## Tools (real network, not tests)
 
+- `tools/log_stats.py` -- reads the compose log (no network).
 - `tools/probe_model.py` -- which request shapes the model accepts.
 - `tools/run_h1.py` -- acceptance H1: runs the prototype's 80 photos through
   the running service and writes a summary table outside the repo.
