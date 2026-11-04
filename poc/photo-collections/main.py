@@ -36,6 +36,10 @@ _llm_status = llm.LLM_UNCONFIGURED
 async def lifespan(app: FastAPI):
     """Probe the model before serving, so /health tells the truth."""
     global _llm_status
+    if config.LLM_WORKERS < 2 * config.WORKERS:
+        print("[collections] warning: PHOTO_LLM_WORKERS={} is below 2 x PHOTO_WORKERS={}; "
+              "jobs may queue behind each other's model calls".format(
+                  config.LLM_WORKERS, config.WORKERS))
     _llm_status = await asyncio.to_thread(llm.probe)
     yield
 

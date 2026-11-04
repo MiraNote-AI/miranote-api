@@ -58,8 +58,15 @@ def cost_cny(prompt_tokens: int, completion_tokens: int) -> float:
 CALL_A_TIMEOUT = 180.0  # user decision 2026-11-01 (spec said 90, then 120)
 CALL_B_TIMEOUT = 30.0
 JOB_CAP_SECONDS = 300.0  # user decision 2026-11-01 (spec said 240)
-JOB_TTL_SECONDS = 900.0
-WORKERS = 4
+# Results are kept an hour: the phone may poll a batch of seven groups late.
+JOB_TTL_SECONDS = float(os.getenv("PHOTO_JOB_TTL_SECONDS") or 3600)
+
+# ---------- Concurrency ----------
+# WORKERS jobs run at once; each job makes up to two model calls at a time
+# (call A and its retry never overlap, but B and a cover rewrite can), so the
+# model pool is sized at twice the job pool.
+WORKERS = int(os.getenv("PHOTO_WORKERS") or 40)
+LLM_WORKERS = int(os.getenv("PHOTO_LLM_WORKERS") or 80)
 
 # ---------- Request limits ----------
 MAX_PHOTOS = 10

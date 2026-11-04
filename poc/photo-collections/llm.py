@@ -44,7 +44,7 @@ _client_lock = threading.Lock()
 # trickling in can run well past it (call B took 35 s against 30 on the real
 # model). Requests run here so the caller waits on the wall clock instead.
 # An abandoned request finishes or fails on its own read timeout.
-_calls = ThreadPoolExecutor(max_workers=8, thread_name_prefix="llm")
+_calls = ThreadPoolExecutor(max_workers=config.LLM_WORKERS, thread_name_prefix="llm")
 
 
 def _get_client() -> OpenAI:

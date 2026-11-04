@@ -127,7 +127,7 @@ def test_expired_job_on_the_route(client, fake_model):
     fake_model.reply("a", _a_json()).reply("b", _b_json())
     job_id = _submit(client).json()["job_id"]
     _poll(client, job_id)
-    clock.now += 901
+    clock.now += 3601
     r = client.get("/collections/jobs/" + job_id)
     assert (r.status_code, r.json()) == (404, {"status": "expired"})
 
