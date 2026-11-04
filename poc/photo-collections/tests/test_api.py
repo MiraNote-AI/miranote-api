@@ -312,3 +312,59 @@ def test_job_finishing_after_cap_reads_timeout():
     while store.get(job_id) == {"status": "running"} and time.monotonic() < end:
         time.sleep(0.01)
     assert store.get(job_id) == {"status": "error", "reason": "timeout", "message": "AI 超时"}
+
+
+def _wait_done(store, job_id):
+    end = time.monotonic() + 2
+    while store.get(job_id) == {"status": "running"} and time.monotonic() < end:
+        time.sleep(0.01)
+
+
+def test_batch_poll_returns_each_status(client):
+    store = client.main.STORE = jobs.JobStore()
+    release = threading.Event()
+    ok_body = {"status": "ok", "memory": {"id": "g1"}}
+    rejected_body = {"status": "rejected", "reason": "sensitive", "message": "x"}
+    running = store.submit(lambda deadline: release.wait(5) and ok_body)
+    ok = store.submit(lambda deadline: ok_body)
+    rejected = store.submit(lambda deadline: rejected_body)
+    _wait_done(store, ok)
+    _wait_done(store, rejected)
+    unknown = "0" * 32
+    r = client.get("/collections/jobs", params={"ids": ",".join([running, ok, rejected, unknown])})
+    release.set()
+    assert r.status_code == 200
+    assert r.json() == {"jobs": {
+        running: {"status": "running"},
+        ok: ok_body,
+        rejected: rejected_body,
+        unknown: {"status": "expired"},
+    }}
+
+
+def test_batch_poll_dedupes_and_skips_empty(client):
+    store = client.main.STORE = jobs.JobStore()
+    job = store.submit(lambda deadline: {"status": "ok", "memory": {}})
+    _wait_done(store, job)
+    r = client.get("/collections/jobs", params={"ids": "{},,{}, zz ,".format(job, job)})
+    assert r.status_code == 200
+    assert r.json() == {"jobs": {job: {"status": "ok", "memory": {}}, "zz": {"status": "expired"}}}
+
+
+@pytest.mark.parametrize("ids", [None, "", ",", " , ,", ",".join("id{}".format(i) for i in range(21))])
+def test_batch_poll_rejects_empty_and_over_twenty(client, ids):
+    r = client.get("/collections/jobs", params={} if ids is None else {"ids": ids})
+    assert r.status_code == 400
+    assert r.json()["reason"] == "bad_request"
+
+
+def test_batch_poll_twenty_distinct_ids_ok(client):
+    ids = ",".join("id{}".format(i) for i in range(20))
+    r = client.get("/collections/jobs", params={"ids": ids})
+    assert r.status_code == 200 and len(r.json()["jobs"]) == 20
+
+
+def test_batch_poll_duplicates_do_not_count_toward_limit(client):
+    ids = ",".join(["same"] * 30)
+    r = client.get("/collections/jobs", params={"ids": ids})
+    assert r.status_code == 200 and list(r.json()["jobs"]) == ["same"]

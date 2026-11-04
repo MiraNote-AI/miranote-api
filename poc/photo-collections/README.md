@@ -97,6 +97,17 @@ Poll every 5 s:
 curl -s -H "Authorization: Bearer $TOKEN" localhost:8006/collections/jobs/<job_id>
 ```
 
+Poll many groups in one request (the phone sends at most 7 ids):
+
+```bash
+curl -s -H "Authorization: Bearer $TOKEN" "localhost:8006/collections/jobs?ids=<id1>,<id2>"
+# -> 200 {"jobs": {"<id1>": <body as below>, "<id2>": {"status": "expired"}}}
+```
+
+Every distinct non-empty id is a key; an unknown or expired id reads
+`{"status": "expired"}` inside a 200. Empty `ids` or more than 20 distinct
+ids answer 400 `bad_request`.
+
 | Status | Body |
 |---|---|
 | 200 | `{"status": "running"}` |

@@ -43,3 +43,7 @@ def test_cors_preflight_is_not_rejected(client):
         headers={"Origin": "https://example.com", "Access-Control-Request-Method": "POST"},
     )
     assert r.status_code == 200
+
+
+def test_batch_poll_needs_token(client):
+    assert _anonymous(client).get("/collections/jobs?ids=a,b").status_code == 401

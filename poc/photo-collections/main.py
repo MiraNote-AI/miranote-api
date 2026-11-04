@@ -7,6 +7,7 @@ finished push / story / ending content as an async job:
 
     POST /collections/compose      -> 202 {"job_id"}
     GET  /collections/jobs/{id}    -> running | ok | rejected | error
+    GET  /collections/jobs?ids=a,b -> {"jobs": {id: that body | expired}}
 """
 
 from __future__ import annotations
@@ -184,6 +185,18 @@ async def compose_route(request: Request):
         await form.close()
     job_id = STORE.submit(lambda deadline: compose.run(meta, images, deadline))
     return JSONResponse({"job_id": job_id}, status_code=202)
+
+
+MAX_BATCH_IDS = 20  # the phone sends at most 7; the bound stops abuse of one request
+
+
+@app.get("/collections/jobs")
+async def batch_route(ids: Optional[str] = None):
+    """Poll many jobs at once: {"jobs": {id: body}}, an unknown id reads expired."""
+    wanted = list(dict.fromkeys(i.strip() for i in (ids or "").split(",") if i.strip()))
+    if not wanted or len(wanted) > MAX_BATCH_IDS:
+        return _bad_request()
+    return JSONResponse({"jobs": {i: STORE.get(i) or {"status": "expired"} for i in wanted}})
 
 
 @app.get("/collections/jobs/{job_id}")
