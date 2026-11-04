@@ -185,6 +185,21 @@ def test_stats_skip_cc_entries(tmp_path):
     assert s["total_cost_cny"] == pytest.approx(0.04)
 
 
+def test_stats_keep_lines_with_unicode_line_separator(tmp_path):
+    log_stats = _load_stats()
+    path = tmp_path / "compose.jsonl"
+    rows = [
+        {"group_key": "g1", "status": "ok", "reason": "a\u2028b", "latencyMs": 1000, "costCny": 0.01},
+        {"group_key": "g2", "status": "ok", "reason": "", "latencyMs": 3000, "costCny": 0.03},
+    ]
+    text = "\n".join(json.dumps(r, ensure_ascii=False) for r in rows) + "\n"
+    assert "\u2028" in text
+    path.write_text(text, encoding="utf-8")
+    s = log_stats.summarize(path)
+    assert s["count"] == 2
+    assert s["total_cost_cny"] == pytest.approx(0.04)
+
+
 def test_startup_purges_the_log(tmp_log, load_main, monkeypatch):
     from fastapi.testclient import TestClient
 

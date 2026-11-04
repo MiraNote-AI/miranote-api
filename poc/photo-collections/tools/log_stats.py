@@ -25,7 +25,7 @@ def summarize(path: Path) -> dict:
     latencies = []
     cost = 0.0
     skipped = 0
-    for raw in Path(path).read_text(encoding="utf-8").splitlines():
+    for raw in Path(path).read_text(encoding="utf-8").split("\n"):
         try:
             entry = json.loads(raw)
         except ValueError:

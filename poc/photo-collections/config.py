@@ -63,8 +63,9 @@ JOB_TTL_SECONDS = float(os.getenv("PHOTO_JOB_TTL_SECONDS") or 3600)
 
 # ---------- Concurrency ----------
 # WORKERS jobs run at once; each job makes up to two model calls at a time
-# (call A and its retry never overlap, but B and a cover rewrite can), so the
-# model pool is sized at twice the job pool.
+# (calls within a job run one after another, but a timed-out request stays in
+# the pool while its retry starts; see _calls in llm.py), so the model pool is
+# sized at twice the job pool.
 WORKERS = int(os.getenv("PHOTO_WORKERS") or 40)
 LLM_WORKERS = int(os.getenv("PHOTO_LLM_WORKERS") or 80)
 

@@ -23,7 +23,7 @@ def reload_config(monkeypatch):
 
 def test_workers_default_40_and_llm_pool_80(monkeypatch, reload_config):
     for name in ("PHOTO_WORKERS", "PHOTO_LLM_WORKERS"):
-        monkeypatch.delenv(name, raising=False)
+        monkeypatch.setenv(name, "")  # beats dotenv; "" falls back to the default
     cfg = reload_config()
     assert cfg.WORKERS == 40
     assert cfg.LLM_WORKERS == 80

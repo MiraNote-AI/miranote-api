@@ -98,8 +98,8 @@ curl -s -H "Authorization: Bearer $TOKEN" \
 phone decides it; `memory.bucket` is the Chinese name of that id. Labels
 no longer pick a bucket (they still feed call A). A missing, non-string or
 unknown `bucket` answers 400. `meta.tz` (an IANA zone name such as
-`America/Chicago`) is optional, a string of at most 64 characters, and is
-only written to the log; anything else answers 400.
+`America/Chicago`) is optional (it may be null or absent), a string of at most 64
+characters, and is only written to the log; anything else answers 400.
 
 Poll every 5 s:
 
