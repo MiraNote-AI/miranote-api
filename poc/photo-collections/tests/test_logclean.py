@@ -44,6 +44,17 @@ def test_purge_keeps_undatable_lines(tmp_path):
     assert path.read_text(encoding="utf-8") == "".join(keep)
 
 
+def test_purge_splits_on_newline_only(tmp_path):
+    path = tmp_path / "compose.jsonl"
+    odd = "a\u2028b\u2029c\x85d\x0be\x0cf\x1cg"
+    old = _line(90, msg=odd).replace("\\u2028", "\u2028")
+    fresh = _line(1, msg=odd).replace("\\u2028", "\u2028")
+    assert "\u2028" in old and "\u2028" in fresh
+    path.write_text(old + fresh, encoding="utf-8")
+    assert logclean.purge(path, NOW) == 1
+    assert path.read_text(encoding="utf-8") == fresh
+
+
 def test_purge_missing_file_is_zero(tmp_path):
     assert logclean.purge(tmp_path / "nope.jsonl", NOW) == 0
 

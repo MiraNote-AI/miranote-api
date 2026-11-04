@@ -39,9 +39,14 @@ def purge(path: Path, now: datetime, keep_days: int = 30) -> int:
     cutoff = now - timedelta(days=keep_days)
     with compose.LOG_LOCK:
         try:
-            lines = path.read_text(encoding="utf-8").splitlines(keepends=True)
+            text = path.read_text(encoding="utf-8")
         except FileNotFoundError:
             return 0
+        # Split on "\n" only: splitlines() also breaks on U+2028 and friends,
+        # which ensure_ascii=False leaves raw inside a single JSON line.
+        lines = [x + "\n" for x in text.split("\n")[:-1]]
+        if not text.endswith("\n"):
+            lines.append(text.rsplit("\n", 1)[-1])
         kept = [x for x in lines if not _too_old(x, cutoff)]
         removed = len(lines) - len(kept)
         if removed == 0:
