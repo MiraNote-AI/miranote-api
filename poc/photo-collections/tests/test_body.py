@@ -340,3 +340,8 @@ def test_leftover_annotation_is_a_marker_leak():
     # A sign's words are not an annotation.
     assert _reason("招牌上那四个字亮着") is None
     assert _reason("光落在台中央 photo_ids") is not None
+
+
+def test_guitar_is_not_a_pronoun():
+    # Full check 2026-11-05: "吉他" was rejected for its "他".
+    assert _reason("台中央的光，落在一把吉他上") is None

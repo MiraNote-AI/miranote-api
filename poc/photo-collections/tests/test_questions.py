@@ -135,3 +135,8 @@ def test_question_echoing_its_type_is_stripped():
         {"text": "推车上，卖的是什么？（zoom）", "type": "zoom", "why": ""},
         {"text": "- 这家店，是怎么找到的？", "type": "found", "why": ""}]}})
     assert [q.text for q in qs] == ["推车上，卖的是什么？", "这家店，是怎么找到的？"]
+
+
+def test_guitar_is_not_a_pronoun_in_questions():
+    q = questions.Question(text="台上那把吉他，弹的是哪首歌？", type="sound", source="llm")
+    assert questions.reject_reason(q, SOMEONE) is None

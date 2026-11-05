@@ -98,7 +98,8 @@
     "她"
   ],
   "question_pronoun_allowed": [
-    "其他"
+    "其他",
+    "吉他"
   ],
   "marker_words": [
     "封面",
