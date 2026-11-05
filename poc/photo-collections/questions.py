@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
 import texts
-from body import char_len, marker_leak
+from body import char_len, marker_leak, strip_echo
 from check_a import AResult
 
 MAX_CHARS = 22
@@ -68,7 +68,7 @@ def from_b(b: Optional[dict]) -> List[Question]:
         if not isinstance(r, dict) or not isinstance(r.get("text"), str):
             continue
         out.append(Question(
-            text=r["text"].strip(),
+            text=strip_echo(r["text"]),
             type=str(r.get("type") or "").strip(),
             source="llm",
             why=r.get("why") if isinstance(r.get("why"), str) else "",

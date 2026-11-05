@@ -126,3 +126,12 @@ def test_photo_ids_and_cover_marker_rejected():
     assert questions.reject_reason(_q("P1和P2，哪一张先拍的？"), NOBODY) == "photo_id:P1"
     assert questions.reject_reason(_q("封面那碗面，是什么面？", "zoom"), NOBODY) == "marker:封面"
     assert questions.reject_reason(_q("那碗面，是什么面？", "zoom"), NOBODY) is None
+
+
+def test_question_echoing_its_type_is_stripped():
+    # The prompt's examples end with "（sound）"; a copied annotation is not
+    # copy a person should see (full check 2026-11-05).
+    qs = questions.from_b({"question": {"ranked": [
+        {"text": "推车上，卖的是什么？（zoom）", "type": "zoom", "why": ""},
+        {"text": "- 这家店，是怎么找到的？", "type": "found", "why": ""}]}})
+    assert [q.text for q in qs] == ["推车上，卖的是什么？", "这家店，是怎么找到的？"]

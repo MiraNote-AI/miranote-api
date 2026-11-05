@@ -13,6 +13,7 @@ from __future__ import annotations
 import logging
 import re
 import threading
+import unicodedata
 from dataclasses import dataclass, field
 from typing import Dict, Iterable, List, Optional, Tuple
 
@@ -89,9 +90,26 @@ def _lexicon() -> List[_Lexicon]:
     return out
 
 
+def strip_echo(text: str) -> str:
+    """The text without prompt annotations the model copied back: a list
+    marker in front, "(18 chars)" / "| photo_ids: P1" / "(zoom)" at the end
+    (real shorten replies, full check 2026-11-05)."""
+    names = _names()
+    t = re.sub(names["echo_head"], "", text.strip())
+    changed = True
+    while changed:
+        changed = False
+        for pattern in names["echo_tail"]:
+            cut = re.sub(pattern, "", t)
+            if cut != t:
+                t, changed = cut, True
+    return t.strip()
+
+
 def clean(text: str) -> str:
-    """The text as checked and shown: trimmed, trailing full stops removed."""
-    t = text.strip()
+    """The text as checked and shown: trimmed, prompt annotations and
+    trailing full stops removed."""
+    t = strip_echo(text)
     end = _names()["body_strip_end"]
     while t.endswith(end):
         t = t[: -len(end)].rstrip()
@@ -239,12 +257,20 @@ def marker_leak(t: str, a: AResult) -> Optional[str]:
     the photo ids and the word for "cover" are markers in our prompt, never
     copy a person should see (a question naming P1 and P2 was seen on real
     photos, 2026-11-05)."""
+    folded = unicodedata.normalize("NFKC", t)
     for pid in a.order:
-        if re.search(r"(?<![A-Za-z0-9])" + re.escape(pid) + r"(?![A-Za-z0-9])", t):
+        letters, digits = pid[:1], pid[1:]
+        pattern = (r"(?<![A-Za-z0-9])" + re.escape(letters) + r"\s*" + re.escape(digits)
+                   + r"(?![0-9])")
+        if re.search(pattern, folded, re.IGNORECASE):
             return "photo_id:" + pid
-    for word in _names()["marker_words"]:
-        if word in t:
+    names = _names()
+    for word in names["marker_words"]:
+        if word in folded:
             return "marker:" + word
+    for pattern in names["marker_patterns"]:
+        if re.search(pattern, folded):
+            return "marker:" + pattern
     return None
 
 

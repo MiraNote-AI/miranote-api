@@ -318,3 +318,25 @@ def test_falls_back_when_no_peak_candidate_survives():
     assert pick.source == "llm" and pick.text == "长椅上，猫睡着"
     pick = body.pick([bad_peak], [], a, raw_count=9, when=WHEN)
     assert pick.source == "fallback_F0"
+
+
+def test_photo_id_in_any_spelling_rejected():
+    # Full check 2026-11-05: only the exact uppercase id was caught.
+    for t in ("p1里的光落在台中央", "Ｐ１里的光落在台中央", "P 1 里的光落在台中央",
+              "照片1里，光落在台中央", "第一张里，光落在台中央"):
+        assert _reason(t) is not None, t
+
+
+def test_prompt_annotation_echo_is_stripped():
+    # Real shorten replies 2026-11-05 echoed the prompt's own line format.
+    assert body.clean("红蓝绿菜单摊在木桌（18个字）") == "红蓝绿菜单摊在木桌"
+    assert body.clean("蓝灰天色沉入玻璃幕墙（20 个字）｜photo_ids：P1") == "蓝灰天色沉入玻璃幕墙"
+    assert body.clean("- 台中央，落下一束光（9 个字）") == "台中央，落下一束光"
+    assert body.clean("1. 台中央，落下一束光") == "台中央，落下一束光"
+
+
+def test_leftover_annotation_is_a_marker_leak():
+    assert _reason("台中央的光，18个字") is not None
+    # A sign's words are not an annotation.
+    assert _reason("招牌上那四个字亮着") is None
+    assert _reason("光落在台中央 photo_ids") is not None

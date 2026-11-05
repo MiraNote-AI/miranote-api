@@ -101,7 +101,20 @@
     "其他"
   ],
   "marker_words": [
-    "封面"
+    "封面",
+    "photo_ids"
+  ],
+  "_echo_note": "Prompt annotations the model sometimes copies back (full check 2026-11-05): cut from the start and end of a sentence or question before the checks. Regexes.",
+  "echo_head": "^\\s*(?:[-*\u00b7]|\\d+[.\u3001])\\s*",
+  "echo_tail": [
+    "\\s*[|\uff5c]\\s*photo_ids.*$",
+    "\\s*[(\uff08]\\s*\\d+\\s*个字\\s*[)\uff09]\\s*$",
+    "\\s*[(\uff08]\\s*[a-z_]+\\s*[)\uff09]\\s*$"
+  ],
+  "marker_patterns": [
+    "\\d+\\s*个字",
+    "照片\\s*\\d",
+    "第\\s*[一二三四五六七八九十\\d]+\\s*张"
   ],
   "shorten_line": "{i}. {text}（{n} 个字）｜photo_ids：{ids}"
 }
