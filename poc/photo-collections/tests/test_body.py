@@ -169,6 +169,10 @@ def test_lianpai_rejected():
     assert _reason("长椅上，连拍了橘猫") == "lianpai"
 
 
+def test_cover_marker_rejected():
+    assert _reason("封面里三人站在蓝幕前") == "marker:封面"
+
+
 def test_photo_id_in_text_rejected():
     # Seen on the real model: "P1, P3, ..." A photo id is never copy.
     assert _reason("P1, P3, 橙黄色的晚霞") == "photo_id:P1"

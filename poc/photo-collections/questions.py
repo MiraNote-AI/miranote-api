@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
 import texts
-from body import char_len
+from body import char_len, marker_leak
 from check_a import AResult
 
 MAX_CHARS = 22
@@ -97,6 +97,9 @@ def reject_reason(q: Question, a: AResult) -> Optional[str]:
     for w in names["question_pronouns"]:
         if w in rest:
             return "pronoun:" + w
+    leak = marker_leak(q.text, a)
+    if leak:
+        return leak
     if q.type not in type_ids():
         return "unknown_type:" + q.type
     if q.type == "people" and not _has_people(a):

@@ -226,13 +226,25 @@ def reject_reason(c: Candidate, a: AResult) -> Optional[str]:
     if hit:
         return "lexicon:" + hit
     if c.source == "llm":
-        # A sanity check on broken output: a photo id leaked into the
-        # sentence is never copy a person should see.
-        for pid in a.order:
-            if re.search(r"(?<![A-Za-z0-9])" + re.escape(pid) + r"(?![A-Za-z0-9])", t):
-                return "photo_id:" + pid
+        leak = marker_leak(t, a)
+        if leak:
+            return leak
         if _names()["lianpai"] in t:
             return "lianpai"
+    return None
+
+
+def marker_leak(t: str, a: AResult) -> Optional[str]:
+    """A sanity check on broken output, for sentences and questions alike:
+    the photo ids and the word for "cover" are markers in our prompt, never
+    copy a person should see (a question naming P1 and P2 was seen on real
+    photos, 2026-11-05)."""
+    for pid in a.order:
+        if re.search(r"(?<![A-Za-z0-9])" + re.escape(pid) + r"(?![A-Za-z0-9])", t):
+            return "photo_id:" + pid
+    for word in _names()["marker_words"]:
+        if word in t:
+            return "marker:" + word
     return None
 
 

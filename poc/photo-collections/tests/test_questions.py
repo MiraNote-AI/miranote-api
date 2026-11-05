@@ -119,3 +119,10 @@ def test_final_is_survivors_or_fallbacks():
         "fallback_B1", "fallback_B2", "fallback_B3"]
     assert questions.final(one, "下午")[0].payload() == {
         "text": "那桌菜里，哪一样最先吃完？", "type": "order", "source": "llm"}
+
+
+def test_photo_ids_and_cover_marker_rejected():
+    # Seen on real photos (2026-11-05): "P1 he P2 dou zai bai sha ...".
+    assert questions.reject_reason(_q("P1和P2，哪一张先拍的？"), NOBODY) == "photo_id:P1"
+    assert questions.reject_reason(_q("封面那碗面，是什么面？", "zoom"), NOBODY) == "marker:封面"
+    assert questions.reject_reason(_q("那碗面，是什么面？", "zoom"), NOBODY) is None
