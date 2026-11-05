@@ -554,9 +554,16 @@ def _compose(job: "_Job", meta: dict, images: Dict[str, bytes]) -> dict:
         sb, _ = job.call("b", _messages_shorten(long_ones), config.CALL_B_TIMEOUT,
                          _check_rewrite, attempts=1)
         s_new = body.from_b(sb)[:len(long_ones)]
-        for c, source in zip(s_new, long_ones):
-            c.rank = source.rank
-            c.photo_ids = list(source.photo_ids)
+        # A reply keeps its own photos when they are selected ones (it may
+        # drop a sentence, full check 2026-11-05). The long sentences were
+        # asked in rank order, so a reply missing some keeps its own order.
+        same_count = len(s_new) == len(long_ones)
+        for i, c in enumerate(s_new):
+            own = [pid for pid in c.photo_ids if pid in a.selected]
+            c.photo_ids = own or (list(long_ones[i].photo_ids) if same_count else [])
+            if same_count:
+                c.rank = long_ones[i].rank
+        s_new = [c for c in s_new if c.photo_ids]
         s_ai, s_rejected = _hard_bodies(s_new, a)
         sc_status, s_ai, sc_rej, _, _, sc_log = _verify(job, a.selected, a.peak, images, s_ai, [])
         if sc_status == "deadline":

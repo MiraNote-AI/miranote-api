@@ -727,3 +727,20 @@ def test_one_unsure_verdict_keeps_the_rest_of_call_c(fake_model, tmp_log):
     m = _run()["memory"]
     assert (m["push"]["body"], m["generation"]["bodySource"]) == ("台中央，落下一束光", "llm")
     assert m["ending"]["questions"][0]["source"] == "fallback_B1"
+
+
+def test_shorten_reply_keeps_its_own_photos(fake_model, tmp_log):
+    # Full check 2026-11-05: the shorten round paired replies with the long
+    # sentences by position. A reply that dropped the first sentence got its
+    # photos, and the cover moved to the flower bed under a cat sentence.
+    fake_model.c_cover = _cover_is()
+    long_flower = "红色的花开满了整个花坛，下午的阳光从左边斜斜照过来"
+    long_cat = "一只橘猫睡在木头长椅上，背后是一大片绿油油的草地呀"
+    cands = [{"text": long_flower, "photo_ids": ["P1"]}, {"text": long_cat, "photo_ids": ["P2"]}]
+    short = [{"text": "橘猫睡在长椅上，草地很绿", "photo_ids": ["P2"]}]
+    fake_model.reply("a", _a_json()).reply("b", _b_json(candidates=cands)).reply(
+        "b", _b_json(candidates=short, ranked=[])).reply(
+        "b", _b_json(candidates=[], ranked=[], cannot_write=True))
+    m = _run()["memory"]
+    assert m["push"]["body"] == "橘猫睡在长椅上，草地很绿"
+    assert m["push"]["coverPhotoId"] == "P2"
