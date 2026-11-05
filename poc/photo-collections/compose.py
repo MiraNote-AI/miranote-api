@@ -1,7 +1,8 @@
-"""The compose pipeline (AI doc 0):
+"""The compose pipeline (AI doc 0, copy refine handoff 2):
 
-    call A -> check A -> templates + question menus -> call B -> check B
-      -> pick detail sentence + question -> memory (handoff 5.2)
+    call A -> check A -> templates -> call B (sees the photos) -> program
+      checks -> call C (checks against the photos) -> pick detail sentence,
+      up to 3 questions -> memory (handoff 5.2, copy refine handoff 5.7)
 
 run() returns exactly the job result body. It never raises for a model or
 check failure; every outcome is one of ok / rejected / error. One JSON line
@@ -24,6 +25,7 @@ import config
 import llm
 import questions
 import texts
+import verify
 
 ATTEMPTS = 2  # each call is tried once more after a failure
 
@@ -110,12 +112,32 @@ def _result(status: str, reason: str) -> dict:
 
 # ---------- prompts ----------
 
+def _image_part(data: bytes) -> dict:
+    return {"type": "image_url", "image_url": {
+        "url": "data:{};base64,{}".format(
+            image_mime(data) or "image/jpeg", base64.b64encode(data).decode("ascii"))}}
+
+
+def _split(name: str) -> Tuple[str, str, str]:
+    """A prompt with photo lines: (header, per-photo template, task)."""
+    header, _, rest = texts.raw(name).partition("=====PHOTO=====\n")
+    photo_tpl, _, task = rest.partition("=====TASK=====\n")
+    return header, photo_tpl.strip("\n"), task
+
+
+def _hhmm(photo: dict) -> str:
+    dt = parse_time(photo.get("taken_at"))
+    return dt.strftime("%H:%M") if dt else ""
+
+
+def _count_text(counts: Dict[str, int], names: dict) -> str:
+    ordered = sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))
+    return names["sep"].join(names["b_count"].format(name=k, n=v) for k, v in ordered)
+
+
 def _messages_a(meta: dict, photos: List[dict], images: Dict[str, bytes]) -> List[dict]:
     names = texts.json("names")
-    raw = texts.raw("collect_a_user")
-    header, _, rest = raw.partition("=====PHOTO=====\n")
-    photo_tpl, _, task = rest.partition("=====TASK=====\n")
-    photo_tpl = photo_tpl.strip("\n")
+    header, photo_tpl, task = _split("collect_a_user")
     weekday = names["weekdays"].get(str(meta.get("weekday")), "")
     content: List[dict] = [{"type": "text", "text": header.format_map({
         "date": meta.get("date"),
@@ -127,21 +149,17 @@ def _messages_a(meta: dict, photos: List[dict], images: Dict[str, bytes]) -> Lis
         "sent_count": len(photos),
     }).strip("\n")}]
     for p in photos:
-        dt = parse_time(p.get("taken_at"))
         represents = int(p.get("represents") or 1)
         content.append({"type": "text", "text": photo_tpl.format_map({
             "id": p["id"],
-            "time": dt.strftime("%H:%M") if dt else "",
+            "time": _hhmm(p),
             "labels": names["list_sep"].join(p.get("labels") or []) or names["none"],
             "faces": int(p.get("faces") or 0),
             "favorite": names["a_favorite"] if p.get("favorite") is True else "",
             "represents": represents,
             "merged": names["a_merged"] if represents > 1 else "",
         })})
-        content.append({"type": "image_url", "image_url": {
-            "url": "data:{};base64,{}".format(
-                image_mime(images[p["id"]]) or "image/jpeg",
-                base64.b64encode(images[p["id"]]).decode("ascii"))}})
+        content.append(_image_part(images[p["id"]]))
     content.append({"type": "text", "text": task.format_map(
         {"schema_a": texts.raw("schema_a_example").strip()})})
     return [
@@ -150,71 +168,82 @@ def _messages_a(meta: dict, photos: List[dict], images: Dict[str, bytes]) -> Lis
     ]
 
 
+def _header_values(meta: dict, daypart: str, counts: Dict[str, int], names: dict) -> dict:
+    return {
+        "date": meta.get("date"),
+        "weekday": names["weekdays"].get(str(meta.get("weekday")), ""),
+        "daypart": names["dayparts"][daypart],
+        "place": _place(meta) or names["none"],
+        "counts": _count_text(counts, names) or names["none"],
+    }
+
+
 def _messages_b(meta: dict, a: check_a.AResult, daypart: str, counts: Dict[str, int],
-                cands: List[questions.QCandidate]) -> List[dict]:
+                by_id: Dict[str, dict], images: Dict[str, bytes]) -> List[dict]:
+    """Call B sees the selected photos, in time order, with call A's
+    descriptions; the cover is marked (handoff 2.2)."""
     names = texts.json("names")
-    none = names["none"]
-    type_names = names["subject_types"]
-    lines = []
+    header, photo_tpl, task = _split("collect_b_user")
+    values = _header_values(meta, daypart, counts, names)
+    values["k"] = len(a.selected)
+    content: List[dict] = [{"type": "text", "text": header.format_map(values).strip("\n")}]
     for pid in a.selected:
         p = a.photos[pid]
-        subjects = names["list_sep"].join(
-            names["b_subject"].format(name=s.name, type=type_names.get(s.type, s.type))
-            for s in p.subjects)
-        lines.append(names["b_photo_line"].format(
-            id=pid,
-            subjects=subjects or none,
-            details=names["list_sep"].join(p.details) or none,
-            text=names["list_sep"].join(p.text) or none,
-            people=p.people_count,
-        ))
-    ordered = sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))
-    count_text = names["sep"].join(names["b_count"].format(name=k, n=v) for k, v in ordered)
-    user = texts.render(
-        "collect_b_user",
-        date=meta.get("date"),
-        daypart=names["dayparts"][daypart],
-        place=_place(meta) or none,
-        k=len(a.selected),
-        peak_id=a.peak,
-        counts=count_text or none,
-        photo_lines="\n".join(lines),
-        question_block=questions.prompt_block(cands),
-    )
+        content.append({"type": "text", "text": photo_tpl.format_map({
+            "id": pid, "time": _hhmm(by_id[pid]),
+            "cover": names["b_cover"] if pid == a.peak else "",
+            "description": p.description or names["none"], "people": p.people_count,
+        })})
+        content.append(_image_part(images[pid]))
+    content.append({"type": "text", "text": task.format_map({
+        "type_table": questions.prompt_types(),
+        "recent_types": questions.prompt_recent(list(meta.get("recent_question_types") or [])),
+    })})
     return [
         {"role": "system", "content": texts.raw("collect_b_system").strip()},
-        {"role": "user", "content": user},
+        {"role": "user", "content": content},
     ]
 
 
-def _messages_b_peak(meta: dict, a: check_a.AResult, daypart: str,
-                     counts: Dict[str, int]) -> List[dict]:
-    """The extra call B: detail sentences about the cover photo only."""
+def _messages_b_peak(meta: dict, a: check_a.AResult, daypart: str, counts: Dict[str, int],
+                     by_id: Dict[str, dict], images: Dict[str, bytes],
+                     too_long: List[str]) -> List[dict]:
+    """The extra call B: detail sentences about the cover photo only. The
+    first round's cover sentences cut only for length are shown back to be
+    shortened (the model overshoots 22 characters; first real runs)."""
     names = texts.json("names")
-    none = names["none"]
-    type_names = names["subject_types"]
+    long_lines = "\n".join(names["too_long_line"].format(text=t, n=body.char_len(t))
+                           for t in too_long) or names["none"]
+    header, photo_tpl, task = _split("collect_b_peak_user")
     p = a.photos[a.peak]
-    subjects = names["list_sep"].join(
-        names["b_subject"].format(name=s.name, type=type_names.get(s.type, s.type))
-        for s in p.subjects)
-    peak_line = names["b_photo_line"].format(
-        id=a.peak, subjects=subjects or none,
-        details=names["list_sep"].join(p.details) or none,
-        text=names["list_sep"].join(p.text) or none, people=p.people_count)
-    ordered = sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))
-    count_text = names["sep"].join(names["b_count"].format(name=k, n=v) for k, v in ordered)
-    user = texts.render(
-        "collect_b_peak_user",
-        date=meta.get("date"),
-        daypart=names["dayparts"][daypart],
-        place=_place(meta) or none,
-        peak_id=a.peak,
-        counts=count_text or none,
-        peak_line=peak_line,
-    )
+    content: List[dict] = [
+        {"type": "text", "text": header.format_map(
+            _header_values(meta, daypart, counts, names)).strip("\n")},
+        {"type": "text", "text": photo_tpl.format_map({
+            "id": a.peak, "time": _hhmm(by_id[a.peak]),
+            "description": p.description or names["none"], "people": p.people_count})},
+        _image_part(images[a.peak]),
+        {"type": "text", "text": task.format_map({"peak_id": a.peak, "too_long": long_lines})},
+    ]
     return [
         {"role": "system", "content": texts.raw("collect_b_system").strip()},
-        {"role": "user", "content": user},
+        {"role": "user", "content": content},
+    ]
+
+
+def _messages_c(ids: List[str], cover: str, images: Dict[str, bytes],
+                sentences: List[str], qs: List[str]) -> List[dict]:
+    names = texts.json("names")
+    photo_tpl, task = verify.user_text(sentences, qs)
+    content: List[dict] = []
+    for pid in ids:
+        content.append({"type": "text", "text": photo_tpl.format_map({
+            "id": pid, "cover": names["b_cover"] if pid == cover else ""})})
+        content.append(_image_part(images[pid]))
+    content.append({"type": "text", "text": task})
+    return [
+        {"role": "system", "content": texts.raw("verify_c_system").strip()},
+        {"role": "user", "content": content},
     ]
 
 
@@ -327,9 +356,77 @@ def _facts_line(p: check_a.PhotoFacts, names: dict) -> str:
     none = names["none"]
     return names["facts_line"].format(
         subjects=names["sep"].join(s.name for s in p.subjects) or none,
-        details=names["sep"].join(p.details) or none,
+        description=p.description or none,
         people=p.people_count,
     )
+
+
+def _when(by_id: Dict[str, dict], peak: str, names: dict) -> Tuple[str, body.When]:
+    """The daypart id and the weekday / daypart names, by the cover's time."""
+    peak_time = parse_time(by_id[peak].get("taken_at"))
+    daypart = daypart_of(peak_time.hour if peak_time else 12)
+    weekday = names["weekdays"].get(str(peak_time.isoweekday())) if peak_time else ""
+    return daypart, body.When(weekday=weekday or "", daypart=names["dayparts"][daypart])
+
+
+def _hard_bodies(ai: List[body.Candidate], a: check_a.AResult):
+    """Model sentences the program passes, and the rejected ones."""
+    passed, rejected = [], []
+    for c in ai:
+        reason = body.reject_reason(c, a)
+        if reason:
+            rejected.append((c.text, reason))
+        else:
+            passed.append(c)
+    return passed, rejected
+
+
+def _verify(job: "_Job", ids: List[str], cover: str, images: Dict[str, bytes],
+            ai: List[body.Candidate], qs: List[questions.Question]):
+    """Call C on what the program passed. Returns (status, sentences, their
+    rejections, questions, their rejections, log). status: skipped (nothing
+    to check) | ok | failed (two failures: nothing model-written survives)
+    | deadline. A sentence cites the cover exactly when C says it mentions
+    it (handoff 2.3 item 3)."""
+    log: Dict[str, Any] = {}
+    if not ai and not qs:
+        return "skipped", ai, [], qs, [], log
+    texts_s = [body.clean(c.text) for c in ai]
+    texts_q = [q.text for q in qs]
+    result, fail = job.call(
+        "c", _messages_c(ids, cover, images, texts_s, texts_q), config.CALL_C_TIMEOUT,
+        lambda text: verify.parse(text, len(ai), len(qs)))
+    if result is None:
+        status = "deadline" if fail == "deadline" else "failed"
+        log["failure"] = fail
+        return status, [], [], [], [], log
+    log["sentences"] = {}
+    log["questions"] = {}
+    kept_s, rej_s = [], []
+    for i, c in enumerate(ai):
+        v = result.sentences[verify.sentence_id(i)]
+        log["sentences"][verify.sentence_id(i)] = {
+            "text": texts_s[i], "grounded": v.grounded, "mentions_cover": v.mentions_cover,
+            "reason": v.reason}
+        if not v.grounded:
+            rej_s.append((c.text, "c_ungrounded:" + v.reason[:80]))
+            continue
+        ids_ = [pid for pid in c.photo_ids if pid != cover]
+        if v.mentions_cover:
+            ids_ = [cover] + ids_
+        kept_s.append(body.Candidate(text=c.text, source=c.source, photo_ids=ids_, rank=c.rank))
+    kept_q, rej_q = [], []
+    for i, q in enumerate(qs):
+        v = result.questions[verify.question_id(i)]
+        log["questions"][verify.question_id(i)] = {
+            "text": q.text, "grounded": v.grounded, "safe": v.safe, "reason": v.reason}
+        if not v.grounded:
+            rej_q.append((q.text, "c_ungrounded:" + v.reason[:80]))
+        elif not v.safe:
+            rej_q.append((q.text, "c_unsafe:" + v.reason[:80]))
+        else:
+            kept_q.append(q)
+    return "ok", kept_s, rej_s, kept_q, rej_q, log
 
 
 def run(meta: dict, images: Dict[str, bytes], deadline: float) -> dict:
@@ -368,45 +465,62 @@ def _compose(job: "_Job", meta: dict, images: Dict[str, bytes]) -> dict:
         return job.finish(_result("rejected", a.verdict))
 
     # ---- program prep ----
-    peak_time = parse_time(by_id[a.peak].get("taken_at"))
-    daypart = daypart_of(peak_time.hour if peak_time else 12)
-    daypart_name = names["dayparts"][daypart]
+    daypart, when = _when(by_id, a.peak, names)
     counts = body.program_counts(a)
-    tpls = body.templates(a, meta)
-    cands = questions.candidates(a, meta, daypart)
+    tpls = body.templates(a, meta, when)
+    raw_count = int(meta.get("raw_count") or 0)
 
     # ---- call B (failing twice is not a rejection: templates + fallback) ----
-    b, fail = job.call("b", _messages_b(meta, a, daypart, counts, cands),
+    b, fail = job.call("b", _messages_b(meta, a, daypart, counts, by_id, images),
                        config.CALL_B_TIMEOUT, _check_b)
     if b is None and fail == "deadline":
         return job.finish(_result("error", "timeout"))
-    ai = body.from_b(b)
-    ranked = (b or {}).get("question", {}).get("ranked") or []
+    first_ai = body.from_b(b)
+    ai, body_rejected = _hard_bodies(first_ai, a)
+    too_long = [body.clean(c.text) for c in first_ai
+                if a.peak in c.photo_ids and body.reject_reason(c, a) == "too_long"]
+    model_qs = questions.from_b(b)
+    qs, q_rejected = questions.hard_check(model_qs, a)
+
+    # ---- call C: only what it passes is used; two failures -> templates,
+    # F0 and fallback questions only (handoff 2.4) ----
+    c_status, ai, c_rej_s, qs, c_rej_q, c_log = _verify(job, a.selected, a.peak, images, ai, qs)
+    if c_status == "deadline":
+        return job.finish(_result("error", "timeout"))
+    job.log["c"] = dict(c_log, status=c_status)
+    body_rejected += c_rej_s
+    q_rejected += c_rej_q
 
     # ---- detail sentence ----
-    raw_count = int(meta.get("raw_count") or 0)
-    detail = body.pick(ai, tpls, a, counts, raw_count=raw_count)
-    first_rejected = list(detail.rejected)
+    detail = body.pick(ai, tpls, a, raw_count=raw_count, when=when)
+    first_rejected = body_rejected + list(detail.rejected)
+    detail.rejected = list(first_rejected)
 
     # The body must describe the cover (user decision 2026-10-31): no model
     # sentence about the peak survived -> one extra call B for the peak only
-    # (no retry, inside the job deadline); still none -> a model sentence
-    # about another photo makes that photo the cover; a template or F0
-    # keeps the cover.
+    # (no retry, inside the job deadline), checked by the program and call C
+    # on the cover alone; still none -> a model sentence about another photo
+    # makes that photo the cover; a template or F0 keeps the cover. Skipped
+    # when call C failed: nothing unchecked may be shown.
     peak_rewrite = False
     peak_switched = False
     old_peak = a.peak
-    if not body.cites_peak(detail, a) and job.remaining() > 0:
+    if not body.cites_peak(detail, a) and c_status != "failed" and job.remaining() > 0:
         peak_rewrite = True
-        rb, _ = job.call("b", _messages_b_peak(meta, a, daypart, counts),
+        rb, _ = job.call("b", _messages_b_peak(meta, a, daypart, counts, by_id, images, too_long),
                          config.CALL_B_TIMEOUT, _check_rewrite, attempts=1)
-        second = body.pick(body.from_b(rb), [], a, counts, raw_count=raw_count,
-                           scope=[a.peak])
-        job.log["peak_rewrite"] = {"rejected": second.rejected, "chosen": second.text,
-                                   "source": second.source}
+        r_ai, r_rejected = _hard_bodies(body.from_b(rb), a)
+        rc_status, r_ai, rc_rej, _, _, rc_log = _verify(job, [a.peak], a.peak, images, r_ai, [])
+        if rc_status == "deadline":
+            return job.finish(_result("error", "timeout"))
+        second = body.pick(r_ai, [], a, raw_count=raw_count, when=when)
+        r_all = r_rejected + rc_rej + second.rejected
+        job.log["peak_rewrite"] = {"rejected": r_all, "chosen": second.text,
+                                   "source": second.source,
+                                   "c": dict(rc_log, status=rc_status)}
         if body.cites_peak(second, a):
             detail = body.BodyPick(text=second.text, source="llm",
-                                   rejected=first_rejected + second.rejected,
+                                   rejected=first_rejected + r_all,
                                    photo_ids=second.photo_ids, score=second.score)
     if not body.cites_peak(detail, a) and detail.source == "llm":
         # Only a model sentence citing a usable photo (selected, unflagged)
@@ -417,8 +531,8 @@ def _compose(job: "_Job", meta: dict, images: Dict[str, bytes]) -> dict:
                          if pid in a.selected and not a.photos[pid].flags), None)
 
         dropped = [(c.text, "no_cover_photo") for c in ai if usable(c) is None]
-        detail = body.pick([c for c in ai if usable(c) is not None], tpls, a, counts,
-                           raw_count=raw_count)
+        detail = body.pick([c for c in ai if usable(c) is not None], tpls, a,
+                           raw_count=raw_count, when=when)
         detail.rejected = first_rejected + [d for d in dropped if d not in first_rejected]
         new_peak = None
         if detail.source == "llm":
@@ -427,29 +541,23 @@ def _compose(job: "_Job", meta: dict, images: Dict[str, bytes]) -> dict:
         if new_peak is not None:
             a.peak = new_peak
             peak_switched = True
-            peak_time = parse_time(by_id[a.peak].get("taken_at"))
-            daypart = daypart_of(peak_time.hour if peak_time else 12)
-            daypart_name = names["dayparts"][daypart]
+            daypart, when = _when(by_id, a.peak, names)
+    daypart_name = when.daypart
     job.log["peakRewrite"] = peak_rewrite
     job.log["peakSwitched"] = peak_switched
     if peak_switched:
         job.log["peak_switch"] = {"from": old_peak, "to": a.peak, "daypart": daypart}
 
-    # ---- question (offered questions rebuilt for a switched cover: menus,
-    # conditions and the daypart all follow the new peak; a ranked id that
-    # is no longer offered falls through to B1-B3) ----
-    final_cands = questions.candidates(a, meta, daypart) if peak_switched else cands
-    q = questions.pick(ranked, final_cands, list(meta.get("recent_question_ids") or []),
-                       daypart_name)
+    # ---- questions: the survivors in the model's order, or B1-B3 ----
+    final_qs = questions.final(qs, daypart_name)
     job.log["body"] = {"rejected": detail.rejected, "chosen": detail.text,
                        "source": detail.source, "templates": [t.text for t in tpls]}
-    job.log["question"] = {"offered": [c.id for c in cands],
-                           "offered_after_switch": [c.id for c in final_cands],
-                           "ranked": ranked,
-                           "rejected": q.rejected, "chosen_id": q.id, "chosen": q.text,
-                           "fill": q.fill, "source": q.source}
+    job.log["question"] = {"ranked": [{"text": q.text, "type": q.type, "why": q.why}
+                                      for q in model_qs],
+                           "rejected": q_rejected,
+                           "final": [q.payload() for q in final_qs]}
     job.log["bodySource"] = detail.source
-    job.log["questionSource"] = q.source
+    job.log["questionSource"] = final_qs[0].source
 
     # ---- memory ----
     md = date_label(meta.get("date"))
@@ -474,14 +582,14 @@ def _compose(job: "_Job", meta: dict, images: Dict[str, bytes]) -> dict:
         "ending": {
             "factLine": fact_line,
             "detail": "" if is_f0 else detail.text,
-            "question": q.text,
-            "questionId": q.id,
+            "questions": [q.payload() for q in final_qs],
             "ctaLabel": names["cta"].format(daypart=daypart_name),
         },
         "facts": {pid: _facts_line(a.photos[pid], names) for pid in a.selected},
         "generation": {
             "bodySource": detail.source,
-            "questionSource": q.source,
+            "questionSource": final_qs[0].source,
+            "copyVersion": config.COPY_VERSION,
             "model": config.LLM_MODEL,
             "costCny": round(job.cost(), 4),
             "latencyMs": int((time.monotonic() - job.started) * 1000),

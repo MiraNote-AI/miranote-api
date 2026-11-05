@@ -35,20 +35,16 @@
   "fact_line": "{md} · {place}",
   "push_title": "{fact} · {daypart}",
   "cta": "留住这个{daypart}",
-  "t1": "那天的{x}，你拍了 {n} 张",
-  "t2": "从{first}拍到了{last}",
-  "f0": "那天你拍了 {n} 张照片",
-  "facts_line": "主体：{subjects}；细节：{details}；人数：{people}",
+  "t1": "{n} 张{x}，一个{weekday}的{daypart}",
+  "t2": "从{first}，到{last}",
+  "f0": "{n} 张照片，一个{weekday}的{daypart}",
+  "facts_line": "主体：{subjects}；描述：{description}；人数：{people}",
   "sep": "、",
   "list_sep": ", ",
   "none": "无",
   "a_favorite": "｜收藏",
   "a_merged": "（连拍或近似重复合并）",
-  "b_photo_line": "  {id}｜主体：{subjects}｜细节：{details}｜文字：{text}｜人数：{people}",
-  "b_subject": "{name}({type})",
   "b_count": "{name}出现在 {n} 张里",
-  "b_question_a": "{id}｜{text}｜菜单：{menu}",
-  "b_question_b": "{id}｜{text}",
   "person_nouns": [
     "人",
     "个人",
@@ -87,20 +83,21 @@
   ],
   "lianpai": "连拍",
   "body_strip_end": "。",
-  "uses_strip": [
-    "的",
-    "了",
-    "着"
-  ],
   "slot_tokens": {
     "thing": "{物}",
     "moment": "{画面}",
     "daypart": "{时段}"
   },
-  "b_fact_labels": [
-    "主体",
-    "细节",
-    "文字",
-    "人数"
+  "b_cover": "｜封面",
+  "c_sentence": "{id}｜{text}",
+  "too_long_line": "- {text}（{n} 个字）",
+  "c_question": "{id}｜{text}",
+  "type_line": "  {id}｜{name}｜{example}",
+  "question_pronouns": [
+    "他",
+    "她"
+  ],
+  "question_pronoun_allowed": [
+    "其他"
   ]
 }

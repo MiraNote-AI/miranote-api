@@ -2,7 +2,8 @@
 
 Every model call goes through complete(), so tests replace one function.
 The request shape per call (thinking / stream / response_format) comes from
-config.CALL_A_MODE and config.CALL_B_MODE, settled by tools/probe_model.py.
+config.CALL_A_MODE, CALL_B_MODE and CALL_C_MODE (A and B settled by
+tools/probe_model.py).
 """
 
 from __future__ import annotations
@@ -79,13 +80,14 @@ def _usage_pair(usage) -> tuple:
 
 
 def _request(call: str, messages: List[dict], timeout: float) -> dict:
-    mode = config.CALL_A_MODE if call == "a" else config.CALL_B_MODE
+    mode = {"a": config.CALL_A_MODE, "b": config.CALL_B_MODE, "c": config.CALL_C_MODE}[call]
     if mode not in config.MODES:
         raise ModelError("unknown call mode " + repr(mode))
     kwargs = {
         "model": config.LLM_MODEL,
         "messages": messages,
-        "temperature": config.TEMPERATURE_A if call == "a" else config.TEMPERATURE_B,
+        "temperature": {"a": config.TEMPERATURE_A, "b": config.TEMPERATURE_B,
+                        "c": config.TEMPERATURE_C}[call],
         "timeout": timeout,
     }
     if mode == "thinking_stream":
@@ -99,9 +101,10 @@ def _request(call: str, messages: List[dict], timeout: float) -> dict:
         kwargs["response_format"] = {"type": "json_object"}
         kwargs["extra_body"] = {"enable_thinking": False}
     else:
+        name, schema = ("verify_c", config.SCHEMA_C) if call == "c" else ("collect_b", config.SCHEMA_B)
         kwargs["response_format"] = {
             "type": "json_schema",
-            "json_schema": {"name": "collect_b", "strict": True, "schema": config.SCHEMA_B},
+            "json_schema": {"name": name, "strict": True, "schema": schema},
         }
         kwargs["extra_body"] = {"enable_thinking": False}
     return kwargs
@@ -110,8 +113,8 @@ def _request(call: str, messages: List[dict], timeout: float) -> dict:
 def complete(messages: List[dict], *, call: str, timeout: float) -> LlmReply:
     """One model call. Raises ModelTimeout or ModelError, never anything else
     from the SDK. Reasoning text from a thinking model is dropped."""
-    if call not in ("a", "b"):
-        raise ValueError("call must be 'a' or 'b'")
+    if call not in ("a", "b", "c"):
+        raise ValueError("call must be 'a', 'b' or 'c'")
     if timeout <= 0:
         raise ModelTimeout("no time left for the call")
     kwargs = _request(call, messages, timeout)

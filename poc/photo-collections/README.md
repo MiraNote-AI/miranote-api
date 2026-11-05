@@ -1,18 +1,20 @@
 # photo-collections (port 8006)
 
 Photo Trigger V1 backend. The app sends up to 10 small photos (768 px, no
-EXIF) of one "life fragment" plus per-photo metadata; the service runs two
+EXIF) of one "life fragment" plus per-photo metadata; the service runs three
 Qwen calls with program checks between them and returns the finished Chinese
 push / story / ending content.
 
 ```
-call A (look) -> check A -> templates + question menus -> call B (write)
-  -> check B -> pick detail sentence + question -> memory
+call A (look) -> check A -> templates -> call B (write; sees the photos)
+  -> program checks -> call C (check against the photos)
+  -> pick detail sentence, up to 3 questions -> memory
 ```
 
 Every rule (prompts, schemas, checks, word lists, selection) comes from the
-spec `feature-photo-trigger/v1/后端-AI调用-V1.md` and the question bank
-`v1/题库-V1.md`. All Chinese text lives in `prompts/*.txt`.
+spec `feature-photo-trigger/v1/后端-AI调用-V1.md`, as changed by the copy
+refine handoff `v1/H-交接-VSCode-文案refine.md` (2026-11-04; it wins where
+they differ). All Chinese text lives in `prompts/*.txt`.
 
 ## Setup
 
@@ -82,7 +84,7 @@ Submit (multipart, `Authorization: Bearer <token>`):
 curl -s -H "Authorization: Bearer $TOKEN" \
   -F 'meta={"group_key":"2026-10-18_8F3A","date":"2026-10-18","weekday":7,
             "start_time":"14:03","end_time":"17:40","place":"达拉斯植物园",
-            "raw_count":23,"covers_all":true,"recent_question_ids":["B4"],
+            "raw_count":23,"covers_all":true,"recent_question_types":["sound"],
             "bucket":"scenery","tz":"America/Chicago",
             "photos":[{"id":"P1","taken_at":"2026-10-18T14:03:00-05:00",
                        "labels":["food_drink"],"faces":0,"favorite":false,
@@ -124,10 +126,18 @@ ids answer 400 `bad_request`.
 | 200 | `{"status": "ok", "memory": {...}}` (shape: handoff section 5.2) |
 | 200 | `{"status": "rejected", "reason": "sensitive" \| "skip_screenshots" \| "too_few_selected" \| "check_failed", "message": "..."}` |
 | 200 | `{"status": "error", "reason": "timeout" \| "model_error", "message": "..."}` |
-| 400 | `{"status": "error", "reason": "bad_request", "message": "..."}` on submit: meta not JSON / missing field / a wrong type (weekday 1-7, raw_count >= 1, start/end time strings, string lists for labels and recent_question_ids, faces int, favorite/edited bool, represents >= 1, taken_at ISO 8601) / 0 or > 10 photos / filename stems != meta ids / a file > 5 MB or not a JPEG, PNG or HEIC. No job, no model call. |
+| 400 | `{"status": "error", "reason": "bad_request", "message": "..."}` on submit: meta not JSON / missing field / a wrong type (weekday 1-7, raw_count >= 1, start/end time strings, string lists for labels and recent_question_types, faces int, favorite/edited bool, represents >= 1, taken_at ISO 8601) / 0 or > 10 photos / filename stems != meta ids / a file > 5 MB or not a JPEG, PNG or HEIC. No job, no model call. |
 | 404 | `{"status": "expired"}`: unknown job, or older than 1 h. Resubmit. |
 
-Limits: call A 180 s, call B 30 s, each retried once; a retry only gets
+`memory.ending.questions` is 1-3 `{text, type, source}` in the model's
+order (`source` `llm`, or `fallback_B1/B2/B3` when none survived, which
+then gives all three); the phone picks the one to show (copy refine
+handoff 4.3, 5.7). `meta.recent_question_types` (types on the two nights
+before and after) is shown to call B as types to avoid; unknown types are
+ignored. `memory.generation.copyVersion` is `copy_v2`.
+
+Limits: call A 180 s, call B 60 s, call C 40 s, each retried once (calls B
+and C measured on 2026-11-04; see config.py); a retry only gets
 what is left of the job, which is capped at 300 s (`timeout`). (User
 decision 2026-11-01: the spec's 90 s / 240 s, and then 120 s for call A,
 were too tight for 10-photo groups, whose call A with thinking took
@@ -150,10 +160,12 @@ Settled by `tools/probe_model.py` against `qwen3.7-flash` on 2026-10-31
 | Call | Mode | Request |
 |---|---|---|
 | A (look) | `thinking_stream` | `enable_thinking=true`, `thinking_budget=1500`, `stream=true` + `include_usage`, no `response_format`; the program parses the JSON |
-| B (write) | `json_schema` | `enable_thinking=false`, `response_format` JSON Schema strict (AI doc 3.3) |
+| B (write) | `json_schema` | `enable_thinking=false`, `response_format` JSON Schema strict (`SCHEMA_B`); images in the request since 2026-11-04 |
+| C (check) | `json_object` | `enable_thinking=false`, `response_format` json_object; images in the request |
 
 Both fallbacks (`json_object`) also worked and can be switched to with
-`PHOTO_CALL_A_MODE` / `PHOTO_CALL_B_MODE` without a code change.
+`PHOTO_CALL_A_MODE` / `PHOTO_CALL_B_MODE` / `PHOTO_CALL_C_MODE` without a
+code change (`json_schema` for C uses `SCHEMA_C`).
 
 Cost uses the token counts the provider returns: input 0.2, output 0.8 CNY
 per million tokens (thinking tokens are output).
@@ -168,63 +180,58 @@ status it would have had). An unexpected error inside the pipeline still
 writes the log line, with the raw output and cost of the calls made, and
 answers `error` / `model_error`.
 
-## Readings of the spec (decided from the first real runs)
+## Readings of the spec
 
-AI doc 4 is followed as written; where it is silent the code reads it so:
+The copy refine handoff (2026-11-04) is followed as written; where it is
+silent the code reads it so:
 
-- **Nouns** are grounded when they are a substring of any subject, detail or
-  text of the selected photos (jieba splits the same phrase differently in
-  different contexts, so token-set membership rejected the spec's own good
-  examples).
-- **uses**: the particles 的 / 了 / 着 are dropped on both sides, and the
-  `name(type)` / `文字：` labels the B prompt itself prints are removed before
-  matching.
-- **Peak bonus (+2)** scores only the photo ids the model cited; templates
-  T1 / T2 are fallback levels (AI doc 6) and never take it.
-- **Peak first (user decision, 2026-10-31):** after every check, if any
-  surviving model sentence cites the peak photo, the detail is picked among
-  those only (same scoring and tie-breaks); otherwise among all survivors,
-  model sentences and T1 / T2 alike; then F0. Call B is asked for at least
-  two sentences about the peak.
-- **Numbers grounded by subject names (user decision, 2026-10-31):** a
-  number in a model sentence also passes when it appears verbatim in a
-  selected photo's subject name (subject 三个人 grounds 三). Program counts,
-  details and text work as before; nothing else is loosened.
-- **The push body describes the cover (user decision, 2026-10-31):** when
-  no model sentence about the peak survives the checks, one extra call B
-  (`prompts/collect_b_peak_user.txt`, no retry, inside the job deadline)
-  asks for sentences about the peak only. If none of those survives either
-  and the winner is a model sentence about another photo, that photo (first
-  selected, unflagged id it cites) becomes the cover: `story.photos`,
-  `isPeak`, the daypart, the push title and `ctaLabel` follow it, and the
-  offered questions are rebuilt for the new cover (menus, conditions,
-  daypart); the model's ranked ids are checked again against them, and one
-  no longer offered falls through to B1 -> B2 -> B3. A template or F0 winner
-  keeps the cover. `generation.peakRewrite` / `peakSwitched` (and the log)
-  say what happened.
-  The rewrite's sentences are checked against the cover photo's facts
-  only (it saw nothing else): nouns, numbers and lexicon exceptions come
-  from that photo, and a uses fragment must be one of its facts.
-- **A photo id in a model sentence** ("P1, P3, ...") is rejected -- a sanity
-  check, not an AI doc 4 rule.
-- **A4's {画面} menu** (program-side, added after H1 round 4) only takes
-  details with a sight verb (`prompts/sight_verbs.txt`: light, things,
-  change), not people's actions; the prompt alone did not stop fills like
-  "站在蓝色幕布前". A1 keeps every action phrase.
-- **{画面} questions (A1 / A4) need a phrase from the peak** (program-side,
-  after H1 round 4): when the peak photo has no action phrase they are not
-  offered, so the fill cannot be only other photos' everyday scenes while
-  the peak's own subject is on the {物} menus. Menu order stays peak first.
+- **Call A's notes** are one `description` per photo (40-80 characters);
+  a selected photo without one fails check A. `subjects` stay (templates,
+  debug page).
+- **Program checks on a detail sentence**: at most 22 characters after
+  trimming and dropping trailing full stops; the lexicon
+  (`prompts/lexicon_push_body.txt`; a word inside a photo's text, a subject
+  name or the category's allowed words passes, except that subject names
+  never shield the person-word category, marked `@nosubjects`); no photo id;
+  no "lianpai". Nouns and numbers are no longer matched against the notes:
+  call C judges them against the photos.
+- **Call C** sees the selected photos (the cover marked) and only what the
+  program passed. A sentence it calls ungrounded, or a question ungrounded
+  or unsafe, is dropped (logged as `c_ungrounded:` / `c_unsafe:` with C's
+  reason). Whether a sentence reaches the cover is C's `mentions_cover`:
+  the cover id is added to or removed from its `photo_ids` accordingly.
+  C failing twice leaves templates, F0 and the fallback questions only, and
+  skips the cover rewrite. Templates are never sent to C.
+- **Pick**: AI rank 1 +2, rank 2 +1; +1 for two or more photos; -2 when the
+  only subjects are everyday things (`prompts/common_objects.txt`) and no
+  light or colour word (`prompts/feature_words.txt`) appears. Ties: model
+  before template, then shorter.
+- **Peak first and the cover rewrite (user decision, 2026-10-31)** are
+  unchanged in shape: when no checked model sentence reaches the cover, one
+  extra call B for the cover only (no retry), checked by the program and by
+  call C on the cover alone. Cover sentences of the first round that were
+  cut only for length are shown back to it to shorten (the model tends to
+  overshoot 22 characters). Still none: a model sentence about another
+  usable photo makes that photo the cover; a template or F0 keeps it.
+- **T1 / F0** name the cover's weekday and daypart; **T2** is "from X, to Y"
+  with the first and last selected photos' first subjects.
+- **Questions**: at most 22 characters, none of the forbidden words, no
+  he / she (the word for "other" is allowed), a type from
+  `prompts/question_types.txt`, the `people` type only when a selected photo
+  has people, no repeated text; then call C. Up to 3 survivors in the
+  model's order; none -> B1, B2, B3 (`prompts/question_bank.txt`, types in
+  `fallback_types`). The bank's other questions and the old A-skeleton menu
+  lists (`action_verbs`, `sight_verbs`) are no longer used.
 - **skip=true** from call A is a verdict (`skip_screenshots`, or `sensitive`
   when any photo has a sensitive flag), even with nothing selected.
-- **T1's n** sums `represents` over every sent photo showing X, so "you took
-  n" is true of the whole group.
+- **T1's n** sums `represents` over every sent photo showing X, so the count
+  is true of the whole group.
 
 ## Log
 
 One JSON line per job in `logs/photo-collections/compose.jsonl` (repo root,
-git-ignored): raw A/B output, every rejected candidate and question with its
-reason, the final picks, `bodySource` / `questionSource`, per-call latency,
+git-ignored): raw A/B/C output, every rejected candidate and question with its
+reason, call C's verdicts, the final picks, `bodySource` / `questionSource`, per-call latency,
 tokens and cost, plus `bucket` and `tz` from meta. No image bytes, no key.
 
 Lines older than 30 days are purged at startup and then every 24 h

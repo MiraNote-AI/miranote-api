@@ -1,17 +1,21 @@
 """Shared fixtures. No test here reaches the network or a real model.
 
 Every model call in the service goes through llm.complete, so one fake
-replaces it: tests script the replies of call "a" (look) and call "b"
-(write) in order, and an unscripted call fails loudly.
+replaces it: tests script the replies of call "a" (look), "b" (write) and
+"c" (check against the photos) in order, and an unscripted call fails
+loudly -- except call "c", which by default approves every sentence and
+question it is shown (see FakeModel.auto_c).
 """
 
 from __future__ import annotations
 
 import importlib.util
+import json
+import re
 import sys
 import threading
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Callable, Dict, List, Optional
 
 import pytest
 
@@ -28,8 +32,13 @@ class FakeModel:
     def __init__(self):
         self.calls: List[dict] = []
         self.unexpected: List[str] = []
-        self._script: Dict[str, list] = {"a": [], "b": []}
+        self._script: Dict[str, list] = {"a": [], "b": [], "c": []}
         self._lock = threading.Lock()
+        # Unscripted call C: every sentence grounded, every question grounded
+        # and safe; a sentence mentions the cover when c_cover(text) is true.
+        self.c_cover: Callable[[str], bool] = lambda text: True
+        self.c_ungrounded: set = set()
+        self.c_unsafe: set = set()
 
     def reply(self, call: str, text: str, prompt_tokens: int = 1000,
               completion_tokens: int = 500, gate: Optional[threading.Event] = None):
@@ -50,6 +59,8 @@ class FakeModel:
     def __call__(self, messages, *, call: str, timeout: float):
         self.calls.append({"call": call, "messages": messages, "timeout": timeout})
         with self._lock:
+            if call == "c" and not self._script["c"]:
+                return self.auto_c(messages)
             if not self._script.get(call):
                 self.unexpected.append(call)
                 raise AssertionError("FakeModel: no scripted reply for call " + call)
@@ -67,6 +78,22 @@ class FakeModel:
             latency_ms=5,
             cost_cny=llm.config.cost_cny(pt, ct),
         )
+
+    def auto_c(self, messages) -> llm.LlmReply:
+        """Call C's verdicts for the S / Q lines in its prompt."""
+        task = messages[1]["content"][-1]["text"]
+        sentences = re.findall(r"^(S\d+)\uff5c(.*)$", task, re.M)
+        qs = re.findall(r"^(Q\d+)\uff5c(.*)$", task, re.M)
+        out = {
+            "sentences": [{"id": i, "grounded": t not in self.c_ungrounded,
+                           "mentions_cover": bool(self.c_cover(t)), "reason": ""}
+                          for i, t in sentences],
+            "questions": [{"id": i, "grounded": t not in self.c_ungrounded,
+                           "safe": t not in self.c_unsafe, "reason": ""} for i, t in qs],
+        }
+        return llm.LlmReply(text=json.dumps(out, ensure_ascii=False), prompt_tokens=1000,
+                            completion_tokens=500, latency_ms=5,
+                            cost_cny=llm.config.cost_cny(1000, 500))
 
     def count(self, call: str) -> int:
         return sum(1 for c in self.calls if c["call"] == call)

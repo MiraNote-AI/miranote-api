@@ -21,7 +21,8 @@ every 5 s; read the cost from the service log; stop when the cumulative
 cost passes --budget. The prototype's lecture-slides group (removed by V1
 grouping as utility photos) is also sent once, as an expected rejection.
 Then H2 re-runs the program checks on the outputs and H3 computes the
-fallback and A-question shares.
+fallback and model-question shares ("a_class" now counts questions
+written by the model; the A/B bank menus are gone since the copy refine).
 """
 
 from __future__ import annotations
@@ -263,7 +264,7 @@ def build(data: Data, name: str, files: List[str], dup_of: Dict[str, str],
         "place": data.place(files),
         "raw_count": len(files),
         "covers_all": covers_all,
-        "recent_question_ids": list(recent[-5:]),
+        "recent_question_types": list(recent[-2:]),
         "bucket": guess_bucket(meta_photos),
         "photos": meta_photos,
     }
@@ -321,30 +322,17 @@ def recheck(meta: dict, entry: dict, memory: dict) -> List[str]:
     a = check_a.validate(check_a.parse_json(raw_a[-1]["raw"]), ids)
     detail = memory["ending"]["detail"] or memory["push"]["body"]
     src = memory["generation"]["bodySource"]
-    cand = body.Candidate(text=detail, source=src, photo_ids=[], uses=[detail])
+    cand = body.Candidate(text=detail, source=src, photo_ids=[])
     if src != "fallback_F0":
-        reason = body._reject_reason(cand, detail, a, body.program_counts(a))
+        reason = body.reject_reason(cand, a)
         if reason:
             problems.append("detail: " + reason)
-    q = memory["ending"]["question"]
-    if body.char_len(q) > questions.MAX_CHARS:
-        problems.append("question too long")
-    word = questions._forbidden(q)
-    if word:
-        problems.append("question forbidden word")
-    if memory["generation"]["questionSource"] == "llm":
-        # Questions were offered for the cover before any switch.
-        peak_time = compose.parse_time(
-            next(p["taken_at"] for p in meta["photos"] if p["id"] == a.peak))
-        daypart = compose.daypart_of(peak_time.hour) if peak_time else memory["daypart"]
-        offered = {c.id: c for c in questions.candidates(a, meta, daypart)}
-        qid = memory["ending"]["questionId"]
-        if qid not in offered:
-            problems.append("question id not offered")
-        elif offered[qid].kind == "A":
-            fill = (entry.get("question") or {}).get("fill", "")
-            if fill not in offered[qid].menu:
-                problems.append("question fill not in menu")
+    for q in memory["ending"]["questions"]:
+        if q["source"] == "llm":
+            reason = questions.reject_reason(
+                questions.Question(text=q["text"], type=q["type"], source="llm"), a)
+            if reason:
+                problems.append("question: " + reason)
     return problems
 
 
@@ -428,7 +416,7 @@ def main(argv=None) -> int:
         }
         memory = result.get("memory")
         if memory:
-            recent.append(memory["ending"]["questionId"])
+            recent.append(memory["ending"]["questions"][0]["type"])
             row.update(
                 selected=len(memory["story"]["photos"]),
                 peak="{} ({})".format(memory["push"]["coverPhotoId"],
@@ -437,8 +425,9 @@ def main(argv=None) -> int:
                 detail=memory["ending"]["detail"],
                 push_body=memory["push"]["body"],
                 body_source=memory["generation"]["bodySource"],
-                question=memory["ending"]["question"],
-                question_id=memory["ending"]["questionId"],
+                question=memory["ending"]["questions"][0]["text"],
+                question_type=memory["ending"]["questions"][0]["type"],
+                questions=memory["ending"]["questions"],
                 question_source=memory["generation"]["questionSource"],
                 service_latency_ms=memory["generation"]["latencyMs"],
                 peak_rewrite=memory["generation"].get("peakRewrite"),
@@ -458,7 +447,7 @@ def main(argv=None) -> int:
     n = len(pushable)
     f0 = sum(1 for r in ok if r["body_source"] == "fallback_F0")
     non_llm = sum(1 for r in ok if r["body_source"] != "llm")
-    a_class = sum(1 for r in ok if str(r["question_id"]).startswith("A"))
+    a_class = sum(1 for r in ok if r["question_source"] == "llm")
     h2 = [(r["group"], p) for r in ok for p in r["h2_problems"]]
     summary = {
         "label": args.label, "groups_sent": len(rows), "pushable_groups": n,
@@ -476,7 +465,7 @@ def main(argv=None) -> int:
 
     lines = [
         "# H1 summary ({})".format(args.label), "",
-        "| group | sent | selected | peak | detail (push body) | bodySource | question | id | questionSource | status | latency s | cost CNY |",
+        "| group | sent | selected | peak | detail (push body) | bodySource | question | type | questionSource | status | latency s | cost CNY |",
         "|---|---|---|---|---|---|---|---|---|---|---|---|",
     ]
     for r in rows:
@@ -484,7 +473,7 @@ def main(argv=None) -> int:
             r["group"] + (" (expect reject)" if r["expect_reject"] else ""),
             r["sent"], r.get("selected", ""), r.get("peak", ""),
             r.get("push_body", ""), r.get("body_source", ""), r.get("question", ""),
-            r.get("question_id", ""), r.get("question_source", ""),
+            r.get("question_type", ""), r.get("question_source", ""),
             r["status"] + (" " + r["reason"] if r["reason"] else ""),
             round(r["latency_ms"] / 1000, 1), r["cost_cny"],
         ]) + " |")
@@ -496,7 +485,7 @@ def main(argv=None) -> int:
         "- detail not written by the model (template or F0) among ok: {} / {} = {}".format(
             non_llm, len(ok), summary["non_llm_share_of_ok"]),
         "- pushable groups rejected by the rules: {}".format(summary["rejected"] or "none"),
-        "- A-class questions: {} / {} = {}".format(a_class, len(ok), summary["a_share"]),
+        "- model-written first question: {} / {} = {}".format(a_class, len(ok), summary["a_share"]),
         "- H2 program re-check problems: {}".format(h2 or "none"),
         "- cover rewrite call made: {} / {}; cover switched to the body's photo: {} / {}".format(
             summary["peak_rewrite_calls"], len(ok), summary["peak_switched"], len(ok)),

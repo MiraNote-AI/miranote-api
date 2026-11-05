@@ -1,263 +1,121 @@
-"""Question bank, conditions, menus and the pick (题库-V1.md, AI doc 2.2 + 5)."""
+"""Ending questions: types, hard checks and fallbacks (copy refine handoff
+2.3, 4.1, 4.2)."""
 
 from __future__ import annotations
 
 from typing import List
 
+import pytest
+
 import questions
+import texts
 from check_a import AResult, PhotoFacts, Subject
 
 
-def _p(pid, subjects=(), details=(), people="0", face=False, scene="park_nature"):
-    return PhotoFacts(
-        id=pid,
-        subjects=[Subject(n, t) for n, t in subjects],
-        details=list(details),
-        people_count=people,
-        face_prominent=face,
-        scene=scene,
-    )
+def _p(pid, people="0"):
+    return PhotoFacts(id=pid, subjects=[Subject("拉面", "food")], description="一碗拉面",
+                      people_count=people)
 
 
-def _a(photos: List[PhotoFacts], peak=None) -> AResult:
+def _a(photos: List[PhotoFacts]) -> AResult:
     ids = [p.id for p in photos]
-    return AResult(photos={p.id: p for p in photos}, selected=ids, peak=peak or ids[-1],
+    return AResult(photos={p.id: p for p in photos}, selected=ids, peak=ids[-1],
                    verdict="ok", order=ids)
 
 
-META = {"start_time": "14:03", "end_time": "17:40", "recent_question_ids": []}
-
-DINNER = [
-    _p("P1", [("拿铁", "drink"), ("桌子", "object")], ["拉花是一片叶子"], scene="restaurant_cafe"),
-    _p("P2", [("拉面", "food")], ["面上冒着热气"], scene="restaurant_cafe"),
-    _p("P3", [("饺子", "food"), ("橘猫", "animal")], ["猫趴在窗台上"], scene="restaurant_cafe"),
-    _p("P4", [("晚霞", "scenery"), ("天空", "scenery")], ["橙红色的云"], scene="street_city"),
-]
+NOBODY = _a([_p("P1"), _p("P2"), _p("P3")])
+SOMEONE = _a([_p("P1"), _p("P2", people="2-4"), _p("P3")])
 
 
-def _cands(a=None, meta=None, daypart="afternoon"):
-    return questions.candidates(a or _a(DINNER, peak="P3"), meta or META, daypart)
+def _q(text, type_="order"):
+    return questions.Question(text=text, type=type_, source="llm")
 
 
-def _by_id(cands):
-    return {c.id: c for c in cands}
+def _b(*ranked):
+    return {"question": {"ranked": list(ranked)}}
 
 
-def test_bank_has_6_a_and_19_b():
-    bank = questions.bank()
-    assert sum(q["kind"] == "A" for q in bank) == 6
-    assert sum(q["kind"] == "B" for q in bank) == 19
-    assert len({q["id"] for q in bank}) == 25
+def test_type_table_matches_handoff_4_2():
+    assert questions.type_ids() == ["order", "sound", "route", "found", "zoom", "next_time",
+                                    "people", "body", "imagine", "one_word", "other"]
+    names = {t["id"]: t["name"] for t in questions.type_table()}
+    assert names["order"] == "先后顺序" and names["other"] == "其他"
 
 
-def test_recent_ids_not_offered():
-    meta = dict(META, recent_question_ids=["B4", "A2"])
-    ids = _by_id(_cands(meta=meta))
-    assert "B4" not in ids and "A2" not in ids
-    assert "B5" in ids
+def test_prompt_types_lists_every_type():
+    lines = questions.prompt_types().splitlines()
+    assert len(lines) == 11
+    assert lines[0] == "  order｜先后顺序｜那桌菜里，哪一样最先吃完？"
 
 
-def test_empty_menu_hides_a_question():
-    a = _a([_p("P1", [("长椅", "object")], ["蓝色的幕布"]),
-            _p("P2", [("长椅", "object")], []),
-            _p("P3", [("舞台", "object")], [])])
-    ids = _by_id(_cands(a=a))
-    assert "A1" not in ids  # no detail with an action verb
-    assert "A5" not in ids  # no food / drink
-    assert "A2" in ids
+def test_prompt_recent_names_known_types_once():
+    assert questions.prompt_recent(["sound", "sound", "zzz", "order"]) == "声音、先后顺序"
+    assert questions.prompt_recent([]) == "无"
 
 
-def test_a5_menu_only_food_drink():
-    assert _by_id(_cands())["A5"].menu == ["饺子", "拿铁", "拉面"]  # peak P3 first
+def test_from_b_keeps_model_order_and_skips_junk():
+    qs = questions.from_b(_b({"text": " 那桌菜里，哪一样最先吃完？ ", "type": "order", "why": "x"},
+                             "not an object",
+                             {"text": "那晚台上说的话，你还记得哪一句？", "type": "sound"}))
+    assert [(q.text, q.type, q.rank) for q in qs] == [
+        ("那桌菜里，哪一样最先吃完？", "order", 0), ("那晚台上说的话，你还记得哪一句？", "sound", 2)]
+    assert questions.from_b(None) == [] and questions.from_b({"question": {}}) == []
 
 
-def test_a2_menu_drops_common_objects():
-    menu = _by_id(_cands())["A2"].menu
-    assert "桌子" not in menu and "天空" not in menu
-    assert menu == ["橘猫", "晚霞"]
-    assert "桌子" in _by_id(_cands())["A3"].menu
-
-
-def test_a6_menu_drops_person():
-    a = _a([_p("P1", [("女孩", "person"), ("气球", "object")], ["气球飘在空中"]),
-            _p("P2", [("舞台", "object")]), _p("P3", [("舞台", "object")])], peak="P1")
-    assert _by_id(_cands(a=a))["A6"].menu == ["气球", "舞台"]
-
-
-def test_scene_condition_needs_half():
-    # 3 of 4 selected in restaurant_cafe: B19 offered.
-    assert "B19" in _by_id(_cands())
-    half = [DINNER[0], DINNER[1], _p("P3", [("湖面", "scenery")], scene="waterside"),
-            _p("P4", [("树林", "scenery")], scene="mountain")]
-    assert "B19" in _by_id(_cands(a=_a(half)))  # exactly half
-    under = half[:1] + [_p("P2", [("湖面", "scenery")], scene="waterside")] + half[2:]
-    assert "B19" not in _by_id(_cands(a=_a(under)))
-
-
-def test_b16_needs_group_face():
-    assert "B16" not in _by_id(_cands())
-    no_face = DINNER[:3] + [_p("P4", [("合影", "object")], people="2-4", face=False)]
-    assert "B16" not in _by_id(_cands(a=_a(no_face)))
-    group = DINNER[:3] + [_p("P4", [("合影", "object")], people="5+", face=True)]
-    assert "B16" in _by_id(_cands(a=_a(group)))
-
-
-def test_people_conditions():
-    assert "B17" not in _by_id(_cands())
-    assert "A4" not in _by_id(_cands())
-    one = DINNER[:3] + [_p("P4", [("女孩", "person")], ["女孩站在桥上", "灯笼挂在桥边"], people="1")]
-    ids = _by_id(_cands(a=_a(one)))
-    assert "B17" in ids and "A4" in ids
-
-
-def test_b12_not_at_night():
-    assert "B12" in _by_id(_cands(daypart="afternoon"))
-    assert "B12" not in _by_id(_cands(daypart="night"))
-    short = dict(META, start_time="14:03", end_time="14:50")
-    assert "B12" not in _by_id(_cands(meta=short))
-    assert "B12" not in _by_id(_cands(a=_a(DINNER[:3])))
-
-
-def test_b15_needs_two_food_photos():
-    assert "B15" in _by_id(_cands())
-    assert "B15" not in _by_id(_cands(a=_a([DINNER[0], DINNER[1], DINNER[3]])))
-
-
-def test_hua_mian_menu_needs_action_verb():
-    menu = _by_id(_cands())["A1"].menu
-    assert menu == ["猫趴在窗台上"]  # 趴 is an action verb; the others have none
-
-
-def test_daypart_filled_in_offered_text():
-    assert _by_id(_cands(daypart="evening"))["B4"].text == "如果那个傍晚能按暂停，你会停在哪一秒？"
-
-
-def test_prompt_block_lines():
-    block = questions.prompt_block(_cands())
-    lines = block.splitlines()
-    assert "A2｜{物}哪一点，让你停下来拍它？｜菜单：橘猫, 晚霞" in lines
-    assert "B5｜在这张照片背面，你会写一句什么？" in lines
-
-
-# ---------- pick (AI doc 5) ----------
-
-def _pick(ranked, cands=None, recent=(), daypart_name="下午"):
-    return questions.pick(ranked, cands if cands is not None else _cands(), list(recent), daypart_name)
-
-
-def _r(qid, fill=""):
-    return {"id": qid, "fill": fill, "why": "贴切"}
-
-
-def test_valid_a_question_is_used():
-    q = _pick([_r("A5", "拉面")])
-    assert (q.text, q.id, q.source) == ("拉面，下次还会点吗？", "A5", "llm")
-
-
-def test_unknown_id_rejected():
-    q = _pick([_r("Z9"), _r("B5")])
-    assert dict(q.rejected)["Z9"] == "not_offered"
-    assert q.id == "B5"
-
-
-def test_recent_not_offered_id_rejected():
-    meta = dict(META, recent_question_ids=["B4"])
-    q = _pick([_r("B4"), _r("B5")], cands=_cands(meta=meta))
-    assert dict(q.rejected)["B4"] == "not_offered"
-
-
-def test_fill_not_in_menu_rejected():
-    q = _pick([_r("A5", "牛排"), _r("B5")])
-    assert dict(q.rejected)["A5"] == "fill_not_in_menu"
-
-
-def test_b_with_fill_rejected():
-    q = _pick([_r("B5", "拉面"), _r("B6")])
-    assert dict(q.rejected)["B5"] == "b_with_fill"
-    assert q.id == "B6"
+def test_good_question_passes():
+    assert questions.reject_reason(_q("那桌菜里，哪一样最先吃完？"), NOBODY) is None
 
 
 def test_over_22_chars_rejected():
-    cands = _cands()
-    a1 = [c for c in cands if c.id == "A1"][0]
-    a1.menu.append("一只橘猫趴在洒满阳光的窗台上睡觉")
-    q = _pick([_r("A1", "一只橘猫趴在洒满阳光的窗台上睡觉"), _r("B5")], cands=cands)
-    assert dict(q.rejected)["A1"] == "too_long"
+    assert questions.reject_reason(_q("那" * 22 + "？"), NOBODY) == "too_long"
+    assert questions.reject_reason(_q("那" * 21 + "？"), NOBODY) is None
 
 
-def test_forbidden_word_rejected():
-    cands = _cands()
-    a5 = [c for c in cands if c.id == "A5"][0]
-    a5.menu.append("又一碗面")
-    q = _pick([_r("A5", "又一碗面"), _r("B5")], cands=cands)
-    assert dict(q.rejected)["A5"] == "forbidden:又"
+@pytest.mark.parametrize("word", ["又", "一直没", "好久没", "别忘了", "该", "错过", "再也", "还没"])
+def test_forbidden_words_rejected(word):
+    assert questions.reject_reason(_q("那天" + word + "去了哪儿？"), NOBODY) == "forbidden:" + word
 
 
-def test_recent_id_rejected():
-    # Offered by mistake but used recently: still rejected.
-    q = _pick([_r("B5"), _r("B6")], recent=["B5"])
-    assert dict(q.rejected)["B5"] == "recent"
-    assert q.id == "B6"
+def test_pronouns_rejected_but_other_allowed():
+    assert questions.reject_reason(_q("那天他说了什么？"), NOBODY) == "pronoun:他"
+    assert questions.reject_reason(_q("她点的是哪一碗？"), NOBODY) == "pronoun:她"
+    assert questions.reject_reason(_q("其他几碗，是什么面？", "zoom"), NOBODY) is None
 
 
-def test_second_rank_used_when_first_fails():
-    q = _pick([_r("A5", "牛排"), _r("A2", "橘猫"), _r("B5")])
-    assert q.id == "A2" and q.text == "橘猫哪一点，让你停下来拍它？"
+def test_unknown_type_rejected():
+    assert questions.reject_reason(_q("那碗面，是什么面？", "flavour"), NOBODY) == "unknown_type:flavour"
+    assert questions.reject_reason(_q("那碗面，是什么面？", ""), NOBODY) == "unknown_type:"
 
 
-def test_only_top_3_considered():
-    q = _pick([_r("Z1"), _r("Z2"), _r("Z3"), _r("B5")])
-    assert q.source == "fallback_B1"
+def test_people_type_needs_people_in_the_photos():
+    q = _q("合照，是谁提议要拍的？", "people")
+    assert questions.reject_reason(q, NOBODY) == "people_without_people"
+    assert questions.reject_reason(q, SOMEONE) is None
 
 
-def test_all_fail_falls_back_b1_then_b2_skipping_recent():
-    q = _pick([_r("Z1")])
-    assert (q.id, q.source) == ("B1", "fallback_B1")
-    q = _pick([], recent=["B1"])
-    assert (q.id, q.source) == ("B2", "fallback_B2")
-    q = _pick([], recent=["B1", "B2"])
-    assert (q.id, q.source) == ("B3", "fallback_B3")
+def test_hard_check_keeps_top_three_in_order_and_drops_repeats():
+    qs = [_q("那桌菜里，哪一样最先吃完？"), _q("那天他说了什么？"), _q("那桌菜里，哪一样最先吃完？"),
+          _q("这家店，是怎么找到的？", "found")]
+    passed, rejected = questions.hard_check(qs, NOBODY)
+    assert [q.text for q in passed] == ["那桌菜里，哪一样最先吃完？"]  # the 4th is past the top 3
+    assert rejected == [("那天他说了什么？", "pronoun:他"), ("那桌菜里，哪一样最先吃完？", "duplicate")]
 
 
-def test_b1_text_fills_daypart():
-    q = _pick([], daypart_name="下午")
-    assert q.text == "那个下午的三个关键词：＿＿、＿＿、＿＿"
+def test_fallbacks_are_b1_b2_b3_with_types_and_daypart():
+    fb = questions.fallbacks("下午")
+    assert [(q.text, q.type, q.source) for q in fb] == [
+        ("那个下午的三个关键词：＿＿、＿＿、＿＿", "one_word", "fallback_B1"),
+        ("满分 10 分，那个下午几分？", "one_word", "fallback_B2"),
+        ("如果给那个下午配一首歌，会是哪首？", "imagine", "fallback_B3"),
+    ]
+    assert texts.json("question_bank")["fallback_types"] == {
+        "B1": "one_word", "B2": "one_word", "B3": "imagine"}
 
 
-def test_a4_menu_only_noticeable_sights():
-    # H1 round 4: A4 filled with "站在蓝色幕布前" -- what people do reads
-    # wrong in "{画面}，是谁先注意到的？". A4 keeps only sights (light, things).
-    a = _a([
-        _p("P1", [("三个人", "person")], ["站在蓝色幕布前", "蓝色灯光照亮幕布"], people="2-4"),
-        _p("P2", [("招牌", "object")], ["霓虹灯招牌亮着", "有人走上台阶"], people="2-4"),
-        _p("P3", [("舞台", "object")], ["一人站在舞台中央"], people="1"),
-    ], peak="P1")
-    ids = _by_id(_cands(a=a))
-    assert ids["A4"].menu == ["蓝色灯光照亮幕布", "霓虹灯招牌亮着"]
-    # A1 keeps every action phrase.
-    assert "站在蓝色幕布前" in ids["A1"].menu and "一人站在舞台中央" in ids["A1"].menu
-
-
-def test_a4_hidden_when_no_sight():
-    a = _a([
-        _p("P1", [("三个人", "person")], ["站在蓝色幕布前"], people="2-4"),
-        _p("P2", [("舞台", "object")], ["一人站在舞台中央"], people="1"),
-        _p("P3", [("舞台", "object")], []),
-    ])
-    assert "A4" not in _by_id(_cands(a=a))
-
-
-def test_moment_questions_need_a_peak_phrase():
-    # H1 round 4 (9.20): the peak (a floor painting) had no action phrase, so
-    # A1 could only be filled with another photo's everyday "交通灯亮着红灯".
-    a = _a([
-        _p("P1", [("街道", "scenery")], ["交通灯亮着红灯"]),
-        _p("P2", [("建筑", "object")], ["灰白色的外墙"]),
-        _p("P3", [("地画", "object")], ["地面有峡谷状3D画"]),
-    ], peak="P3")
-    ids = _by_id(_cands(a=a))
-    assert "A1" not in ids
-    assert ids["A2"].menu[0] == "地画"
-    # With a peak phrase, other photos' phrases stay in the menu after it.
-    a.photos["P3"].details.append("灯光照在地画上")
-    assert _by_id(_cands(a=a))["A1"].menu == ["灯光照在地画上", "交通灯亮着红灯"]
+def test_final_is_survivors_or_fallbacks():
+    one = [_q("那桌菜里，哪一样最先吃完？")]
+    assert questions.final(one, "下午") == one  # not topped up with fallbacks
+    assert [q.source for q in questions.final([], "下午")] == [
+        "fallback_B1", "fallback_B2", "fallback_B3"]
+    assert questions.final(one, "下午")[0].payload() == {
+        "text": "那桌菜里，哪一样最先吃完？", "type": "order", "source": "llm"}

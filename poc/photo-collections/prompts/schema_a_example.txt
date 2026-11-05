@@ -3,7 +3,7 @@
     {
       "id": "P1",
       "subjects": [{"name": "拿铁", "type": "drink"}, {"name": "木桌", "type": "object"}],
-      "details": ["拉花是一片叶子"],
+      "description": "木桌上一杯拿铁，拉花是一片叶子。窗边的光从左边照进来，杯子旁放着一把小勺，背景是浅色的墙。",
       "text": [],
       "people": {"count": "0", "face_prominent": false},
       "scene": "restaurant_cafe",

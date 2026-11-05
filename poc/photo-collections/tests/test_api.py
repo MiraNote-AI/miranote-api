@@ -166,7 +166,7 @@ def test_bad_meta_json_400(client, fake_model):
 
 
 @pytest.mark.parametrize("field", ["group_key", "date", "weekday", "start_time", "end_time",
-                                   "raw_count", "covers_all", "recent_question_ids", "photos"])
+                                   "raw_count", "covers_all", "recent_question_types", "photos"])
 def test_missing_meta_field_400(client, fake_model, field):
     meta = _meta()
     del meta[field]
@@ -228,9 +228,9 @@ def test_two_jobs_do_not_mix(client, fake_model):
         return json.dumps(raw, ensure_ascii=False)
 
     def b_for(messages):
-        peak = re.search(r"峰值照 (\w+)", messages[1]["content"]).group(1)
-        return _b_json(candidates=[{"text": "台中央，落下一束光", "photo_ids": [peak],
-                                    "uses": ["一束光"]}])
+        texts_ = [p["text"] for p in messages[1]["content"] if p["type"] == "text"]
+        peak = next(re.match(r"^(\w+)｜", t).group(1) for t in texts_ if "｜封面｜" in t)
+        return _b_json(candidates=[{"text": "台中央，落下一束光", "photo_ids": [peak]}])
 
     fake_model.respond("a", a_for, times=2).respond("b", b_for, times=2)
     m1 = _meta(group_key="g1")
@@ -254,7 +254,7 @@ def test_two_jobs_do_not_mix(client, fake_model):
     ("weekday", 0), ("weekday", 8), ("weekday", "7"), ("weekday", True),
     ("raw_count", 0), ("raw_count", "23"),
     ("start_time", 1403), ("end_time", None),
-    ("recent_question_ids", ["B4", 2]), ("recent_question_ids", "B4"),
+    ("recent_question_types", ["sound", 2]), ("recent_question_types", "sound"),
 ])
 def test_bad_meta_types_400(client, fake_model, field, value):
     _assert_400(_submit(client, _meta(**{field: value})), fake_model)

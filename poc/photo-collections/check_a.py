@@ -54,7 +54,7 @@ class Subject:
 class PhotoFacts:
     id: str
     subjects: List[Subject] = field(default_factory=list)
-    details: List[str] = field(default_factory=list)
+    description: str = ""
     text: List[str] = field(default_factory=list)
     people_count: str = "0"
     face_prominent: bool = False
@@ -175,7 +175,7 @@ def _photo(item) -> PhotoFacts:
     return PhotoFacts(
         id=item["id"].strip(),
         subjects=_clean_subjects(item.get("subjects")),
-        details=_strings(item.get("details")),
+        description=item["description"].strip() if isinstance(item.get("description"), str) else "",
         text=_strings(item.get("text")),
         people_count=count,
         face_prominent=face,
@@ -234,6 +234,10 @@ def validate(raw, input_ids: List[str]) -> AResult:
     dropped = [pid for pid in selected if not photos[pid].keep]
     if dropped:
         raise CheckFailed("selected photos marked keep=false: {}".format(dropped))
+    # Call B writes from these descriptions (copy refine handoff 2.1).
+    blank = [pid for pid in selected if not photos[pid].description]
+    if blank:
+        raise CheckFailed("selected photos without a description: {}".format(blank))
 
     # Rule 3: peak must be selected.
     peak = raw.get("peak_id")

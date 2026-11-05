@@ -13,11 +13,11 @@ IDS = ["P1", "P2", "P3", "P4", "P5", "P6"]
 
 
 def _photo(pid, subjects=None, flags=None, keep=True, drop_reason="", people="0",
-           face=False, scene="park_nature", details=None, text=None):
+           face=False, scene="park_nature", description=None, text=None):
     return {
         "id": pid,
         "subjects": subjects if subjects is not None else [{"name": "长椅", "type": "object"}],
-        "details": details if details is not None else ["猫睡在长椅上"],
+        "description": description if description is not None else "一只橘猫睡在长椅上",
         "text": text if text is not None else [],
         "people": {"count": people, "face_prominent": face},
         "scene": scene,
