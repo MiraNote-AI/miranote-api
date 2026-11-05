@@ -31,6 +31,10 @@ import texts
 import verify
 
 ATTEMPTS = 2  # each call is tried once more after a failure
+# Kept back from every call so the program can still put the answer
+# together before the job cap (full check 2026-11-05: a late cover
+# rewrite used to turn a ready answer into a timeout).
+CALL_MARGIN_SECONDS = 2.0
 
 LOG_LOCK = threading.Lock()  # shared with logclean's purge
 
@@ -320,7 +324,7 @@ class _Job:
         (None, last failure: timeout | model_error | check_failed)."""
         last = "model_error"
         for attempt in range(1, attempts + 1):
-            left = self.remaining()
+            left = self.remaining() - CALL_MARGIN_SECONDS
             if left <= 0:
                 return None, "deadline"
             entry = {"call": which, "attempt": attempt, "latency_ms": 0, "prompt_tokens": 0,
@@ -347,7 +351,7 @@ class _Job:
             except check_a.CheckFailed as error:
                 entry["error"] = "check_failed: " + error.reason[:200]
                 last = "check_failed"
-        if self.remaining() <= 0:
+        if self.remaining() <= CALL_MARGIN_SECONDS:
             return None, "deadline"
         return None, last
 
@@ -508,11 +512,12 @@ def _compose(job: "_Job", meta: dict, images: Dict[str, bytes]) -> dict:
     for pid in a.selected:
         images[pid] = shrink(images[pid], config.SMALL_IMAGE_PX)
 
-    # ---- call B (failing twice is not a rejection: templates + fallback) ----
+    # ---- call B (failing twice, or running into the job cap, is not a
+    # rejection: templates + fallback questions) ----
     b, fail = job.call("b", _messages_b(meta, a, daypart, counts, by_id, images),
                        config.CALL_B_TIMEOUT, _check_b)
-    if b is None and fail == "deadline":
-        return job.finish(_result("error", "timeout"))
+    if b is None:
+        job.log["b_failure"] = fail
     first_ai = body.from_b(b)
     ai, body_rejected = _hard_bodies(first_ai, a)
     too_long = [body.clean(c.text) for c in first_ai
@@ -524,7 +529,9 @@ def _compose(job: "_Job", meta: dict, images: Dict[str, bytes]) -> dict:
     # F0 and fallback questions only (handoff 2.4) ----
     c_status, ai, c_rej_s, qs, c_rej_q, c_log = _verify(job, a.selected, a.peak, images, ai, qs)
     if c_status == "deadline":
-        return job.finish(_result("error", "timeout"))
+        # Out of time before anything was checked: same as call C failing
+        # twice (templates, F0 and fallback questions only).
+        c_status = "failed"
     job.log["c"] = dict(c_log, status=c_status)
     body_rejected += c_rej_s
     q_rejected += c_rej_q
@@ -541,7 +548,8 @@ def _compose(job: "_Job", meta: dict, images: Dict[str, bytes]) -> dict:
     # C like the first round. Skipped when call C failed.
     long_ones = [c for c in first_ai if body.reject_reason(c, a) == "too_long"]
     shortened = False
-    if long_ones and not body.cites_peak(detail, a) and c_status != "failed" and job.remaining() > 0:
+    if (long_ones and not body.cites_peak(detail, a) and c_status != "failed"
+            and job.remaining() > CALL_MARGIN_SECONDS):
         shortened = True
         sb, _ = job.call("b", _messages_shorten(long_ones), config.CALL_B_TIMEOUT,
                          _check_rewrite, attempts=1)
@@ -552,7 +560,7 @@ def _compose(job: "_Job", meta: dict, images: Dict[str, bytes]) -> dict:
         s_ai, s_rejected = _hard_bodies(s_new, a)
         sc_status, s_ai, sc_rej, _, _, sc_log = _verify(job, a.selected, a.peak, images, s_ai, [])
         if sc_status == "deadline":
-            return job.finish(_result("error", "timeout"))
+            s_ai = []  # optional round out of time: keep the answer we have
         job.log["shorten"] = {"asked": [body.clean(c.text) for c in long_ones],
                               "rejected": s_rejected + sc_rej, "c": dict(sc_log, status=sc_status)}
         ai = ai + s_ai
@@ -570,14 +578,15 @@ def _compose(job: "_Job", meta: dict, images: Dict[str, bytes]) -> dict:
     peak_rewrite = False
     peak_switched = False
     old_peak = a.peak
-    if not body.cites_peak(detail, a) and c_status != "failed" and job.remaining() > 0:
+    if (not body.cites_peak(detail, a) and b is not None and c_status != "failed"
+            and job.remaining() > CALL_MARGIN_SECONDS):
         peak_rewrite = True
         rb, _ = job.call("b", _messages_b_peak(meta, a, daypart, counts, by_id, images, too_long),
                          config.CALL_B_TIMEOUT, _check_rewrite, attempts=1)
         r_ai, r_rejected = _hard_bodies(body.from_b(rb), a)
         rc_status, r_ai, rc_rej, _, _, rc_log = _verify(job, [a.peak], a.peak, images, r_ai, [])
         if rc_status == "deadline":
-            return job.finish(_result("error", "timeout"))
+            r_ai = []  # optional round out of time: keep the answer we have
         second = body.pick(r_ai, [], a, raw_count=raw_count, when=when)
         r_all = r_rejected + rc_rej + second.rejected
         job.log["peak_rewrite"] = {"rejected": r_all, "chosen": second.text,

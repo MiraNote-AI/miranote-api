@@ -627,14 +627,19 @@ def test_template_winner_keeps_peak(fake_model, tmp_log):
     assert (m["generation"]["peakRewrite"], m["generation"]["peakSwitched"]) == (True, False)
 
 
-def test_rewrite_counts_cost_and_respects_deadline(fake_model, tmp_log):
+def test_rewrite_counts_cost_and_respects_deadline(fake_model, tmp_log, monkeypatch):
+    # The fake model ignores the timeout it is given, so the sub-second
+    # deadlines here need no margin (the margin is tested at real scale in
+    # test_deadline_budget.py).
+    monkeypatch.setattr(compose, "CALL_MARGIN_SECONDS", 0.0)
     fake_model.c_cover = _cover_is("台中央，落下一束光")
     fake_model.reply("a", _a_json(), 1000, 500).reply("b", _b_json(candidates=NON_PEAK), 1000, 500).reply(
         "b", _b_json(candidates=ON_PEAK, ranked=[]), 1000, 500)
     m = _run(deadline=time.monotonic() + 20)["memory"]
     assert m["generation"]["costCny"] == round(5 * config.cost_cny(1000, 500), 4)
     assert fake_model.calls[3]["timeout"] <= 20
-    # No time left after call B: the job answers a timeout without call C.
+    # Call B comes back after the deadline: the job answers a timeout
+    # without call C (and no cover rewrite).
     fake_model.reply("a", _a_json())
 
     def slow_b(messages):
@@ -698,7 +703,8 @@ def test_unexpected_exception_still_logs_and_answers_model_error(fake_model, tmp
     assert entry["costCny"] == pytest.approx(3 * config.cost_cny(1000, 500))
 
 
-def test_result_after_deadline_is_a_logged_timeout(fake_model, tmp_log):
+def test_result_after_deadline_is_a_logged_timeout(fake_model, tmp_log, monkeypatch):
+    monkeypatch.setattr(compose, "CALL_MARGIN_SECONDS", 0.0)  # see above
     def slow_c(messages):
         time.sleep(0.4)
         return fake_model.auto_c(messages).text
