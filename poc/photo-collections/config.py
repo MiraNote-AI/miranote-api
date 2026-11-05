@@ -45,7 +45,7 @@ TEMPERATURE_C = 0.2
 
 # The copy rules the memory was written under; the phone keys its AI cache
 # on it, so a change of rules never serves old copy (copy refine handoff 5.4).
-COPY_VERSION = "copy_v2"
+COPY_VERSION = "copy_v3"  # copy_v3: question refine 2026-11-05
 
 # ---------- Prices (CNY per million tokens; thinking billed as output) ----------
 PRICE_INPUT_PER_M = 0.2

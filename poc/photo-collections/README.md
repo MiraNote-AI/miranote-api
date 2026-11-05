@@ -134,7 +134,7 @@ order (`source` `llm`, or `fallback_B1/B2/B3` when none survived, which
 then gives all three); the phone picks the one to show (copy refine
 handoff 4.3, 5.7). `meta.recent_question_types` (types on the two nights
 before and after) is shown to call B as types to avoid; unknown types are
-ignored. `memory.generation.copyVersion` is `copy_v2`.
+ignored. `memory.generation.copyVersion` is `copy_v3` (copy_v2 before the 2026-11-05 question refine).
 
 Limits: call A 180 s, call B 60 s, call C 60 s, each retried once (calls B
 and C measured on 2026-11-04; see config.py); a retry only gets

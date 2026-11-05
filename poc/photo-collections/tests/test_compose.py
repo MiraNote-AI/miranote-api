@@ -148,7 +148,7 @@ def test_happy_path_matches_handoff_example_shape(fake_model, tmp_log):
     g = m["generation"]
     assert set(g) == {"bodySource", "questionSource", "copyVersion", "model", "costCny",
                       "latencyMs", "peakSwitched", "peakRewrite"}
-    assert g["copyVersion"] == "copy_v2"
+    assert g["copyVersion"] == "copy_v3"
     assert (g["peakSwitched"], g["peakRewrite"]) == (False, False)
     assert (g["bodySource"], g["questionSource"], g["model"]) == ("llm", "llm", config.LLM_MODEL)
     assert isinstance(g["latencyMs"], int)
@@ -182,7 +182,7 @@ def test_call_b_sees_the_selected_photos_with_descriptions_and_cover(fake_model,
     assert "日期：2026-10-18（周日）；时段：傍晚；地点：达拉斯植物园" in lines[0]
     assert "舞台出现在 2 张里" in lines[0]
     task = lines[-1]
-    assert "  order｜先后顺序｜那桌菜里，哪一样最先吃完？" in task
+    assert "  order｜先后顺序（有意义的先后：先吃完哪样、先到哪儿）｜那桌菜里，哪一样最先吃完？" in task
     assert "  people｜有人在场（照片里有人才能用）｜合照，是谁提议要拍的？" in task
     assert "尽量避开这些类型（前后几晚已经用过）：声音、先后顺序" in task
 

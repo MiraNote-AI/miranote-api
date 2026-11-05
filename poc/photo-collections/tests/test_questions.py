@@ -36,16 +36,19 @@ def _b(*ranked):
 
 
 def test_type_table_matches_handoff_4_2():
-    assert questions.type_ids() == ["order", "sound", "route", "found", "zoom", "next_time",
+    # Question refine 2026-11-05 added taste.
+    assert questions.type_ids() == ["order", "sound", "route", "found", "zoom", "taste", "next_time",
                                     "people", "body", "imagine", "one_word", "other"]
     names = {t["id"]: t["name"] for t in questions.type_table()}
-    assert names["order"] == "先后顺序" and names["other"] == "其他"
+    assert names["order"] == "先后顺序" and names["other"] == "其他" and names["taste"] == "味道"
 
 
 def test_prompt_types_lists_every_type():
     lines = questions.prompt_types().splitlines()
-    assert len(lines) == 11
-    assert lines[0] == "  order｜先后顺序｜那桌菜里，哪一样最先吃完？"
+    assert len(lines) == 12
+    # The narrowed meaning (question refine 2026-11-05) goes to call B.
+    assert lines[0] == "  order｜先后顺序（有意义的先后：先吃完哪样、先到哪儿）｜那桌菜里，哪一样最先吃完？"
+    assert "  taste｜味道｜那锅冬阴功，是什么味道？" in lines
 
 
 def test_prompt_recent_names_known_types_once():
@@ -140,3 +143,9 @@ def test_question_echoing_its_type_is_stripped():
 def test_guitar_is_not_a_pronoun_in_questions():
     q = questions.Question(text="台上那把吉他，弹的是哪首歌？", type="sound", source="llm")
     assert questions.reject_reason(q, SOMEONE) is None
+
+
+def test_taste_is_a_known_type():
+    # Question refine 2026-11-05: the new taste type passes the type check,
+    # and "味道" is not a banned word for questions (only for detail lines).
+    assert questions.reject_reason(_q("那锅冬阴功，是什么味道？", "taste"), NOBODY) is None

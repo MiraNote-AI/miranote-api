@@ -46,7 +46,7 @@ def type_ids() -> List[str]:
 def prompt_types() -> str:
     """The type table as lines for call B's prompt."""
     names = texts.json("names")
-    return "\n".join(names["type_line"].format(**t) for t in type_table())
+    return "\n".join(names["type_line"].format(**dict({"note": ""}, **t)) for t in type_table())
 
 
 def prompt_recent(recent: List[str]) -> str:

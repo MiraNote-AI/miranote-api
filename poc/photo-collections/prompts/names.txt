@@ -92,7 +92,7 @@
   "c_sentence": "{id}｜{text}",
   "too_long_line": "- {text}（{n} 个字）",
   "c_question": "{id}｜{text}",
-  "type_line": "  {id}｜{name}｜{example}",
+  "type_line": "  {id}｜{name}{note}｜{example}",
   "question_pronouns": [
     "他",
     "她"
