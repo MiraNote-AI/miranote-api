@@ -715,3 +715,15 @@ def test_result_after_deadline_is_a_logged_timeout(fake_model, tmp_log, monkeypa
     entry = _log(tmp_log)
     assert (entry["status"], entry["reason"], entry["lateResult"], entry["lateStatus"]) == (
         "error", "timeout", True, "ok")
+
+
+def test_one_unsure_verdict_keeps_the_rest_of_call_c(fake_model, tmp_log):
+    # Full check 2026-11-05: an "unsure" safety answer on one question threw
+    # every checked sentence away. Now only that question is dropped.
+    reply = json.dumps({"sentences": [{"id": "S1", "grounded": True, "mentions_cover": True}],
+                        "questions": [{"id": "Q1", "grounded": True, "safe": "unsure"}]},
+                       ensure_ascii=False)
+    fake_model.reply("a", _a_json()).reply("b", _b_json()).reply("c", reply).reply("c", reply)
+    m = _run()["memory"]
+    assert (m["push"]["body"], m["generation"]["bodySource"]) == ("台中央，落下一束光", "llm")
+    assert m["ending"]["questions"][0]["source"] == "fallback_B1"

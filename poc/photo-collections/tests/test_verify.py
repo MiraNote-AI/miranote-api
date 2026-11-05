@@ -1,5 +1,5 @@
-"""Call C's reply: every sentence and question answered, booleans only
-(copy refine handoff 2.4)."""
+"""Call C's reply (copy refine handoff 2.4): per sentence and question,
+booleans; an unsure answer follows decision 2026-11-04 item 3."""
 
 from __future__ import annotations
 
@@ -25,16 +25,38 @@ def test_parse_reads_every_verdict():
     assert (out.questions["Q1"].safe, out.questions["Q1"].reason) == (False, "假设有人陪")
 
 
-def test_missing_verdict_fails_the_check():
-    with pytest.raises(check_a.CheckFailed, match="S2"):
-        verify.parse(_reply([{"id": "S1", "grounded": True, "mentions_cover": True}], []), 2, 0)
-    with pytest.raises(check_a.CheckFailed, match="Q1"):
+def test_missing_verdict_drops_only_that_item():
+    # Full check 2026-11-05: one missing item used to throw the whole reply
+    # away (templates only). Now only that item is unchecked, so dropped.
+    out = verify.parse(_reply([{"id": "S1", "grounded": True, "mentions_cover": True}], []), 2, 0)
+    assert out.sentences["S1"].grounded is True
+    assert out.sentences["S2"].grounded is False
+
+
+def test_nothing_answered_fails_the_check():
+    with pytest.raises(check_a.CheckFailed):
         verify.parse(_reply([], []), 0, 1)
+    with pytest.raises(check_a.CheckFailed):
+        verify.parse(_reply([{"id": "S9", "grounded": True}], []), 1, 0)
 
 
-def test_non_boolean_fails_the_check():
-    with pytest.raises(check_a.CheckFailed, match="grounded"):
-        verify.parse(_reply([{"id": "S1", "grounded": "yes", "mentions_cover": True}], []), 1, 0)
+def test_unsure_follows_the_user_rule():
+    # Decision 2026-11-04 item 3: unsure about made-up content passes,
+    # unsure about safety fails. A non-boolean answer is "unsure".
+    out = verify.parse(_reply(
+        [{"id": "S1", "grounded": "unsure", "mentions_cover": None}],
+        [{"id": "Q1", "grounded": None, "safe": "unsure"}]), 1, 1)
+    assert out.sentences["S1"].grounded is True
+    assert out.sentences["S1"].mentions_cover is False
+    assert (out.questions["Q1"].grounded, out.questions["Q1"].safe) == (True, False)
+
+
+def test_string_booleans_and_loose_ids_are_read():
+    out = verify.parse(_reply(
+        [{"id": 1, "grounded": "false", "mentions_cover": "true"}],
+        [{"id": "q1", "grounded": "True", "safe": "true"}]), 1, 1)
+    assert (out.sentences["S1"].grounded, out.sentences["S1"].mentions_cover) == (False, True)
+    assert (out.questions["Q1"].grounded, out.questions["Q1"].safe) == (True, True)
 
 
 def test_nothing_to_check_accepts_empty_lists():
