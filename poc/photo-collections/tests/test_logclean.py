@@ -218,3 +218,11 @@ def test_startup_purges_the_log(tmp_log, load_main, monkeypatch):
             time.sleep(0.02)
     text = tmp_log.read_text(encoding="utf-8")
     assert '"old"' not in text and '"new"' in text
+
+
+def test_tests_never_write_the_real_log():
+    # Full check 2026-11-05: test rows were found in the real log.
+    import config
+
+    real = config.REPO_ROOT / "logs" / "photo-collections" / "compose.jsonl"
+    assert config.LOG_PATH != real

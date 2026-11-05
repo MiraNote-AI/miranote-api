@@ -15,10 +15,19 @@ from tests.test_compose import _a_json, _b_json, _meta
 
 @pytest.fixture
 def reload_config(monkeypatch):
-    """Reload config under the env set by the test; restore it afterwards."""
-    yield lambda: importlib.reload(config)
+    """Reload config under the env set by the test; restore it afterwards.
+    A reload resets LOG_PATH to the real log, so it is put back to the
+    run's temporary log each time (conftest._no_real_log)."""
+    log_path = config.LOG_PATH
+
+    def _reload():
+        cfg = importlib.reload(config)
+        cfg.LOG_PATH = log_path
+        return cfg
+
+    yield _reload
     monkeypatch.undo()
-    importlib.reload(config)
+    _reload()
 
 
 def test_workers_default_40_and_llm_pool_80(monkeypatch, reload_config):

@@ -119,6 +119,20 @@ def fake_model(monkeypatch):
     assert fake.unexpected == [], "unscripted model calls: {}".format(fake.unexpected)
 
 
+@pytest.fixture(scope="session", autouse=True)
+def _no_real_log(tmp_path_factory):
+    """The whole run writes its compose log to a temporary file. Jobs that
+    outlive their test (worker threads) used to write rows into the real
+    logs/photo-collections/compose.jsonl once a test's tmp_log was undone
+    (full check 2026-11-05); per-test tmp_log now restores to this path."""
+    import config
+
+    real = config.LOG_PATH
+    config.LOG_PATH = tmp_path_factory.mktemp("logs") / "compose.jsonl"
+    yield
+    config.LOG_PATH = real
+
+
 @pytest.fixture
 def tmp_log(monkeypatch, tmp_path):
     """Send the compose log line to a temporary file."""
