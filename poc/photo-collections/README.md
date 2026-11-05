@@ -12,9 +12,9 @@ call A (look) -> check A -> templates -> call B (write; sees the photos)
 ```
 
 Every rule (prompts, schemas, checks, word lists, selection) comes from the
-spec `feature-photo-trigger/v1/后端-AI调用-V1.md`, as changed by the copy
-refine handoff `v1/H-交接-VSCode-文案refine.md` (2026-11-04; it wins where
-they differ). All Chinese text lives in `prompts/*.txt`.
+feature's V1 backend AI-call spec (in the feature folder outside this repo),
+as changed by the copy refine handoff (2026-11-04; it wins where they
+differ) and the question refine (2026-11-05). All Chinese text lives in `prompts/*.txt`.
 
 ## Setup
 
@@ -83,7 +83,7 @@ Submit (multipart, `Authorization: Bearer <token>`):
 ```bash
 curl -s -H "Authorization: Bearer $TOKEN" \
   -F 'meta={"group_key":"2026-10-18_8F3A","date":"2026-10-18","weekday":7,
-            "start_time":"14:03","end_time":"17:40","place":"达拉斯植物园",
+            "start_time":"14:03","end_time":"17:40","place":"Dallas Arboretum",
             "raw_count":23,"covers_all":true,"recent_question_types":["sound"],
             "bucket":"scenery","tz":"America/Chicago",
             "photos":[{"id":"P1","taken_at":"2026-10-18T14:03:00-05:00",
@@ -95,8 +95,8 @@ curl -s -H "Authorization: Bearer $TOKEN" \
 ```
 
 `meta.bucket` is required and must be one of the seven ids, in tie order:
-`food` (美食饮品), `scenery` (自然风光), `animal` (宠物与动物), `city`
-(城市街头), `indoor` (室内居家), `event` (活动演出), `other` (其他). The
+`food`, `scenery`, `animal`, `city`, `indoor`, `event`, `other` (Chinese
+names in `prompts/names.txt` under `buckets`). The
 phone decides it; `memory.bucket` is the Chinese name of that id. Labels
 no longer pick a bucket (they still feed call A). A missing, non-string or
 unknown `bucket` answers 400. `meta.tz` (an IANA zone name such as
