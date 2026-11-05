@@ -65,9 +65,11 @@ CALL_A_TIMEOUT = 180.0  # user decision 2026-11-01 (spec said 90, then 120)
 # Calls B and C see the photos (copy refine handoff 2.2, 2.4). Measured on
 # the 80 test photos, 2026-11-04, 5 runs x 8 groups: B 5-26 s with two
 # outliers at 81-84 s (16 jobs in flight), C 5-26 s. Limits are about 1.5x
-# the usual top; an outlier is retried inside the 300 s job cap.
+# the usual top; an outlier is retried inside the 300 s job cap. C raised
+# from 40 s on 2026-11-05: on a real phone's 7 groups at once it ran past
+# 40 s twice in a row for one group.
 CALL_B_TIMEOUT = 60.0
-CALL_C_TIMEOUT = 40.0
+CALL_C_TIMEOUT = 60.0
 JOB_CAP_SECONDS = 300.0  # user decision 2026-11-01 (spec said 240)
 # Results are kept an hour: the phone may poll a batch of seven groups late.
 JOB_TTL_SECONDS = float(os.getenv("PHOTO_JOB_TTL_SECONDS") or 3600)

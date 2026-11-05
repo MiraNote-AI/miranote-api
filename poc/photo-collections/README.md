@@ -136,7 +136,7 @@ handoff 4.3, 5.7). `meta.recent_question_types` (types on the two nights
 before and after) is shown to call B as types to avoid; unknown types are
 ignored. `memory.generation.copyVersion` is `copy_v2`.
 
-Limits: call A 180 s, call B 60 s, call C 40 s, each retried once (calls B
+Limits: call A 180 s, call B 60 s, call C 60 s, each retried once (calls B
 and C measured on 2026-11-04; see config.py); a retry only gets
 what is left of the job, which is capped at 300 s (`timeout`). (User
 decision 2026-11-01: the spec's 90 s / 240 s, and then 120 s for call A,

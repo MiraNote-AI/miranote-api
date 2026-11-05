@@ -606,7 +606,7 @@ def test_time_limits():
     # Call A 180 s and the job 300 s are a user decision (2026-11-01); jobs
     # are kept an hour (phase 2). Calls B and C: see config (handoff 2.2, 2.4).
     assert config.CALL_A_TIMEOUT == 180
-    assert (config.CALL_B_TIMEOUT, config.CALL_C_TIMEOUT) == (60, 40)
+    assert (config.CALL_B_TIMEOUT, config.CALL_C_TIMEOUT) == (60, 60)
     assert config.JOB_CAP_SECONDS == 300
     assert config.JOB_TTL_SECONDS == 3600
     assert compose.ATTEMPTS == 2
