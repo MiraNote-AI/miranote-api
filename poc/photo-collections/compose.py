@@ -14,6 +14,7 @@ from __future__ import annotations
 import base64
 import io
 import json
+import re
 import threading
 import time
 import traceback
@@ -389,11 +390,28 @@ def _write_log(entry: dict) -> None:
         print("[collections] could not write the compose log: {}".format(error))
 
 
-def _facts_line(p: check_a.PhotoFacts, names: dict) -> str:
+# Full-width comma, full stop, semicolon: where a description is cut into clauses.
+_CLAUSE_END = re.compile("([\uff0c\u3002\uff1b])")
+
+
+def _description_for_facts(description: str, a: check_a.AResult) -> str:
+    """Call A's description without the clauses that name other photos
+    ("same framing as P1"): facts become the photo's summary in the saved
+    page (full check 2026-11-05)."""
+    parts = _CLAUSE_END.split(description)
+    kept = []
+    for i in range(0, len(parts), 2):
+        clause, end = parts[i], parts[i + 1] if i + 1 < len(parts) else ""
+        if clause.strip() and body.marker_leak(clause, a) is None:
+            kept.append(clause + end)
+    return "".join(kept)
+
+
+def _facts_line(p: check_a.PhotoFacts, a: check_a.AResult, names: dict) -> str:
     none = names["none"]
     return names["facts_line"].format(
         subjects=names["sep"].join(s.name for s in p.subjects) or none,
-        description=p.description or none,
+        description=_description_for_facts(p.description, a) or none,
         people=p.people_count,
     )
 
@@ -668,7 +686,7 @@ def _compose(job: "_Job", meta: dict, images: Dict[str, bytes]) -> dict:
             "questions": [q.payload() for q in final_qs],
             "ctaLabel": names["cta"].format(daypart=daypart_name),
         },
-        "facts": {pid: _facts_line(a.photos[pid], names) for pid in a.selected},
+        "facts": {pid: _facts_line(a.photos[pid], a, names) for pid in a.selected},
         "generation": {
             "bodySource": detail.source,
             "questionSource": final_qs[0].source,

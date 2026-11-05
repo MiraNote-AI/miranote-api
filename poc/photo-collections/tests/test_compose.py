@@ -767,3 +767,14 @@ def test_weekday_follows_the_groups_day_after_midnight(fake_model, tmp_log):
     assert "10.17" in m["push"]["title"]
     sat = texts.json("names")["weekdays"]["6"]
     assert sat in m["push"]["body"], m["push"]["body"]
+
+
+def test_facts_drop_clauses_naming_other_photos(fake_model, tmp_log):
+    # Full check 2026-11-05: 23 of 2018 real descriptions said things like
+    # "与P1取景几乎相同"; facts become the photo's summary in the saved page.
+    a = json.loads(_a_json())
+    a["photos"][1]["description"] = "一只橘猫睡在木长椅上，与P1取景几乎相同，背景是草地。"
+    fake_model.reply("a", json.dumps(a, ensure_ascii=False)).reply("b", _b_json())
+    m = _run()["memory"]
+    assert "P1" not in m["facts"]["P2"]
+    assert "橘猫" in m["facts"]["P2"] and "草地" in m["facts"]["P2"]
