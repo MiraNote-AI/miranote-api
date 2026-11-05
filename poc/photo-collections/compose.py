@@ -12,12 +12,15 @@ per job goes to config.LOG_PATH (AI doc 6) -- text only, no image bytes.
 from __future__ import annotations
 
 import base64
+import io
 import json
 import threading
 import time
 import traceback
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
+
+from PIL import Image
 
 import body
 import check_a
@@ -116,6 +119,36 @@ def _image_part(data: bytes) -> dict:
     return {"type": "image_url", "image_url": {
         "url": "data:{};base64,{}".format(
             image_mime(data) or "image/jpeg", base64.b64encode(data).decode("ascii"))}}
+
+
+def shrink(data: bytes, px: int) -> bytes:
+    """`data` as a JPEG at most `px` on the long side; unchanged when it is
+    already that small or cannot be decoded here (calls B and C then see
+    the photo as sent)."""
+    try:
+        img = Image.open(io.BytesIO(data))
+        img.load()
+        if max(img.size) <= px:
+            return data
+        img = img.convert("RGB")
+        img.thumbnail((px, px))
+        out = io.BytesIO()
+        img.save(out, "JPEG", quality=80)
+        return out.getvalue()
+    except Exception:  # noqa: BLE001 -- any decode failure keeps the original
+        return data
+
+
+def _messages_shorten(cands: List[body.Candidate]) -> List[dict]:
+    """The shorten round: text only, the sentences cut for length."""
+    names = texts.json("names")
+    lines = "\n".join(names["shorten_line"].format(
+        i=i + 1, text=body.clean(c.text), n=body.char_len(body.clean(c.text)),
+        ids=names["list_sep"].join(c.photo_ids) or names["none"]) for i, c in enumerate(cands))
+    return [
+        {"role": "system", "content": texts.raw("collect_b_system").strip()},
+        {"role": "user", "content": texts.render("shorten_b_user", lines=lines)},
+    ]
 
 
 def _split(name: str) -> Tuple[str, str, str]:
@@ -470,6 +503,11 @@ def _compose(job: "_Job", meta: dict, images: Dict[str, bytes]) -> dict:
     tpls = body.templates(a, meta, when)
     raw_count = int(meta.get("raw_count") or 0)
 
+    # Calls B and C see smaller photos (user decision 2026-11-05).
+    images = dict(images)
+    for pid in a.selected:
+        images[pid] = shrink(images[pid], config.SMALL_IMAGE_PX)
+
     # ---- call B (failing twice is not a rejection: templates + fallback) ----
     b, fail = job.call("b", _messages_b(meta, a, daypart, counts, by_id, images),
                        config.CALL_B_TIMEOUT, _check_b)
@@ -495,6 +533,33 @@ def _compose(job: "_Job", meta: dict, images: Dict[str, bytes]) -> dict:
     detail = body.pick(ai, tpls, a, raw_count=raw_count, when=when)
     first_rejected = body_rejected + list(detail.rejected)
     detail.rejected = list(first_rejected)
+
+    # Shorten round (user decision 2026-11-05): no checked model sentence
+    # reaches the cover and some were cut only for length -> one text-only
+    # call B (no retry) shortens them, nothing added; the results keep their
+    # sentence's rank and photos and go through the program checks and call
+    # C like the first round. Skipped when call C failed.
+    long_ones = [c for c in first_ai if body.reject_reason(c, a) == "too_long"]
+    shortened = False
+    if long_ones and not body.cites_peak(detail, a) and c_status != "failed" and job.remaining() > 0:
+        shortened = True
+        sb, _ = job.call("b", _messages_shorten(long_ones), config.CALL_B_TIMEOUT,
+                         _check_rewrite, attempts=1)
+        s_new = body.from_b(sb)[:len(long_ones)]
+        for c, source in zip(s_new, long_ones):
+            c.rank = source.rank
+            c.photo_ids = list(source.photo_ids)
+        s_ai, s_rejected = _hard_bodies(s_new, a)
+        sc_status, s_ai, sc_rej, _, _, sc_log = _verify(job, a.selected, a.peak, images, s_ai, [])
+        if sc_status == "deadline":
+            return job.finish(_result("error", "timeout"))
+        job.log["shorten"] = {"asked": [body.clean(c.text) for c in long_ones],
+                              "rejected": s_rejected + sc_rej, "c": dict(sc_log, status=sc_status)}
+        ai = ai + s_ai
+        first_rejected = first_rejected + s_rejected + sc_rej
+        detail = body.pick(ai, tpls, a, raw_count=raw_count, when=when)
+        detail.rejected = list(first_rejected)
+    job.log["shortened"] = shortened
 
     # The body must describe the cover (user decision 2026-10-31): no model
     # sentence about the peak survived -> one extra call B for the peak only

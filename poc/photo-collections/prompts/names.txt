@@ -102,5 +102,6 @@
   ],
   "marker_words": [
     "封面"
-  ]
+  ],
+  "shorten_line": "{i}. {text}（{n} 个字）｜photo_ids：{ids}"
 }

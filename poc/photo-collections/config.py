@@ -70,6 +70,10 @@ CALL_A_TIMEOUT = 180.0  # user decision 2026-11-01 (spec said 90, then 120)
 # 40 s twice in a row for one group.
 CALL_B_TIMEOUT = 60.0
 CALL_C_TIMEOUT = 60.0
+# Calls B and C see the photos at most this many pixels on the long side
+# (user decision 2026-11-05: a group of 10 landscape photos ran both past
+# 60 s at full size). Call A keeps what the phone sent.
+SMALL_IMAGE_PX = 512
 JOB_CAP_SECONDS = 300.0  # user decision 2026-11-01 (spec said 240)
 # Results are kept an hour: the phone may poll a batch of seven groups late.
 JOB_TTL_SECONDS = float(os.getenv("PHOTO_JOB_TTL_SECONDS") or 3600)

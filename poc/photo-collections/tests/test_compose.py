@@ -520,12 +520,57 @@ def test_rewrite_is_shown_the_cover_sentences_cut_for_length(fake_model, tmp_log
     long_other = "长椅上那只橘猫睡得很沉很沉，一下午都没有醒过来呢"
     cands = [{"text": long_cover, "photo_ids": ["P4"]}, {"text": long_other, "photo_ids": ["P2"]}]
     fake_model.reply("a", _a_json()).reply("b", _b_json(candidates=cands)).reply(
+        "b", _b_json(candidates=[], ranked=[], cannot_write=True)).reply(  # shorten round
         "b", _b_json(candidates=ON_PEAK, ranked=[]))
     m = _run()["memory"]
     assert m["push"]["body"] == "台中央，落下一束光"
-    task = _texts(fake_model.calls[3]["messages"][1]["content"])[-1]
+    task = _texts(fake_model.calls[4]["messages"][1]["content"])[-1]
     assert "- 台中央落下一束很亮很亮的光，四周的幕布都暗了下去（24 个字）" in task
     assert long_other not in task
+
+
+def test_shorten_round_rescues_sentences_cut_for_length(fake_model, tmp_log):
+    # User decision 2026-11-05: cut only for length -> one text-only call
+    # to shorten them, then the usual checks and call C.
+    long_cover = "台中央落下一束很亮很亮的光，四周的幕布都暗了下去"  # 24
+    cands = [{"text": long_cover, "photo_ids": ["P4"]}]
+    short = [{"text": "台中央落下一束光，幕布暗了", "photo_ids": ["P9"]}]
+    fake_model.reply("a", _a_json()).reply("b", _b_json(candidates=cands)).reply(
+        "b", _b_json(candidates=short, ranked=[]))
+    m = _run()["memory"]
+    assert m["push"]["body"] == "台中央落下一束光，幕布暗了"
+    assert m["push"]["coverPhotoId"] == "P4"  # the source's photos, not the reply's
+    assert [c["call"] for c in fake_model.calls] == ["a", "b", "c", "b", "c"]
+    shorten = fake_model.calls[3]["messages"][1]["content"]
+    assert isinstance(shorten, str)  # text only, no photos
+    assert "1. 台中央落下一束很亮很亮的光，四周的幕布都暗了下去（24 个字）｜photo_ids：P4" in shorten
+    entry = _log(tmp_log)
+    assert entry["shortened"] is True and entry["peakRewrite"] is False
+    assert entry["shorten"]["asked"] == [long_cover]
+
+
+def test_no_shorten_round_without_long_sentences(fake_model, tmp_log):
+    fake_model.reply("a", _a_json()).reply("b", _b_json())
+    _run()
+    assert fake_model.count("b") == 1 and _log(tmp_log)["shortened"] is False
+
+
+def test_shrink_caps_the_long_side_and_keeps_what_it_cannot_read():
+    import io
+    from PIL import Image
+
+    def png(w, h):
+        out = io.BytesIO()
+        Image.new("RGB", (w, h), (200, 120, 80)).save(out, "PNG")
+        return out.getvalue()
+
+    big = compose.shrink(png(1000, 800), 512)
+    assert Image.open(io.BytesIO(big)).size == (512, 410)
+    assert compose.image_mime(big) == "image/jpeg"
+    small = png(400, 300)
+    assert compose.shrink(small, 512) == small
+    assert compose.shrink(b"not an image", 512) == b"not an image"
+    assert config.SMALL_IMAGE_PX == 512
 
 
 def test_rewrite_without_long_cover_sentences_says_none(fake_model, tmp_log):
