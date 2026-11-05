@@ -398,12 +398,14 @@ def _facts_line(p: check_a.PhotoFacts, names: dict) -> str:
     )
 
 
-def _when(by_id: Dict[str, dict], peak: str, names: dict) -> Tuple[str, body.When]:
-    """The daypart id and the weekday / daypart names, by the cover's time."""
+def _when(meta: dict, by_id: Dict[str, dict], peak: str, names: dict) -> Tuple[str, body.When]:
+    """The daypart id by the cover's time, and the weekday of the group's
+    day (meta.weekday): a cover taken after midnight still belongs to the
+    night before, like the date in the title (full check 2026-11-05)."""
     peak_time = parse_time(by_id[peak].get("taken_at"))
     daypart = daypart_of(peak_time.hour if peak_time else 12)
-    weekday = names["weekdays"].get(str(peak_time.isoweekday())) if peak_time else ""
-    return daypart, body.When(weekday=weekday or "", daypart=names["dayparts"][daypart])
+    weekday = names["weekdays"].get(str(meta.get("weekday")), "")
+    return daypart, body.When(weekday=weekday, daypart=names["dayparts"][daypart])
 
 
 def _hard_bodies(ai: List[body.Candidate], a: check_a.AResult):
@@ -502,7 +504,7 @@ def _compose(job: "_Job", meta: dict, images: Dict[str, bytes]) -> dict:
         return job.finish(_result("rejected", a.verdict))
 
     # ---- program prep ----
-    daypart, when = _when(by_id, a.peak, names)
+    daypart, when = _when(meta, by_id, a.peak, names)
     counts = body.program_counts(a)
     tpls = body.templates(a, meta, when)
     raw_count = int(meta.get("raw_count") or 0)
@@ -622,7 +624,7 @@ def _compose(job: "_Job", meta: dict, images: Dict[str, bytes]) -> dict:
         if new_peak is not None:
             a.peak = new_peak
             peak_switched = True
-            daypart, when = _when(by_id, a.peak, names)
+            daypart, when = _when(meta, by_id, a.peak, names)
     daypart_name = when.daypart
     job.log["peakRewrite"] = peak_rewrite
     job.log["peakSwitched"] = peak_switched

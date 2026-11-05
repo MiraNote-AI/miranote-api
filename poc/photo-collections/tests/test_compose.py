@@ -744,3 +744,26 @@ def test_shorten_reply_keeps_its_own_photos(fake_model, tmp_log):
     m = _run()["memory"]
     assert m["push"]["body"] == "橘猫睡在长椅上，草地很绿"
     assert m["push"]["coverPhotoId"] == "P2"
+
+
+def test_weekday_follows_the_groups_day_after_midnight(fake_model, tmp_log):
+    # Full check 2026-11-05: a Saturday-night group whose cover was taken at
+    # 00:30 said "a Sunday night" under the title "10.17". Photos before
+    # 04:00 belong to the day before (grouping rule), and so does the
+    # weekday in the templates.
+    meta = _meta(date="2026-10-17", weekday=6, covers_all=False)
+    times = ["2026-10-17T23:00:00-05:00", "2026-10-17T23:20:00-05:00", "2026-10-17T23:50:00-05:00",
+             "2026-10-18T00:30:00-05:00", "2026-10-18T00:40:00-05:00"]
+    for p, t in zip(meta["photos"], times):
+        p["taken_at"] = t
+    a = json.loads(_a_json())
+    for p in a["photos"]:
+        p["subjects"] = [{"name": "舞台", "type": "object"}]
+    fake_model.reply("a", json.dumps(a, ensure_ascii=False)).reply(
+        "b", _b_json(candidates=[], ranked=[], cannot_write=True)).reply(
+        "b", _b_json(candidates=[], ranked=[], cannot_write=True))
+    m = _run(meta=meta)["memory"]
+    assert m["generation"]["bodySource"] == "fallback_F0"
+    assert "10.17" in m["push"]["title"]
+    sat = texts.json("names")["weekdays"]["6"]
+    assert sat in m["push"]["body"], m["push"]["body"]
