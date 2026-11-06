@@ -47,7 +47,8 @@ Once this service is merged into `dev`, on the Mac that runs the beta
 
 1. Pull, then create `poc/photo-collections/.venv` and `.env` as in
    Setup (`LLM_API_KEY`, `LLM_BASE_URL`, `LLM_MODEL`). The beta token is
-   the existing `BETA_TOKENS` in the repo-root `.env`.
+   the existing `BETA_TOKENS` in the repo-root `.env`. The key's account
+   must also have `qwen3.8-flash` (call B's model, see "Model call modes").
 2. Start it with the others: `scripts/start_backends.sh` (8006 is in its
    list; it binds 127.0.0.1 only).
 3. In `~/.cloudflared/miranote.yml` (outside the repo -- never
@@ -73,8 +74,9 @@ Once this service is merged into `dev`, on the Mac that runs the beta
 5. Restart the tunnel: `launchctl kickstart -k gui/$(id -u)/ai.miranote.beta-tunnel`
    (or `scripts/stop_tunnel.sh && scripts/start_tunnel.sh` when it is not
    run by launchd; `start_tunnel.sh` already checks `beta-collections`).
-6. Check `https://beta-collections.miranote.app/health`: `status: ok` and
-   `llm: ok`.
+6. Check `https://beta-collections.miranote.app/health`: `status: ok`,
+   `llm: ok` and `call_b_model: qwen3.8-flash` (`llm` is `ok` only when
+   both models answer).
 
 ## API
 
@@ -167,8 +169,17 @@ Both fallbacks (`json_object`) also worked and can be switched to with
 `PHOTO_CALL_A_MODE` / `PHOTO_CALL_B_MODE` / `PHOTO_CALL_C_MODE` without a
 code change (`json_schema` for C uses `SCHEMA_C`).
 
-Cost uses the token counts the provider returns: input 0.2, output 0.8 CNY
-per million tokens (thinking tokens are output).
+Call B (the sentences and questions, and its shorten and cover rounds)
+runs on its own model, `qwen3.8-flash` by default (`PHOTO_CALL_B_MODEL`
+to change it); calls A and C use `LLM_MODEL`. Decision 2026-11-05: on the
+80 test photos `qwen3.7-flash` wrote past 22 characters in most sentences
+and the shortened ones read badly; `qwen3.8-flash` kept to 12-18.
+`qwen3.8-flash` takes the same `json_schema` request.
+
+Cost uses the token counts the provider returns, CNY per million tokens
+(thinking tokens are output): `qwen3.7-flash` input 0.2, output 0.8;
+`qwen3.8-flash` 0.8 / 2.7; other models in `config.MODEL_PRICES_PER_M`,
+anything else is priced like the default.
 A call cut at its time limit returns no token counts, so it is logged at
 cost 0, but the provider may still bill it (the request is abandoned, not
 cancelled upstream). Expect real spend to run slightly above the log when

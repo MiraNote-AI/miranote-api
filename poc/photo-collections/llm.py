@@ -79,12 +79,17 @@ def _usage_pair(usage) -> tuple:
     )
 
 
+def model_for(call: str) -> str:
+    """The model a call runs on: call B may have its own."""
+    return config.CALL_B_MODEL if call == "b" else config.LLM_MODEL
+
+
 def _request(call: str, messages: List[dict], timeout: float) -> dict:
     mode = {"a": config.CALL_A_MODE, "b": config.CALL_B_MODE, "c": config.CALL_C_MODE}[call]
     if mode not in config.MODES:
         raise ModelError("unknown call mode " + repr(mode))
     kwargs = {
-        "model": config.LLM_MODEL,
+        "model": model_for(call),
         "messages": messages,
         "temperature": {"a": config.TEMPERATURE_A, "b": config.TEMPERATURE_B,
                         "c": config.TEMPERATURE_C}[call],
@@ -162,7 +167,7 @@ def complete(messages: List[dict], *, call: str, timeout: float) -> LlmReply:
         prompt_tokens=prompt_tokens,
         completion_tokens=completion_tokens,
         latency_ms=int((time.monotonic() - started) * 1000),
-        cost_cny=config.cost_cny(prompt_tokens, completion_tokens),
+        cost_cny=config.cost_cny(prompt_tokens, completion_tokens, kwargs["model"]),
     )
 
 
@@ -177,18 +182,20 @@ def probe() -> str:
     if not config.LLM_API_KEY:
         print("[collections] LLM_API_KEY is not set -- every compose job will fail")
         return LLM_UNCONFIGURED
-    try:
-        _get_client().chat.completions.create(
-            model=config.LLM_MODEL,
-            messages=[{"role": "user", "content": "ping"}],
-            max_tokens=1,
-            extra_body={"enable_thinking": False},
-            timeout=20,
-        )
-    except Exception as error:  # noqa: BLE001 -- degraded, not dead
-        print("[collections] MODEL PROBE FAILED: model={} base_url={}".format(
-            config.LLM_MODEL, config.LLM_BASE_URL))
-        print("[collections]   provider said: " + _redact(str(error))[:300])
-        return LLM_UNREACHABLE
-    print("[collections] model ready: {} at {}".format(config.LLM_MODEL, config.LLM_BASE_URL))
+    # Call B may run on its own model; both must answer.
+    for model in dict.fromkeys([config.LLM_MODEL, config.CALL_B_MODEL]):
+        try:
+            _get_client().chat.completions.create(
+                model=model,
+                messages=[{"role": "user", "content": "ping"}],
+                max_tokens=1,
+                extra_body={"enable_thinking": False},
+                timeout=20,
+            )
+        except Exception as error:  # noqa: BLE001 -- degraded, not dead
+            print("[collections] MODEL PROBE FAILED: model={} base_url={}".format(
+                model, config.LLM_BASE_URL))
+            print("[collections]   provider said: " + _redact(str(error))[:300])
+            return LLM_UNREACHABLE
+        print("[collections] model ready: {} at {}".format(model, config.LLM_BASE_URL))
     return LLM_OK

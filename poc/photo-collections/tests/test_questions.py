@@ -48,7 +48,9 @@ def test_prompt_types_lists_every_type():
     assert len(lines) == 12
     # The narrowed meaning (question refine 2026-11-05) goes to call B.
     assert lines[0] == "  order｜先后顺序（有意义的先后：先吃完哪样、先到哪儿）｜那桌菜里，哪一样最先吃完？"
-    assert "  taste｜味道｜那锅冬阴功，是什么味道？" in lines
+    assert "  taste｜味道｜那锅冬阴功，味道怎么样？" in lines
+    # Open examples only (2026-11-05 evening): no yes/no or either/or left.
+    assert not any("还是" in line or "吗？" in line for line in lines)
 
 
 def test_prompt_recent_names_known_types_once():
@@ -149,3 +151,26 @@ def test_taste_is_a_known_type():
     # Question refine 2026-11-05: the new taste type passes the type check,
     # and "味道" is not a banned word for questions (only for detail lines).
     assert questions.reject_reason(_q("那锅冬阴功，是什么味道？", "taste"), NOBODY) is None
+
+
+LONG_Q = {"text": "从外面的街道一路走到这个舞台，中间经过了哪段路？", "type": "route", "why": "x"}
+
+
+def test_too_long_lists_only_questions_cut_for_length():
+    qs = questions.from_b(_b(LONG_Q, {"text": "那晚台上说的话，你还记得哪一句？", "type": "sound", "why": "y"}))
+    assert [q.text for q in questions.too_long(qs, NOBODY)] == [LONG_Q["text"]]
+
+
+def test_with_shortened_keeps_rank_and_type():
+    qs = questions.from_b(_b({"text": "这家店，是怎么找到的？", "type": "found", "why": "y"}, LONG_Q))
+    long_qs = questions.too_long(qs, NOBODY)
+    reply = questions.from_b(_b({"text": "从街上到台下，去了哪儿？", "type": "zoom", "why": "改短"}))
+    out = questions.with_shortened(qs, long_qs, reply)
+    assert [(q.text, q.type, q.rank) for q in out] == [
+        ("这家店，是怎么找到的？", "found", 0), ("从街上到台下，去了哪儿？", "route", 1)]
+
+
+def test_with_shortened_ignores_a_reply_of_another_count():
+    qs = questions.from_b(_b(LONG_Q))
+    out = questions.with_shortened(qs, questions.too_long(qs, NOBODY), [])
+    assert [q.text for q in out] == [LONG_Q["text"]]

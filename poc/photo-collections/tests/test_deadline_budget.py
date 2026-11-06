@@ -129,3 +129,35 @@ def test_every_call_ends_before_the_cap(scaled, tmp_log):
     out, sim, deadline = _go(scaled, plan)
     assert (out["status"], out["reason"]) == ("error", "timeout")
     assert time.monotonic() <= deadline
+
+
+LONG_Q = {"text": "从外面的街道一路走到这个舞台，中间经过了哪段路？", "type": "route", "why": "x"}
+SHORT_Q = {"text": "那晚台上说的话，你还记得哪一句？", "type": "sound", "why": "y"}
+
+
+def test_question_shorten_never_eats_call_cs_time(scaled, tmp_log):
+    # Review 2026-11-05: the question shorten round runs before call C. A
+    # times out once, so under 60 s are left after B: the round is skipped
+    # and C still checks the answer we have.
+    plan = [("a", 999, ""), ("a", 55, _a_json()),
+            ("b", 8, _b_json(candidates=ON_PEAK, ranked=[SHORT_Q, LONG_Q])),
+            ("c", 30, _auto_c({"台中央，落下一束光"}))]
+    out, sim, deadline = _go(scaled, plan)
+    assert out["status"] == "ok", (out, sim.log)
+    assert [c for c, _, _ in sim.log] == ["a", "a", "b", "c"]
+    assert out["memory"]["generation"]["bodySource"] == "llm"
+    assert out["memory"]["ending"]["questions"][0]["text"] == SHORT_Q["text"]
+    assert time.monotonic() <= deadline
+
+
+def test_question_shorten_leaves_call_c_its_full_time(scaled, tmp_log):
+    # With time to spare the round runs, but a hanging reply is cut early
+    # enough that call C keeps its whole limit.
+    plan = [("a", 100, _a_json()), ("b", 40, _b_json(candidates=ON_PEAK, ranked=[SHORT_Q, LONG_Q])),
+            ("b", 999, ""), ("c", 55, _auto_c({"台中央，落下一束光"}))]
+    out, sim, deadline = _go(scaled, plan)
+    assert out["status"] == "ok", (out, sim.log)
+    assert [c for c, _, _ in sim.log] == ["a", "b", "b", "c"]
+    assert sim.log[3][2] >= round(config.CALL_C_TIMEOUT / S) - 1
+    assert out["memory"]["generation"]["bodySource"] == "llm"
+    assert time.monotonic() <= deadline

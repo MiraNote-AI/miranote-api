@@ -123,6 +123,26 @@ def hard_check(qs: List[Question], a: AResult) -> Tuple[List[Question], List[Tup
     return passed, rejected
 
 
+def too_long(qs: List[Question], a: AResult) -> List[Question]:
+    """The model's first TOP_N questions the program cuts only for length:
+    the ones the shorten round is asked about (decision 2026-11-05 evening,
+    question item 5)."""
+    return [q for q in qs[:TOP_N] if reject_reason(q, a) == "too_long"]
+
+
+def with_shortened(qs: List[Question], long_qs: List[Question],
+                   replies: List[Question]) -> List[Question]:
+    """The model's first TOP_N questions in its order, each too-long one
+    replaced by its shortened version (same rank and type). A reply with a
+    different count cannot be matched up and changes nothing."""
+    if len(replies) != len(long_qs):
+        return list(qs[:TOP_N])
+    swap = {id(old): Question(text=new.text, type=old.type, source="llm",
+                              why=old.why, rank=old.rank)
+            for old, new in zip(long_qs, replies)}
+    return [swap.get(id(q), q) for q in qs[:TOP_N]]
+
+
 def fallbacks(daypart_name: str) -> List[Question]:
     """B1, B2, B3 with the daypart filled in, each with its type."""
     doc = texts.json("question_bank")

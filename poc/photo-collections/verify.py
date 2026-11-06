@@ -1,11 +1,12 @@
 """Call C (copy refine handoff 2.4): the model looks at the selected photos
 and only answers, per detail sentence, "is everything it mentions in the
-photos" and "does it mention the cover", and per question, "is what it
-mentions in the photos" and "is it safe". It does not judge style.
+photos", "does it fit the cover" and "does it read" (only plainly broken
+sentences fail, decision 2026-11-05 evening item 7), and per question, "is
+what it mentions in the photos" and "is it safe". It does not judge style.
 
 Sentences are S1.., questions Q1.., in the order given. An item the reply
 leaves out is dropped; an unsure (non-boolean) answer passes "grounded" and
-fails "safe" (decision 2026-11-04 item 3). A reply that answers nothing
+"fluent" and fails "safe" (decision 2026-11-04 item 3). A reply that answers nothing
 fails the check (the pipeline retries once; two failures mean templates
 and fallback questions only).
 """
@@ -24,6 +25,7 @@ class Verdict:
     grounded: bool
     reason: str = ""
     mentions_cover: bool = True  # sentences only
+    fluent: bool = True  # sentences only
     safe: bool = True  # questions only
 
 
@@ -112,6 +114,7 @@ def parse(text: str, n_sentences: int, n_questions: int) -> CResult:
         out.sentences[sid] = Verdict(
             grounded=_bool(e, "grounded", unsure=True),
             mentions_cover=_bool(e, "mentions_cover", unsure=False),
+            fluent=_bool(e, "fluent", unsure=True),
             reason=_reason(e),
         )
     for i in range(n_questions):

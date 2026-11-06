@@ -37,6 +37,7 @@ class Candidate:
     source: str  # llm | template_T1 | template_T2
     photo_ids: List[str] = field(default_factory=list)
     rank: Optional[int] = None  # the model's order, 0-based; None for templates
+    style: str = ""  # the model's tone label (decision 2026-11-05 evening item 3)
 
 
 @dataclass
@@ -46,6 +47,7 @@ class BodyPick:
     rejected: List[Tuple[str, str]] = field(default_factory=list)
     photo_ids: List[str] = field(default_factory=list)
     score: Optional[float] = None
+    style: str = ""
 
 
 @dataclass
@@ -196,6 +198,7 @@ def from_b(b: Optional[dict]) -> List[Candidate]:
             source="llm",
             photo_ids=[x for x in c.get("photo_ids") or [] if isinstance(x, str)],
             rank=i,
+            style=c.get("style") if isinstance(c.get("style"), str) else "",
         ))
     return out
 
@@ -331,5 +334,5 @@ def pick(ai: List[Candidate], templates: List[Candidate], a: AResult, *,
     best = max(on_peak or alive, key=lambda x: x[:4])
     return BodyPick(
         text=best[5], source=best[4].source, rejected=rejected,
-        photo_ids=list(best[4].photo_ids), score=best[0],
+        photo_ids=list(best[4].photo_ids), score=best[0], style=best[4].style,
     )

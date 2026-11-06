@@ -26,6 +26,12 @@ DASHSCOPE_BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1"
 LLM_API_KEY = os.getenv("LLM_API_KEY") or None
 LLM_BASE_URL = os.getenv("LLM_BASE_URL") or DASHSCOPE_BASE_URL
 LLM_MODEL = os.getenv("LLM_MODEL") or "qwen3.7-flash"
+# Call B writes the sentences and questions on its own model (user decision
+# 2026-11-05 evening, second-round refine: on the 80 test photos qwen3.7-flash
+# wrote past 22 characters in most sentences and the shortened ones read like
+# telegrams; qwen3.8-flash kept to 12-18, judged 7/10 sentences and 10/10
+# questions against 2/10 and 6/10).
+CALL_B_MODEL = os.getenv("PHOTO_CALL_B_MODEL") or "qwen3.8-flash"
 
 # How each call talks to the model, settled by tools/probe_model.py
 # (2026-10-31, see README.md "Model call modes"):
@@ -50,13 +56,17 @@ COPY_VERSION = "copy_v3"  # copy_v3: question refine 2026-11-05
 # ---------- Prices (CNY per million tokens; thinking billed as output) ----------
 PRICE_INPUT_PER_M = 0.2
 PRICE_OUTPUT_PER_M = 0.8
+# Other models call B may use: (input, output), DashScope list prices 2026-11-05.
+MODEL_PRICES_PER_M = {"qwen3.8-flash": (0.8, 2.7), "qwen3.7-plus": (2.0, 8.0)}
 
 
-def cost_cny(prompt_tokens: int, completion_tokens: int) -> float:
-    """What one call cost, from the token counts the provider returned."""
+def cost_cny(prompt_tokens: int, completion_tokens: int, model: str = "") -> float:
+    """What one call cost, from the token counts the provider returned. A
+    model not in the table is priced like the default one."""
+    price_in, price_out = MODEL_PRICES_PER_M.get(model, (PRICE_INPUT_PER_M, PRICE_OUTPUT_PER_M))
     return (
-        prompt_tokens / 1_000_000 * PRICE_INPUT_PER_M
-        + completion_tokens / 1_000_000 * PRICE_OUTPUT_PER_M
+        prompt_tokens / 1_000_000 * price_in
+        + completion_tokens / 1_000_000 * price_out
     )
 
 
@@ -102,17 +112,19 @@ LOG_PATH = REPO_ROOT / "logs" / "photo-collections" / "compose.jsonl"
 SCHEMA_B = {
     "type": "object",
     "additionalProperties": False,
-    "required": ["cannot_write", "candidates", "question"],
+    "required": ["scene", "cannot_write", "candidates", "question"],
     "properties": {
+        "scene": {"type": "string"},
         "cannot_write": {"type": "boolean"},
         "candidates": {
             "type": "array",
             "items": {
                 "type": "object",
                 "additionalProperties": False,
-                "required": ["text", "photo_ids"],
+                "required": ["text", "style", "photo_ids"],
                 "properties": {
                     "text": {"type": "string"},
+                    "style": {"type": "string"},
                     "photo_ids": {"type": "array", "items": {"type": "string"}},
                 },
             },
@@ -150,9 +162,10 @@ SCHEMA_C = {
     "properties": {
         "sentences": {"type": "array", "items": {
             "type": "object", "additionalProperties": False,
-            "required": ["id", "grounded", "mentions_cover", "reason"],
+            "required": ["id", "grounded", "mentions_cover", "fluent", "reason"],
             "properties": {"id": {"type": "string"}, "grounded": _VERDICT,
-                           "mentions_cover": _VERDICT, "reason": {"type": "string"}},
+                           "mentions_cover": _VERDICT, "fluent": _VERDICT,
+                           "reason": {"type": "string"}},
         }},
         "questions": {"type": "array", "items": {
             "type": "object", "additionalProperties": False,

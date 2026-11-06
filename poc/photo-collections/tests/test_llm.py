@@ -71,6 +71,7 @@ def test_json_schema_mode_for_call_b(monkeypatch):
 
 def test_usage_becomes_cost(monkeypatch):
     monkeypatch.setattr(config, "CALL_B_MODE", "json_object")
+    monkeypatch.setattr(config, "CALL_B_MODEL", config.LLM_MODEL)
     resp = SimpleNamespace(
         choices=[SimpleNamespace(message=SimpleNamespace(content="{}"))],
         usage=SimpleNamespace(prompt_tokens=1_000_000, completion_tokens=1_000_000),
@@ -146,3 +147,28 @@ def test_timed_out_call_future_is_cancelled(monkeypatch):
     with pytest.raises(llm.ModelTimeout):
         llm.complete([{"role": "user", "content": "x"}], call="b", timeout=30)
     assert Future.cancelled is True
+
+
+def _plain_reply(prompt_tokens=1_000_000, completion_tokens=1_000_000):
+    return SimpleNamespace(
+        choices=[SimpleNamespace(message=SimpleNamespace(content="{}"))],
+        usage=SimpleNamespace(prompt_tokens=prompt_tokens, completion_tokens=completion_tokens),
+    )
+
+
+def test_call_b_can_run_on_its_own_model(monkeypatch):
+    # Second-round refine 2026-11-05: sentences and questions on a stronger
+    # model, calls A and C unchanged.
+    monkeypatch.setattr(config, "CALL_B_MODE", "json_object")
+    monkeypatch.setattr(config, "CALL_C_MODE", "json_object")
+    monkeypatch.setattr(config, "CALL_B_MODEL", "qwen3.8-flash")
+    comp = _install(monkeypatch, FakeCompletions(result=_plain_reply()))
+    reply = llm.complete([{"role": "user", "content": "x"}], call="b", timeout=30)
+    assert comp.kwargs["model"] == "qwen3.8-flash"
+    assert reply.cost_cny == pytest.approx(0.8 + 2.7)
+    llm.complete([{"role": "user", "content": "x"}], call="c", timeout=30)
+    assert comp.kwargs["model"] == config.LLM_MODEL
+
+
+def test_unknown_model_is_priced_like_the_default():
+    assert config.cost_cny(1_000_000, 1_000_000, "some-new-model") == pytest.approx(1.0)

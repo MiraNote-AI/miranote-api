@@ -93,13 +93,15 @@ Q2 = {"text": "那天看完演出，你去了哪儿？", "type": "route", "why":
 Q3 = {"text": "那只橘猫，后来醒了吗？", "type": "order", "why": "长椅上的猫"}
 
 
-def _b_json(candidates=None, ranked=None, cannot_write=False):
+def _b_json(candidates=None, ranked=None, cannot_write=False, scene=None):
     if candidates is None:
         candidates = [{"text": "台中央，落下一束光", "photo_ids": ["P4"]}]
     if ranked is None:
         ranked = [Q1]
-    return json.dumps({"cannot_write": cannot_write, "candidates": candidates,
-                       "question": {"ranked": ranked}}, ensure_ascii=False)
+    out = {"cannot_write": cannot_write, "candidates": candidates, "question": {"ranked": ranked}}
+    if scene is not None:
+        out["scene"] = scene
+    return json.dumps(out, ensure_ascii=False)
 
 
 def _run(meta=None, deadline=None):
@@ -543,7 +545,7 @@ def test_shorten_round_rescues_sentences_cut_for_length(fake_model, tmp_log):
     assert [c["call"] for c in fake_model.calls] == ["a", "b", "c", "b", "c"]
     shorten = fake_model.calls[3]["messages"][1]["content"]
     assert isinstance(shorten, str)  # text only, no photos
-    assert "1. 台中央落下一束很亮很亮的光，四周的幕布都暗了下去（24 个字）｜photo_ids：P4" in shorten
+    assert "1. 台中央落下一束很亮很亮的光，四周的幕布都暗了下去（24 个字）｜style：无｜photo_ids：P4" in shorten
     entry = _log(tmp_log)
     assert entry["shortened"] is True and entry["peakRewrite"] is False
     assert entry["shorten"]["asked"] == [long_cover]
@@ -778,3 +780,78 @@ def test_facts_drop_clauses_naming_other_photos(fake_model, tmp_log):
     m = _run()["memory"]
     assert "P1" not in m["facts"]["P2"]
     assert "橘猫" in m["facts"]["P2"] and "草地" in m["facts"]["P2"]
+
+
+# ---------- second-round refine (decisions 2026-11-05 evening) ----------
+
+SCENE = "看了一场小演出"
+LONG_Q = {"text": "从外面的街道一路走到这个舞台，中间经过了哪段路？", "type": "route", "why": "x"}
+
+
+def test_scene_and_styles_are_logged_not_sent(fake_model, tmp_log):
+    cands = [{"text": "台中央，落下一束光", "style": "诗意", "photo_ids": ["P4"]}]
+    fake_model.reply("a", _a_json()).reply("b", _b_json(candidates=cands, scene=SCENE))
+    m = _run()["memory"]
+    assert SCENE not in json.dumps(m, ensure_ascii=False)
+    entry = _log(tmp_log)
+    assert entry["scene"] == SCENE
+    assert entry["b_candidates"] == [{"text": "台中央，落下一束光", "style": "诗意", "photo_ids": ["P4"]}]
+    assert entry["body"]["style"] == "诗意"
+
+
+def test_later_rounds_are_told_the_scene(fake_model, tmp_log):
+    long_cover = "台中央落下一束很亮很亮的光，四周的幕布都暗了下去"  # 24
+    fake_model.c_cover = _cover_is("台中央，落下一束光")
+    fake_model.reply("a", _a_json()).reply(
+        "b", _b_json(candidates=[{"text": long_cover, "style": "诗意", "photo_ids": ["P4"]}],
+                     scene=SCENE)).reply(
+        "b", _b_json(candidates=[], ranked=[], cannot_write=True)).reply(  # shorten round
+        "b", _b_json(candidates=ON_PEAK, ranked=[]))  # cover rewrite
+    _run()
+    shorten = fake_model.calls[3]["messages"][1]["content"]
+    assert "scene（照抄：" + SCENE + "）" in shorten and "｜style：诗意｜" in shorten
+    rewrite = _texts(fake_model.calls[4]["messages"][1]["content"])
+    assert "- 这组照片的场面：" + SCENE in rewrite[0]
+
+
+def test_c_drops_sentences_that_do_not_read(fake_model, tmp_log):
+    cands = [{"text": "木桌盛满夜晚", "photo_ids": ["P4"]},
+             {"text": "台中央，落下一束光", "photo_ids": ["P4"]}]
+    fake_model.c_not_fluent = {"木桌盛满夜晚"}
+    fake_model.reply("a", _a_json()).reply("b", _b_json(candidates=cands))
+    assert _run()["memory"]["push"]["body"] == "台中央，落下一束光"
+    entry = _log(tmp_log)
+    assert ["木桌盛满夜晚", "c_not_fluent:"] in entry["body"]["rejected"]
+    assert entry["c"]["sentences"]["S1"]["fluent"] is False
+
+
+def test_a_long_question_is_shortened_once_and_checked(fake_model, tmp_log):
+    short = {"text": "从街上到台下，去了哪儿？", "type": "zoom", "why": "改短"}
+    fake_model.reply("a", _a_json()).reply("b", _b_json(ranked=[Q2, LONG_Q], scene=SCENE)).reply(
+        "b", _b_json(candidates=[], ranked=[short]))
+    m = _run()["memory"]
+    assert [c["call"] for c in fake_model.calls] == ["a", "b", "b", "c"]
+    asked = fake_model.calls[2]["messages"][1]["content"]
+    assert isinstance(asked, str)  # text only, no photos
+    assert "1. " + LONG_Q["text"] + "（24 个字）｜type：route" in asked
+    assert "scene（照抄：" + SCENE + "）" in asked
+    assert m["ending"]["questions"] == [
+        {"text": Q2["text"], "type": "route", "source": "llm"},
+        {"text": short["text"], "type": "route", "source": "llm"}]  # the original type
+    c_task = _texts(fake_model.calls[3]["messages"][1]["content"])[-1]
+    assert "Q2｜" + short["text"] in c_task
+    assert _log(tmp_log)["question_shorten"] == {"asked": [LONG_Q["text"]], "replies": [short["text"]]}
+
+
+def test_a_question_still_too_long_is_dropped(fake_model, tmp_log):
+    fake_model.reply("a", _a_json()).reply("b", _b_json(ranked=[LONG_Q, Q2])).reply(
+        "b", _b_json(candidates=[], ranked=[LONG_Q]))
+    m = _run()["memory"]
+    assert [q["text"] for q in m["ending"]["questions"]] == [Q2["text"]]
+    assert [LONG_Q["text"], "too_long"] in _log(tmp_log)["question"]["rejected"]
+
+
+def test_no_question_shorten_round_without_long_questions(fake_model, tmp_log):
+    fake_model.reply("a", _a_json()).reply("b", _b_json(ranked=[Q1, Q2]))
+    _run()
+    assert fake_model.count("b") == 1 and "question_shorten" not in _log(tmp_log)

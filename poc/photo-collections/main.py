@@ -228,6 +228,7 @@ async def health():
         "status": "ok",
         "llm": _llm_status,
         "model": config.LLM_MODEL,
+        "call_b_model": config.CALL_B_MODEL,
         "call_a_mode": config.CALL_A_MODE,
         "call_b_mode": config.CALL_B_MODE,
     }

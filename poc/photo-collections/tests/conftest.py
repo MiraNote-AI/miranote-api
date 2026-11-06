@@ -39,6 +39,7 @@ class FakeModel:
         self.c_cover: Callable[[str], bool] = lambda text: True
         self.c_ungrounded: set = set()
         self.c_unsafe: set = set()
+        self.c_not_fluent: set = set()
 
     def reply(self, call: str, text: str, prompt_tokens: int = 1000,
               completion_tokens: int = 500, gate: Optional[threading.Event] = None):
@@ -86,7 +87,8 @@ class FakeModel:
         qs = re.findall(r"^(Q\d+)\uff5c(.*)$", task, re.M)
         out = {
             "sentences": [{"id": i, "grounded": t not in self.c_ungrounded,
-                           "mentions_cover": bool(self.c_cover(t)), "reason": ""}
+                           "mentions_cover": bool(self.c_cover(t)),
+                           "fluent": t not in self.c_not_fluent, "reason": ""}
                           for i, t in sentences],
             "questions": [{"id": i, "grounded": t not in self.c_ungrounded,
                            "safe": t not in self.c_unsafe, "reason": ""} for i, t in qs],

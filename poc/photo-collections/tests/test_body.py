@@ -87,7 +87,8 @@ def test_trailing_full_stop_stripped():
     ("灯似乎亮了", "似乎"),
     ("那晚的时光，停在台上", "时光"),        # stock words, only two
     ("一束光，留在回忆里", "回忆"),
-    ("旅行的最后一晚，台上亮着灯", "旅行"),  # event, still banned
+    ("出差的最后一晚，台上亮着灯", "出差"),  # event, still banned
+    ("邻居家的院子，亮着紫灯", "邻居"),      # whose place: not guessed (2026-11-05 evening)
     ("台上的灯又亮了", "又"),
 ])
 def test_banned_words_rejected(text, word):
@@ -345,3 +346,34 @@ def test_leftover_annotation_is_a_marker_leak():
 def test_guitar_is_not_a_pronoun():
     # Full check 2026-11-05: "吉他" was rejected for its "他".
     assert _reason("台中央的光，落在一把吉他上") is None
+
+
+@pytest.mark.parametrize("text", [
+    "旅行的最后一晚，台上亮着灯",    # events opened 2026-11-05 evening
+    "一桌聚餐的菜，那晚的桌子很满",
+])
+def test_opened_event_words_pass(text):
+    assert _reason(text) is None
+
+
+@pytest.mark.parametrize("text", [
+    "晚霞还没散，一排房子亮了灯",      # user decision 2026-11-05 evening
+    "天边的晚霞还没散尽，人行道上裂开一道峡谷",
+    "天还没黑，台上的灯先亮了",
+])
+def test_sky_and_light_huanmei_pass(text):
+    assert _reason(text) is None
+
+
+def test_other_huanmei_still_banned():
+    assert _reason("那家店还没去过") == "lexicon:还没"
+
+
+@pytest.mark.parametrize("raw,clean", [
+    # The shorten lines carry style / type since 2026-11-05 evening; an
+    # echoed line must still come back clean (review 2026-11-05).
+    ("天色暗下去，台上的光亮起来（14 个字）｜style：诗意｜photo_ids：P1", "天色暗下去，台上的光亮起来"),
+    ("那锅冬阴功，味道怎么样？（12 个字）｜type：taste", "那锅冬阴功，味道怎么样？"),
+])
+def test_echoed_shorten_lines_are_stripped(raw, clean):
+    assert body.strip_echo(raw) == clean

@@ -69,5 +69,14 @@ def test_user_text_numbers_sentences_and_questions():
     assert photo_tpl == "{id}{cover}"
     assert "S1｜天色暗下去，台上的光亮起来" in task
     assert "Q1｜推车上，卖的是什么？" in task
-    assert "拿不准时：grounded 算通过，safe 算不通过。" in task
+    assert "拿不准时：grounded 和 fluent 算通过，safe 算不通过。" in task
     assert '{"sentences": [{"id": "S1"' in task  # literal braces survive format_map
+
+
+def test_fluent_is_read_and_unsure_passes():
+    # Decision 2026-11-05 evening item 7: only plainly broken sentences fail.
+    out = verify.parse(_reply(
+        [{"id": "S1", "grounded": True, "mentions_cover": True, "fluent": False, "reason": "读不通"},
+         {"id": "S2", "grounded": True, "mentions_cover": True, "fluent": "unsure"},
+         {"id": "S3", "grounded": True, "mentions_cover": True}], []), 3, 0)
+    assert [out.sentences[s].fluent for s in ("S1", "S2", "S3")] == [False, True, True]

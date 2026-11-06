@@ -144,15 +144,31 @@ def shrink(data: bytes, px: int) -> bytes:
         return data
 
 
-def _messages_shorten(cands: List[body.Candidate]) -> List[dict]:
+def _messages_shorten(cands: List[body.Candidate], scene: str) -> List[dict]:
     """The shorten round: text only, the sentences cut for length."""
     names = texts.json("names")
     lines = "\n".join(names["shorten_line"].format(
         i=i + 1, text=body.clean(c.text), n=body.char_len(body.clean(c.text)),
+        style=c.style or names["none"],
         ids=names["list_sep"].join(c.photo_ids) or names["none"]) for i, c in enumerate(cands))
     return [
         {"role": "system", "content": texts.raw("collect_b_system").strip()},
-        {"role": "user", "content": texts.render("shorten_b_user", lines=lines)},
+        {"role": "user", "content": texts.render("shorten_b_user", lines=lines,
+                                                 scene=scene or names["none"])},
+    ]
+
+
+def _messages_shorten_q(qs: List[questions.Question], scene: str) -> List[dict]:
+    """The question shorten round (decision 2026-11-05 evening, question
+    item 5): text only, the questions cut for length."""
+    names = texts.json("names")
+    lines = "\n".join(names["shorten_q_line"].format(
+        i=i + 1, text=q.text, n=body.char_len(q.text), type=q.type)
+        for i, q in enumerate(qs))
+    return [
+        {"role": "system", "content": texts.raw("collect_b_system").strip()},
+        {"role": "user", "content": texts.render("shorten_q_user", lines=lines,
+                                                 scene=scene or names["none"])},
     ]
 
 
@@ -245,7 +261,7 @@ def _messages_b(meta: dict, a: check_a.AResult, daypart: str, counts: Dict[str, 
 
 def _messages_b_peak(meta: dict, a: check_a.AResult, daypart: str, counts: Dict[str, int],
                      by_id: Dict[str, dict], images: Dict[str, bytes],
-                     too_long: List[str]) -> List[dict]:
+                     too_long: List[str], scene: str) -> List[dict]:
     """The extra call B: detail sentences about the cover photo only. The
     first round's cover sentences cut only for length are shown back to be
     shortened (the model overshoots 22 characters; first real runs)."""
@@ -254,9 +270,10 @@ def _messages_b_peak(meta: dict, a: check_a.AResult, daypart: str, counts: Dict[
                            for t in too_long) or names["none"]
     header, photo_tpl, task = _split("collect_b_peak_user")
     p = a.photos[a.peak]
+    values = _header_values(meta, daypart, counts, names)
+    values["scene"] = scene or names["none"]
     content: List[dict] = [
-        {"type": "text", "text": header.format_map(
-            _header_values(meta, daypart, counts, names)).strip("\n")},
+        {"type": "text", "text": header.format_map(values).strip("\n")},
         {"type": "text", "text": photo_tpl.format_map({
             "id": a.peak, "time": _hhmm(by_id[a.peak]),
             "description": p.description or names["none"], "people": p.people_count})},
@@ -328,7 +345,8 @@ class _Job:
             left = self.remaining() - CALL_MARGIN_SECONDS
             if left <= 0:
                 return None, "deadline"
-            entry = {"call": which, "attempt": attempt, "latency_ms": 0, "prompt_tokens": 0,
+            entry = {"call": which, "attempt": attempt, "model": llm.model_for(which),
+                     "latency_ms": 0, "prompt_tokens": 0,
                      "completion_tokens": 0, "cost_cny": 0.0, "raw": "", "error": ""}
             self.calls.append(entry)
             t0 = time.monotonic()
@@ -464,14 +482,18 @@ def _verify(job: "_Job", ids: List[str], cover: str, images: Dict[str, bytes],
         v = result.sentences[verify.sentence_id(i)]
         log["sentences"][verify.sentence_id(i)] = {
             "text": texts_s[i], "grounded": v.grounded, "mentions_cover": v.mentions_cover,
-            "reason": v.reason}
+            "fluent": v.fluent, "reason": v.reason}
         if not v.grounded:
             rej_s.append((c.text, "c_ungrounded:" + v.reason[:80]))
+            continue
+        if not v.fluent:
+            rej_s.append((c.text, "c_not_fluent:" + v.reason[:80]))
             continue
         ids_ = [pid for pid in c.photo_ids if pid != cover]
         if v.mentions_cover:
             ids_ = [cover] + ids_
-        kept_s.append(body.Candidate(text=c.text, source=c.source, photo_ids=ids_, rank=c.rank))
+        kept_s.append(body.Candidate(text=c.text, source=c.source, photo_ids=ids_, rank=c.rank,
+                                     style=c.style))
     kept_q, rej_q = [], []
     for i, q in enumerate(qs):
         v = result.questions[verify.question_id(i)]
@@ -538,11 +560,33 @@ def _compose(job: "_Job", meta: dict, images: Dict[str, bytes]) -> dict:
                        config.CALL_B_TIMEOUT, _check_b)
     if b is None:
         job.log["b_failure"] = fail
+    # The scene line is the model's own note (decision 2026-11-05 evening,
+    # item 4): logged and passed to the later rounds, never sent to the phone.
+    scene = b.get("scene") if isinstance(b, dict) and isinstance(b.get("scene"), str) else ""
+    job.log["scene"] = scene
     first_ai = body.from_b(b)
+    job.log["b_candidates"] = [{"text": c.text, "style": c.style, "photo_ids": c.photo_ids}
+                               for c in first_ai]
     ai, body_rejected = _hard_bodies(first_ai, a)
     too_long = [body.clean(c.text) for c in first_ai
                 if a.peak in c.photo_ids and body.reject_reason(c, a) == "too_long"]
     model_qs = questions.from_b(b)
+
+    # Question shorten round (decision 2026-11-05 evening, question item 5):
+    # questions cut only for length -> one text-only call (no retry); the
+    # shortened ones take their place and go through the program checks and
+    # call C with the rest. Still too long -> dropped as before. It runs
+    # before call C, so it only spends time C would not need (review
+    # 2026-11-05: a slow reply here used to leave C no time at all).
+    long_qs = questions.too_long(model_qs, a)
+    spare = job.remaining() - config.CALL_C_TIMEOUT - CALL_MARGIN_SECONDS
+    if long_qs and spare > CALL_MARGIN_SECONDS:
+        sq, _ = job.call("b", _messages_shorten_q(long_qs, scene),
+                         min(config.CALL_B_TIMEOUT, spare), _check_b, attempts=1)
+        replies = questions.from_b(sq)
+        job.log["question_shorten"] = {"asked": [q.text for q in long_qs],
+                                       "replies": [q.text for q in replies]}
+        model_qs = questions.with_shortened(model_qs, long_qs, replies)
     qs, q_rejected = questions.hard_check(model_qs, a)
 
     # ---- call C: only what it passes is used; two failures -> templates,
@@ -571,7 +615,7 @@ def _compose(job: "_Job", meta: dict, images: Dict[str, bytes]) -> dict:
     if (long_ones and not body.cites_peak(detail, a) and c_status != "failed"
             and job.remaining() > CALL_MARGIN_SECONDS):
         shortened = True
-        sb, _ = job.call("b", _messages_shorten(long_ones), config.CALL_B_TIMEOUT,
+        sb, _ = job.call("b", _messages_shorten(long_ones, scene), config.CALL_B_TIMEOUT,
                          _check_rewrite, attempts=1)
         s_new = body.from_b(sb)[:len(long_ones)]
         # A reply keeps its own photos when they are selected ones (it may
@@ -583,6 +627,7 @@ def _compose(job: "_Job", meta: dict, images: Dict[str, bytes]) -> dict:
             c.photo_ids = own or (list(long_ones[i].photo_ids) if same_count else [])
             if same_count:
                 c.rank = long_ones[i].rank
+                c.style = c.style or long_ones[i].style
         s_new = [c for c in s_new if c.photo_ids]
         s_ai, s_rejected = _hard_bodies(s_new, a)
         sc_status, s_ai, sc_rej, _, _, sc_log = _verify(job, a.selected, a.peak, images, s_ai, [])
@@ -608,7 +653,8 @@ def _compose(job: "_Job", meta: dict, images: Dict[str, bytes]) -> dict:
     if (not body.cites_peak(detail, a) and b is not None and c_status != "failed"
             and job.remaining() > CALL_MARGIN_SECONDS):
         peak_rewrite = True
-        rb, _ = job.call("b", _messages_b_peak(meta, a, daypart, counts, by_id, images, too_long),
+        rb, _ = job.call("b", _messages_b_peak(meta, a, daypart, counts, by_id, images, too_long,
+                                               scene),
                          config.CALL_B_TIMEOUT, _check_rewrite, attempts=1)
         r_ai, r_rejected = _hard_bodies(body.from_b(rb), a)
         rc_status, r_ai, rc_rej, _, _, rc_log = _verify(job, [a.peak], a.peak, images, r_ai, [])
@@ -622,7 +668,8 @@ def _compose(job: "_Job", meta: dict, images: Dict[str, bytes]) -> dict:
         if body.cites_peak(second, a):
             detail = body.BodyPick(text=second.text, source="llm",
                                    rejected=first_rejected + r_all,
-                                   photo_ids=second.photo_ids, score=second.score)
+                                   photo_ids=second.photo_ids, score=second.score,
+                                   style=second.style)
     if not body.cites_peak(detail, a) and detail.source == "llm":
         # Only a model sentence citing a usable photo (selected, unflagged)
         # can take the cover; the rest give way to the next survivor, and a
@@ -652,7 +699,8 @@ def _compose(job: "_Job", meta: dict, images: Dict[str, bytes]) -> dict:
     # ---- questions: the survivors in the model's order, or B1-B3 ----
     final_qs = questions.final(qs, daypart_name)
     job.log["body"] = {"rejected": detail.rejected, "chosen": detail.text,
-                       "source": detail.source, "templates": [t.text for t in tpls]}
+                       "style": detail.style, "source": detail.source,
+                       "templates": [t.text for t in tpls]}
     job.log["question"] = {"ranked": [{"text": q.text, "type": q.type, "why": q.why}
                                       for q in model_qs],
                            "rejected": q_rejected,
