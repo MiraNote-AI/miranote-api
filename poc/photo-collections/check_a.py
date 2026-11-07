@@ -28,6 +28,7 @@ SCENES = (
     "waterside", "mountain", "transit", "venue_event", "work_study", "other",
 )
 PEOPLE_COUNTS = ("0", "1", "2-4", "5+")
+DROP_REASONS = ("", "duplicate", "unclear", "screenshot_doc", "sensitive", "memo")
 MIN_SELECTED = 3
 MAX_SELECTED = 8
 
@@ -108,6 +109,11 @@ def parse_json(text: Optional[str]) -> dict:
     return value
 
 
+def is_flagged(item: dict) -> bool:
+    """A sensitive flag on one photo of a raw reply, read as _photo reads it."""
+    return bool(SENSITIVE_FLAGS.intersection(_strings(item.get("flags"))))
+
+
 def _strings(value) -> List[str]:
     if not isinstance(value, list):
         return []
@@ -182,8 +188,29 @@ def _photo(item) -> PhotoFacts:
         scene=scene if scene in SCENES else "other",
         flags=[f for f in _strings(item.get("flags")) if f in FLAGS],
         keep=item.get("keep") is not False,
-        drop_reason=item.get("drop_reason") if isinstance(item.get("drop_reason"), str) else "",
+        drop_reason=_drop_reason(item.get("drop_reason")),
     )
+
+
+def _drop_reason(value) -> str:
+    """One of DROP_REASONS; "other" for anything else the model wrote."""
+    value = value.strip() if isinstance(value, str) else ""
+    return value if value in DROP_REASONS else "other"
+
+
+def log_facts(facts: PhotoFacts) -> dict:
+    """A photo's fixed-vocabulary facts: what the log may keep of any photo,
+    since none of it is text the model wrote freely."""
+    return {"flags": facts.flags, "scene": facts.scene, "keep": facts.keep,
+            "drop_reason": facts.drop_reason, "people": facts.people_count,
+            "face_prominent": facts.face_prominent}
+
+
+def logged_photo(item) -> dict:
+    """One photo of a raw reply as the log may keep it: its id and
+    log_facts. Raises CheckFailed when it has no id."""
+    facts = _photo(item)
+    return dict(id=facts.id, **log_facts(facts))
 
 
 def validate(raw, input_ids: List[str]) -> AResult:

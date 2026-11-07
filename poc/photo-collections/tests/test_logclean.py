@@ -1,4 +1,4 @@
-"""The compose log is kept 30 days; stats skip test entries (phase 2, task 4)."""
+"""The compose log is kept 7 days; stats skip test entries (phase 2, task 4)."""
 
 from __future__ import annotations
 
@@ -21,9 +21,9 @@ def _line(days_ago, **extra):
     return json.dumps(dict({"group_key": "g", "ts": ts, "status": "ok"}, **extra)) + "\n"
 
 
-def test_purge_drops_lines_older_than_30_days(tmp_path):
+def test_purge_drops_lines_older_than_7_days(tmp_path):
     path = tmp_path / "compose.jsonl"
-    old, edge, fresh = _line(31, n="old"), _line(30, n="edge"), _line(1, n="fresh")
+    old, edge, fresh = _line(8, n="old"), _line(7, n="edge"), _line(1, n="fresh")
     path.write_text(old + edge + fresh, encoding="utf-8")
     assert logclean.purge(path, NOW) == 1
     assert path.read_text(encoding="utf-8") == edge + fresh

@@ -128,8 +128,9 @@ ids answer 400 `bad_request`.
 | 200 | `{"status": "ok", "memory": {...}}` (shape: handoff section 5.2) |
 | 200 | `{"status": "rejected", "reason": "sensitive" \| "skip_screenshots" \| "too_few_selected" \| "check_failed", "message": "..."}` |
 | 200 | `{"status": "error", "reason": "timeout" \| "model_error", "message": "..."}` |
-| 400 | `{"status": "error", "reason": "bad_request", "message": "..."}` on submit: meta not JSON / missing field / a wrong type (weekday 1-7, raw_count >= 1, start/end time strings, string lists for labels and recent_question_types, faces int, favorite/edited bool, represents >= 1, taken_at ISO 8601) / 0 or > 10 photos / filename stems != meta ids / a file > 5 MB or not a JPEG, PNG or HEIC. No job, no model call. |
+| 400 | `{"status": "error", "reason": "bad_request", "message": "..."}` on submit: meta not JSON / missing field / a wrong type (weekday 1-7, raw_count >= 1, start/end time strings, string lists for labels and recent_question_types, faces int, favorite/edited bool, represents >= 1, taken_at ISO 8601) / 0 or > 10 photos / filename stems != meta ids / a file > 1 MB, not a single-frame JPEG (PNG, HEIC and multi-frame MPO are refused: the phone sends JPEG), more than 64 segments or 256 KB before its image data, or over 1024 px on its long side (read from the header; the phone sends 768 px). No job, no model call. |
 | 404 | `{"status": "expired"}`: unknown job, or older than 1 h. Resubmit. |
+| 429 | `{"detail": "busy"}` with `Retry-After: 10` on submit: 2 x `PHOTO_WORKERS` jobs are already running or waiting (each holds its photos in memory); checked before the upload is read. No job. The phone waits 10 s and submits again. |
 
 `memory.ending.questions` is 1-3 `{text, type, source}` in the model's
 order (`source` `llm`, or `fallback_B1/B2/B3` when none survived, which
@@ -244,8 +245,17 @@ One JSON line per job in `logs/photo-collections/compose.jsonl` (repo root,
 git-ignored): raw A/B/C output, every rejected candidate and question with its
 reason, call C's verdicts, the final picks, `bodySource` / `questionSource`, per-call latency,
 tokens and cost, plus `bucket` and `tz` from meta. No image bytes, no key.
+Each job logs `a.photos`: every photo's fixed-vocabulary facts (`flags`,
+`scene`, `keep`, `drop_reason`, `people`, `face_prominent`), so a rejection
+still shows which photo carried which flag. A job call A rejected (sensitive,
+screenshots, too few selected; also when the rejection lands past the
+deadline) logs no raw model output and no `skip_reason`: call A's reply
+describes the photos. In any other job, check_failed included, call A's reply
+is logged with each photo that has a sensitive flag cut down to its id and
+those facts, and `skip_reason` emptied when a photo is flagged or the job was
+rejected; a reply not in the shape asked for is not logged.
 
-Lines older than 30 days are purged at startup and then every 24 h
+Lines older than 7 days are purged at startup and then every 24 h
 (`logclean.py`; the file is rewritten atomically under the same lock the
 writer uses). A line with no readable `ts` is never deleted.
 `tools/log_stats.py [path]` prints counts by status and reason, mean latency

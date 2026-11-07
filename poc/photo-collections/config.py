@@ -98,7 +98,9 @@ LLM_WORKERS = int(os.getenv("PHOTO_LLM_WORKERS") or 80)
 
 # ---------- Request limits ----------
 MAX_PHOTOS = 10
-MAX_PHOTO_BYTES = 5 * 1024 * 1024
+# The phone sends JPEGs of 768 px on the long side (ComposeSession.prepare).
+MAX_PHOTO_BYTES = 1 * 1024 * 1024
+MAX_PHOTO_PX = 1024
 # The push buckets the phone may send, in tie order (names live in names.txt).
 BUCKET_IDS = ("food", "scenery", "animal", "city", "indoor", "event", "other")
 MAX_TZ_CHARS = 64

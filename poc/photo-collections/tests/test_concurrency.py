@@ -111,3 +111,72 @@ def test_small_llm_pool_warns_at_startup(load_main, monkeypatch, capsys):
     with TestClient(main.app):
         pass
     assert "PHOTO_LLM_WORKERS=10" in capsys.readouterr().out
+
+
+def _wait_until(cond, seconds=5.0):
+    end = time.monotonic() + seconds
+    while not cond():
+        assert time.monotonic() < end, "condition not reached"
+        time.sleep(0.01)
+
+
+def test_store_refuses_jobs_past_its_limit():
+    # Review of api#97: each waiting job holds its photos in memory.
+    import threading
+
+    release = threading.Event()
+    store = jobs.JobStore(workers=1, limit=2)
+    first = store.submit(lambda deadline: release.wait(5) and {"status": "ok"})
+    store.submit(lambda deadline: release.wait(5) and {"status": "ok"})
+    with pytest.raises(jobs.Busy):
+        store.submit(lambda deadline: {"status": "ok"})
+    release.set()
+    _wait_until(lambda: store.get(first) == {"status": "ok"})
+    _wait_until(lambda: store.active == 0)
+    assert store.get(store.submit(lambda deadline: {"status": "ok"})) is not None
+
+
+def test_crashed_job_frees_its_place():
+    store = jobs.JobStore(workers=1, limit=1)
+
+    def boom(deadline):
+        raise RuntimeError("bug")
+
+    job_id = store.submit(boom)
+    _wait_until(lambda: store.get(job_id)["status"] == "error")
+    _wait_until(lambda: store.active == 0)
+    store.submit(lambda deadline: {"status": "ok"})
+
+
+def test_store_limit_defaults_to_twice_the_workers():
+    assert jobs.JobStore(workers=3).limit == 6
+
+
+def test_full_store_answers_429_with_retry_after(client, fake_model):
+    import threading
+
+    release = threading.Event()
+    client.main.STORE = jobs.JobStore(workers=1, limit=1)
+    client.main.STORE.submit(lambda deadline: release.wait(5) and {"status": "ok"})
+    try:
+        r = _submit(client)
+        assert r.status_code == 429
+        assert r.headers["Retry-After"] == "10"
+        assert r.json() == {"detail": "busy"}
+        assert fake_model.calls == []
+    finally:
+        release.set()
+
+
+def test_full_store_answers_429_before_reading_the_upload(client, fake_model):
+    # Review: a refused submit should not first parse 10 photos.
+    import threading
+
+    release = threading.Event()
+    client.main.STORE = jobs.JobStore(workers=1, limit=1)
+    client.main.STORE.submit(lambda deadline: release.wait(5) and {"status": "ok"})
+    try:
+        r = client.post("/collections/compose", json={"meta": "{}"})  # not even multipart
+        assert r.status_code == 429
+    finally:
+        release.set()

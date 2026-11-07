@@ -78,6 +78,46 @@ def image_mime(data: bytes) -> Optional[str]:
     return None
 
 
+def jpeg_size(data: bytes) -> Optional[Tuple[int, int]]:
+    """(width, height) of a single-frame JPEG, read from its header without
+    decoding the pixels; None for anything else. PNG is left out because
+    Pillow inflates its text chunks while reading the header, MPO because
+    only its first frame would be sized (review of api#97)."""
+    if image_mime(data) != "image/jpeg":
+        return None  # never opened: opening a PNG is what inflates its chunks
+    if not _short_jpeg_header(data):
+        return None
+    try:
+        img = Image.open(io.BytesIO(data))
+        return img.size if img.format == "JPEG" else None
+    except Exception:  # noqa: BLE001 -- any open failure means "cannot size it"
+        return None
+
+
+# The phone's JPEGs carry about a dozen segments before the image data.
+MAX_JPEG_SEGMENTS = 64
+MAX_JPEG_HEADER_BYTES = 256 * 1024
+
+
+def _short_jpeg_header(data: bytes) -> bool:
+    """True when the segments before the image data (SOS) are few and small.
+    Pillow walks each one in Python, so 1 MB of empty segments costs it
+    most of a second (review of api#97)."""
+    i, segments = 2, 0
+    while i + 4 <= len(data) and i <= MAX_JPEG_HEADER_BYTES and segments <= MAX_JPEG_SEGMENTS:
+        if data[i] != 0xFF:
+            return False
+        marker = data[i + 1]
+        if marker == 0xFF:  # fill byte
+            i += 1
+            continue
+        if marker == 0xDA:
+            return True
+        i += 2 + int.from_bytes(data[i + 2:i + 4], "big")
+        segments += 1
+    return False
+
+
 def daypart_of(hour: int) -> str:
     """5-11 morning, 11-14 noon, 14-17 afternoon, 17-19 evening, else night."""
     if 5 <= hour < 11:
@@ -375,6 +415,7 @@ class _Job:
         return None, last
 
     def finish(self, result: dict) -> dict:
+        rejected = result.get("status") == "rejected"
         # A result completed after the job deadline is not delivered: the
         # phone has been told (or will be told) "timeout" by then.
         if time.monotonic() > self.deadline and not (
@@ -382,6 +423,21 @@ class _Job:
             self.log["lateResult"] = True
             self.log["lateStatus"] = result.get("status")
             result = _result("error", "timeout")
+        # Call A's reply describes every photo, the sensitive ones too
+        # (review of api#97). A job call A rejected (sensitive, screenshots,
+        # too few) logs its verdict and each photo's fixed facts, not the
+        # text; any other job, check_failed included, logs call A's reply
+        # without the text of a flagged photo, so a broken reply stays readable.
+        if rejected and "a" in self.log:
+            for entry in self.calls:
+                entry["raw"] = ""
+            self.log["a"]["skip_reason"] = ""
+        else:
+            for entry in self.calls:
+                if entry["call"] == "a" and entry["raw"]:
+                    entry["raw"], flagged = _without_flagged_text(entry["raw"], keep_skip_reason=not rejected)
+                    if flagged and "a" in self.log:
+                        self.log["a"]["skip_reason"] = ""
         self.log.update(
             ts=datetime.now(timezone.utc).isoformat(timespec="seconds"),
             status=result["status"],
@@ -392,6 +448,30 @@ class _Job:
         )
         _write_log(self.log)
         return result
+
+
+def _without_flagged_text(raw: str, keep_skip_reason: bool = True) -> Tuple[str, bool]:
+    """(call A's reply as logged, whether a photo was flagged). A photo with
+    a sensitive flag, read the way check_a reads it, keeps only its id and
+    check_a.log_facts, and the reply's skip_reason is emptied (also when
+    keep_skip_reason is false); the reply is unchanged when neither applies,
+    and "" when it is not the shape asked for (it may still describe the photos)."""
+    try:
+        reply = check_a.parse_json(raw)
+        photos = reply["photos"]
+        if not isinstance(photos, list) or not all(isinstance(p, dict) for p in photos):
+            return "", False
+        flagged = [n for n, p in enumerate(photos) if check_a.is_flagged(p)]
+        for n in flagged:
+            photos[n] = check_a.logged_photo(photos[n])
+    except Exception:  # noqa: BLE001 -- not the expected shape
+        return "", False
+    blank_skip = bool(flagged) or not keep_skip_reason
+    if not flagged and not (blank_skip and reply.get("skip_reason")):
+        return raw, False
+    if blank_skip and "skip_reason" in reply:
+        reply["skip_reason"] = ""
+    return json.dumps(reply, ensure_ascii=False), bool(flagged)
 
 
 def _write_log(entry: dict) -> None:
@@ -539,7 +619,8 @@ def _compose(job: "_Job", meta: dict, images: Dict[str, bytes]) -> dict:
         status = "rejected" if reason == "check_failed" else "error"
         return job.finish(_result(status, reason))
     job.log["a"] = {"verdict": a.verdict, "selected": a.selected, "peak": a.peak,
-                    "peak_replaced_from": a.peak_replaced_from, "skip_reason": a.skip_reason}
+                    "peak_replaced_from": a.peak_replaced_from, "skip_reason": a.skip_reason,
+                    "photos": {pid: check_a.log_facts(f) for pid, f in a.photos.items()}}
     if a.verdict != "ok":
         return job.finish(_result("rejected", a.verdict))
 

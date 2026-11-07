@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 
 import jobs
-from tests.test_compose import IMAGES, _a_json, _b_json, _meta
+from tests.test_compose import IMAGES, _a_json, _b_json, _meta, jpeg
 
 
 def _files(ids=None, data=None):
@@ -285,18 +285,84 @@ def test_non_image_upload_400(client, fake_model):
     _assert_400(_submit(client, files=_files(data={"P1": b"hello, not a photo"})), fake_model)
 
 
-def test_png_and_heic_uploads_accepted(client, fake_model):
-    png = b"\x89PNG\r\n\x1a\n" + b"0" * 32
+def _png(w, h, mode="RGB", pixels=None):
+    import io
+
+    from PIL import Image
+
+    img = Image.frombytes(mode, (w, h), pixels) if pixels else Image.new(mode, (w, h))
+    out = io.BytesIO()
+    img.save(out, "PNG")
+    return out.getvalue()
+
+
+def test_png_upload_400(client, fake_model):
+    # Review: Pillow inflates a PNG's text chunks while reading its header
+    # (up to 64 MB a file); the phone sends JPEG only.
+    _assert_400(_submit(client, files=_files(data={"P1": _png(8, 8)})), fake_model)
+
+
+def test_multi_frame_jpeg_400(client, fake_model):
+    import io
+
+    from PIL import Image
+
+    out = io.BytesIO()
+    Image.new("RGB", (800, 600)).save(out, "MPO", save_all=True,
+                                       append_images=[Image.new("RGB", (2000, 2000))])
+    mpo = out.getvalue()
+    assert mpo[:3] == b"\xff\xd8\xff"
+    _assert_400(_submit(client, files=_files(data={"P1": mpo})), fake_model)
+
+
+def _claims_size(data, w, h):
+    """`data` with its JPEG frame header (SOF0) patched to claim w x h."""
+    at = data.index(b"\xff\xc0") + 5
+    return data[:at] + h.to_bytes(2, "big") + w.to_bytes(2, "big") + data[at + 4:]
+
+
+def test_heic_upload_400(client, fake_model):
+    # Pillow cannot read a HEIC's size, so it cannot be checked; the phone sends JPEG.
     heic = b"\x00\x00\x00\x18ftypheic" + b"0" * 32
+    _assert_400(_submit(client, files=_files(data={"P1": heic})), fake_model)
+
+
+def test_jpeg_that_does_not_open_400(client, fake_model):
+    _assert_400(_submit(client, files=_files(data={"P1": b"\xff\xd8\xff\xe0not-a-jpeg"})), fake_model)
+
+
+@pytest.mark.filterwarnings("ignore::PIL.Image.DecompressionBombWarning")  # Pillow saying so
+def test_small_file_of_huge_pixels_400(client, fake_model):
+    # Review of api#97: a small file whose header claims 12000 x 12000
+    # would decode to hundreds of MB.
+    bomb = _claims_size(jpeg(), 12000, 12000)
+    assert len(bomb) < 1024
+    _assert_400(_submit(client, files=_files(data={"P1": bomb})), fake_model)
+
+
+def test_long_side_over_1024_px_400(client, fake_model):
+    _assert_400(_submit(client, files=_files(data={"P1": jpeg(1025, 10)})), fake_model)
+
+
+def test_long_side_of_1024_px_accepted(client, fake_model):
     fake_model.reply("a", _a_json()).reply("b", _b_json())
-    r = _submit(client, files=_files(data={"P1": png, "P2": heic}))
+    r = _submit(client, files=_files(data={"P1": jpeg(1024, 768), "P2": jpeg(768, 1024)}))
     assert r.status_code == 202
-    _poll(client, r.json()["job_id"])
-    content = fake_model.calls[0]["messages"][1]["content"]
-    urls = [p["image_url"]["url"] for p in content if p["type"] == "image_url"]
-    assert urls[0].startswith("data:image/png;base64,")
-    assert urls[1].startswith("data:image/heic;base64,")
-    assert urls[2].startswith("data:image/jpeg;base64,")
+    assert _poll(client, r.json()["job_id"]).json()["status"] == "ok"
+
+
+def test_photo_over_1_mb_400(client, fake_model):
+    import os
+
+    import io
+
+    from PIL import Image
+
+    out = io.BytesIO()
+    Image.frombytes("RGB", (1000, 1000), os.urandom(3 * 1000 * 1000)).save(out, "JPEG", quality=100)
+    noisy = out.getvalue()  # its size is allowed
+    assert len(noisy) > 1024 * 1024
+    _assert_400(_submit(client, files=_files(data={"P1": noisy})), fake_model)
 
 
 def test_job_finishing_after_cap_reads_timeout():
@@ -406,3 +472,49 @@ def test_bad_tz_400(client, fake_model, value):
 def test_tz_of_64_chars_accepted(client, fake_model):
     fake_model.reply("a", _a_json()).reply("b", _b_json())
     assert _submit(client, _meta(tz="x" * 64)).status_code == 202
+
+
+def test_png_is_refused_without_opening_it(monkeypatch):
+    # Opening is what inflates a PNG's text chunks, so the check must not open it.
+    import compose
+
+    png = _png(8, 8)
+    opened = []
+    monkeypatch.setattr(compose.Image, "open", lambda *a, **k: opened.append(a))
+    assert compose.jpeg_size(png) is None
+    assert opened == []
+
+
+def test_jpeg_padded_with_empty_segments_is_refused_fast():
+    # Review: Pillow walks every segment before the image data in Python;
+    # 1 MB of empty APP1 segments took 0.7 s on the event loop.
+    import compose
+
+    good = jpeg(768, 768)
+    bad = good[:2] + b"\xff\xe1\x00\x02" * 250000 + good[2:]
+    started = time.monotonic()
+    assert compose.jpeg_size(bad) is None
+    assert time.monotonic() - started < 0.1
+
+
+def test_jpeg_with_a_quarter_mb_before_its_image_data_is_refused():
+    import compose
+
+    good = jpeg(768, 768)
+    big_app = b"\xff\xe2\xff\xff" + b"\x00" * 0xfffd  # one 64 KB APP2 segment
+    assert compose.jpeg_size(good[:2] + big_app * 4 + good[2:]) is None
+    assert compose.jpeg_size(good[:2] + big_app * 3 + good[2:]) == (768, 768)
+
+
+def test_jpeg_with_exif_is_sized():
+    import io
+
+    import compose
+    from PIL import Image
+
+    img = Image.new("RGB", (768, 576))
+    exif = Image.Exif()
+    exif[0x0112] = 6  # orientation
+    out = io.BytesIO()
+    img.save(out, "JPEG", exif=exif.tobytes(), quality=82)
+    assert compose.jpeg_size(out.getvalue()) == (768, 576)

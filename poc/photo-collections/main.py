@@ -75,6 +75,11 @@ app.add_middleware(
 )
 
 
+def _busy() -> JSONResponse:
+    # The phone waits 10 s on a 429 and submits again (ComposeSession.submit).
+    return JSONResponse({"detail": "busy"}, status_code=429, headers={"Retry-After": "10"})
+
+
 def _bad_request() -> JSONResponse:
     return JSONResponse(
         {"status": "error", "reason": "bad_request", "message": texts.message("bad_request")},
@@ -174,7 +179,10 @@ async def _read_photos(form, ids) -> Optional[Dict[str, bytes]]:
         await f.close()
         if not data or len(data) > config.MAX_PHOTO_BYTES:
             return None
-        if compose.image_mime(data) is None:  # JPEG, PNG or HEIC only
+        # JPEG only, sized from its header: a small file can still decode to
+        # a huge image (review of api#97). The phone sends JPEG.
+        size = compose.jpeg_size(data)
+        if size is None or max(size) > config.MAX_PHOTO_PX:
             return None
         images[stem] = data
     if set(images) != set(ids):
@@ -185,6 +193,8 @@ async def _read_photos(form, ids) -> Optional[Dict[str, bytes]]:
 @app.post("/collections/compose")
 async def compose_route(request: Request):
     """Validate and queue one group; 202 {"job_id"} at once."""
+    if STORE.full():  # before reading the photos; submit checks again
+        return _busy()
     try:
         form = await request.form(max_files=config.MAX_PHOTOS + 1)
     except Exception:  # noqa: BLE001 -- not multipart, or malformed
@@ -198,8 +208,12 @@ async def compose_route(request: Request):
             return _bad_request()
     finally:
         await form.close()
-    job_id = STORE.submit(lambda deadline: compose.run(meta, images, deadline))
+    try:
+        job_id = STORE.submit(lambda deadline: compose.run(meta, images, deadline))
+    except jobs.Busy:
+        return _busy()
     return JSONResponse({"job_id": job_id}, status_code=202)
+
 
 
 MAX_BATCH_IDS = 20  # the phone sends at most 7; the bound stops abuse of one request

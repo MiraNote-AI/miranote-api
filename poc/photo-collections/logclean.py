@@ -1,4 +1,5 @@
-"""Keep the compose log to 30 days.
+"""Keep the compose log to 7 days (review of api#97: it holds model text
+about the photos).
 
 The log is one JSON line per job (compose._write_log). A line is dropped
 only when its `ts` is readable and older than keep_days; a line we cannot
@@ -33,7 +34,7 @@ def _too_old(line: str, cutoff: datetime) -> bool:
     return when < cutoff
 
 
-def purge(path: Path, now: datetime, keep_days: int = 30) -> int:
+def purge(path: Path, now: datetime, keep_days: int = 7) -> int:
     """Rewrite `path` without lines older than keep_days; returns lines removed."""
     path = Path(path)
     cutoff = now - timedelta(days=keep_days)

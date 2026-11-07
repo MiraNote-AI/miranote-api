@@ -45,7 +45,18 @@ def _meta(**over):
     return meta
 
 
-IMAGES = {pid: b"\xff\xd8\xff\xe0fake-jpeg-" + pid.encode() for pid in ["P1", "P2", "P3", "P4", "P5"]}
+def jpeg(w=8, h=8, color=(200, 120, 80)) -> bytes:
+    """A real JPEG: uploads must open (main._read_photos reads their size)."""
+    import io
+
+    from PIL import Image
+
+    out = io.BytesIO()
+    Image.new("RGB", (w, h), color).save(out, "JPEG")
+    return out.getvalue()
+
+
+IMAGES = {pid: jpeg(color=(40 * n, 120, 80)) for n, pid in enumerate(["P1", "P2", "P3", "P4", "P5"], 1)}
 
 
 def _img(pid):
@@ -855,3 +866,159 @@ def test_no_question_shorten_round_without_long_questions(fake_model, tmp_log):
     fake_model.reply("a", _a_json()).reply("b", _b_json(ranked=[Q1, Q2]))
     _run()
     assert fake_model.count("b") == 1 and "question_shorten" not in _log(tmp_log)
+
+
+def test_rejected_job_logs_no_raw_model_text(fake_model, tmp_log):
+    # Review of api#97: call A describes each photo, sensitive ones included;
+    # a rejected job keeps the verdict but none of that text.
+    a = json.loads(_a_json())
+    a["photos"][2]["flags"] = ["hospital"]
+    a["photos"][2]["description"] = "unique-sensitive-description"
+    fake_model.reply("a", json.dumps(a, ensure_ascii=False))
+    assert _run()["reason"] == "sensitive"
+    entry = _log(tmp_log)
+    assert entry["a"]["verdict"] == "sensitive"
+    assert [c["raw"] for c in entry["calls"]] == [""]
+    assert "unique-sensitive-description" not in tmp_log.read_text(encoding="utf-8")
+
+
+def test_check_failed_job_logs_no_raw_model_text(fake_model, tmp_log):
+    fake_model.reply("a", "x-unique-reply").reply("a", "y-unique-reply")
+    assert _run()["reason"] == "check_failed"
+    entry = _log(tmp_log)
+    assert [c["raw"] for c in entry["calls"]] == ["", ""]
+    assert entry["calls"][0]["error"].startswith("check_failed")
+
+
+def test_late_rejected_job_logs_no_raw_model_text(fake_model, tmp_log, monkeypatch):
+    # Review: a rejection that lands past the deadline is logged as a timeout
+    # and must still drop call A's text.
+    monkeypatch.setattr(compose, "CALL_MARGIN_SECONDS", 0.0)
+    a = json.loads(_a_json())
+    a["photos"][2]["flags"] = ["hospital"]
+    a["photos"][2]["description"] = "unique-late-description"
+
+    def slow_a(messages):
+        time.sleep(0.4)
+        return json.dumps(a, ensure_ascii=False)
+
+    fake_model.respond("a", slow_a)
+    assert _run(deadline=time.monotonic() + 0.3)["reason"] == "timeout"
+    entry = _log(tmp_log)
+    assert entry["lateStatus"] == "rejected"
+    assert "unique-late-description" not in tmp_log.read_text(encoding="utf-8")
+
+
+def test_sensitive_job_logs_no_skip_reason_text(fake_model, tmp_log):
+    a = json.loads(_a_json(skip=True, skip_reason="unique-skip-reason"))
+    a["photos"][2]["flags"] = ["hospital"]
+    fake_model.reply("a", json.dumps(a, ensure_ascii=False))
+    assert _run()["reason"] == "sensitive"
+    assert "unique-skip-reason" not in tmp_log.read_text(encoding="utf-8")
+
+
+def test_ok_job_logs_no_text_of_a_flagged_photo(fake_model, tmp_log):
+    # Review: a flagged photo that is not selected does not reject the group;
+    # its description and visible text still stay out of the log.
+    a = json.loads(_a_json())
+    a["photos"][4]["flags"] = ["injury"]
+    a["photos"][4]["description"] = "unique-flagged-description"
+    a["photos"][4]["text"] = ["unique-flagged-text"]
+    fake_model.reply("a", json.dumps(a, ensure_ascii=False)).reply("b", _b_json())
+    assert _run()["status"] == "ok"
+    line = tmp_log.read_text(encoding="utf-8")
+    assert "unique-flagged-description" not in line and "unique-flagged-text" not in line
+    logged = json.loads(_log(tmp_log)["calls"][0]["raw"])
+    assert logged["photos"][4]["flags"] == ["injury"]
+    assert logged["photos"][0]["description"] == a["photos"][0]["description"]
+
+
+def test_ok_job_without_flags_logs_call_a_unchanged(fake_model, tmp_log):
+    fake_model.reply("a", _a_json()).reply("b", _b_json())
+    assert _run()["status"] == "ok"
+    assert _log(tmp_log)["calls"][0]["raw"] == _a_json()
+
+
+def _ok_with_flagged_p5(**p5):
+    a = json.loads(_a_json())
+    a["photos"][4].update(p5)
+    return a
+
+
+def test_flag_read_as_check_a_reads_it_is_scrubbed(fake_model, tmp_log):
+    a = _ok_with_flagged_p5(flags=[" injury "], description="unique-spaced-flag")
+    fake_model.reply("a", json.dumps(a, ensure_ascii=False)).reply("b", _b_json())
+    assert _run()["status"] == "ok"
+    assert "unique-spaced-flag" not in tmp_log.read_text(encoding="utf-8")
+
+
+def test_flagged_photo_keeps_only_non_text_fields(fake_model, tmp_log):
+    a = _ok_with_flagged_p5(flags=["injury"], subjects=[{"name": "unique-subject", "type": "object"}],
+                            note="unique-extra-key")
+    a["skip_reason"] = "unique-top-skip-reason"
+    fake_model.reply("a", json.dumps(a, ensure_ascii=False)).reply("b", _b_json())
+    assert _run()["status"] == "ok"
+    line = tmp_log.read_text(encoding="utf-8")
+    for leak in ("unique-subject", "unique-extra-key", "unique-top-skip-reason"):
+        assert leak not in line, leak
+    p5 = json.loads(_log(tmp_log)["calls"][0]["raw"])["photos"][4]
+    assert set(p5) == {"id", "flags", "keep", "drop_reason", "scene", "people", "face_prominent"}
+
+
+def test_failed_attempt_with_photos_not_a_list_logs_no_raw(fake_model, tmp_log):
+    bad = json.dumps({"photos": {"P5": {"flags": ["injury"], "description": "unique-dict-photos"}}})
+    fake_model.reply("a", bad).reply("a", _a_json()).reply("b", _b_json())
+    assert _run()["status"] == "ok"
+    entry = _log(tmp_log)
+    assert entry["calls"][0]["raw"] == ""
+    assert "unique-dict-photos" not in tmp_log.read_text(encoding="utf-8")
+
+
+def test_sensitive_job_logs_which_photo_was_flagged(fake_model, tmp_log):
+    # User ask: a rejected job must still show why, in fixed values only.
+    a = json.loads(_a_json())
+    a["photos"][2]["flags"] = ["hospital"]
+    fake_model.reply("a", json.dumps(a, ensure_ascii=False))
+    assert _run()["reason"] == "sensitive"
+    entry = _log(tmp_log)
+    assert entry["a"]["photos"]["P3"] == {"flags": ["hospital"], "scene": "venue_event", "keep": True,
+                                          "drop_reason": "", "people": "2-4", "face_prominent": False}
+    assert set(entry["a"]["photos"]) == {"P1", "P2", "P3", "P4", "P5"}
+    assert a["photos"][2]["description"] not in tmp_log.read_text(encoding="utf-8")
+
+
+def test_free_text_in_fixed_fields_is_never_logged(fake_model, tmp_log):
+    a = _ok_with_flagged_p5(flags=["injury"], drop_reason="unique-drop-text",
+                            scene="unique-scene-text", people={"count": "unique-count-text"})
+    fake_model.reply("a", json.dumps(a, ensure_ascii=False)).reply("b", _b_json())
+    assert _run()["status"] == "ok"
+    line = tmp_log.read_text(encoding="utf-8")
+    for leak in ("unique-drop-text", "unique-scene-text", "unique-count-text"):
+        assert leak not in line, leak
+    assert _log(tmp_log)["a"]["photos"]["P5"]["drop_reason"] == "other"
+
+
+def test_check_failed_job_keeps_raw_without_flagged_text(fake_model, tmp_log):
+    # User ask: a reply that broke a rule stays readable, minus flagged photos.
+    a = _ok_with_flagged_p5(flags=["injury"], description="unique-flagged-in-failed")
+    a["peak_id"] = "P9"
+    a["skip_reason"] = "unique-failed-skip-reason"
+    bad = json.dumps(a, ensure_ascii=False)
+    fake_model.reply("a", bad).reply("a", bad)
+    assert _run()["reason"] == "check_failed"
+    entry = _log(tmp_log)
+    logged = json.loads(entry["calls"][0]["raw"])
+    assert logged["peak_id"] == "P9"
+    assert logged["photos"][0]["description"] == a["photos"][0]["description"]
+    line = tmp_log.read_text(encoding="utf-8")
+    assert "unique-flagged-in-failed" not in line and "unique-failed-skip-reason" not in line
+    assert entry["calls"][0]["error"].startswith("check_failed")
+
+
+def test_check_failed_job_logs_no_skip_reason_even_without_flags(fake_model, tmp_log):
+    a = json.loads(_a_json(peak_id="P9", skip_reason="unique-unflagged-skip-reason"))
+    bad = json.dumps(a, ensure_ascii=False)
+    fake_model.reply("a", bad).reply("a", bad)
+    assert _run()["reason"] == "check_failed"
+    assert json.loads(_log(tmp_log)["calls"][0]["raw"])["peak_id"] == "P9"
+    assert "unique-unflagged-skip-reason" not in tmp_log.read_text(encoding="utf-8")
