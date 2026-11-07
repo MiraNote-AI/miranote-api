@@ -1,6 +1,6 @@
 # miranote-api
 
-Backend POCs for MiraNote. Five small FastAPI services, one per
+Backend POCs for MiraNote. Six small FastAPI services, one per
 capability; the iOS app talks to all of them on localhost.
 
 | Service | Port | Needs |
@@ -10,6 +10,7 @@ capability; the iOS app talks to all of them on localhost.
 | image-generation (generate / cutout / stylize / describe) | 8002 | `.env` with GCP `PROJECT_ID` + gcloud ADC |
 | chatbot (journal chat, drafts, titles) | 8003 | `.env` with `LLM_API_KEY` |
 | retrieval (quote corpus) | 8004 | `.env` with `LLM_API_KEY` |
+| photo-collections (photo trigger: photos -> push / story / ending) | 8006 | `.env` with DashScope `LLM_API_KEY` |
 
 ## Quick start
 
@@ -103,7 +104,7 @@ Two kinds of dependencies:
 ## Smoke tests
 
 ```bash
-for p in 8001 8002 8003 8004 8005; do curl -s -o /dev/null -w "$p %{http_code}\n" localhost:$p/docs; done
+for p in 8001 8002 8003 8004 8005 8006; do curl -s -o /dev/null -w "$p %{http_code}\n" localhost:$p/docs; done
 poc/chatbot/.venv/bin/python3 -m pytest poc/chatbot/tests -q
 cd poc/image-generation && .venv/bin/python3 -m unittest discover tests
 ```

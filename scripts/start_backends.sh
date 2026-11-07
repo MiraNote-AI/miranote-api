@@ -27,6 +27,7 @@ SERVICES=(
   "image:image-generation:main:app:8002"
   "chat:chatbot:poc.chatbot.main:app:8003"
   "voice:voice-to-text:main:app:8005"
+  "collections:photo-collections:main:app:8006"
 )
 
 echo "== building the Apple Vision matte helper"
@@ -136,5 +137,6 @@ echo "      https://beta-text.miranote.app    -> :8001"
 echo "      https://beta-image.miranote.app   -> :8002"
 echo "      https://beta-chat.miranote.app    -> :8003"
 echo "      https://beta-voice.miranote.app   -> :8005"
+echo "      https://beta-collections.miranote.app -> :8006"
 echo "   Tunnel: scripts/start_tunnel.sh (separate lifecycle, start it too)"
 echo "   Stop everything: scripts/stop_backends.sh"
