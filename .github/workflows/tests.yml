@@ -1,5 +1,5 @@
 # .github/workflows/tests.yml -- repo-local (not synced from MiraNote-AI/.github).
-# Runs the four offline pytest suites the verify-repo skill lists for this
+# Runs the five offline pytest suites the verify-repo skill lists for this
 # repo, so a PR's test result is visible without trusting a local run.
 # Every model call is stubbed inside the suites: no network, no API keys.
 
@@ -20,7 +20,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # chatbot and retrieval run from the repo root, the other two from
+          # chatbot and retrieval run from the repo root, the others from
           # their POC directory -- the same commands verify-repo gives.
           # chatbot's main.py refuses to import without LLM_API_KEY (a local
           # run reads it from poc/chatbot/.env); its tests stub every call,
@@ -37,6 +37,9 @@ jobs:
             tests: tests/
           - suite: text-clean-expand
             workdir: poc/text-clean-expand
+            tests: tests/
+          - suite: photo-collections
+            workdir: poc/photo-collections
             tests: tests/
     steps:
       - uses: actions/checkout@v4

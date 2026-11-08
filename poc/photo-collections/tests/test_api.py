@@ -1,0 +1,520 @@
+"""Submit-and-poll routes (handoff 5.1 / 5.2 plus the two gap fills)."""
+
+from __future__ import annotations
+
+import builtins
+import json
+import re
+import threading
+import time
+from pathlib import Path
+
+import pytest
+
+import jobs
+from tests.test_compose import IMAGES, _a_json, _b_json, _meta, jpeg
+
+
+def _files(ids=None, data=None):
+    ids = ids or ["P1", "P2", "P3", "P4", "P5"]
+    return [("photos", (pid + ".jpg", (data or {}).get(pid, IMAGES.get(pid, b"\xff\xd8x")),
+                        "image/jpeg")) for pid in ids]
+
+
+def _submit(client, meta=None, files=None):
+    return client.post("/collections/compose",
+                       data={"meta": meta if isinstance(meta, str) else json.dumps(meta or _meta())},
+                       files=files if files is not None else _files())
+
+
+def _poll(client, job_id, until=("ok", "rejected", "error"), seconds=15.0):
+    end = time.monotonic() + seconds
+    while time.monotonic() < end:
+        r = client.get("/collections/jobs/" + job_id)
+        if r.status_code != 200 or r.json()["status"] in until:
+            return r
+        time.sleep(0.02)
+    raise AssertionError("job did not finish")
+
+
+def test_compose_returns_202_job_id_fast(client, fake_model):
+    gate = threading.Event()
+    fake_model.reply("a", _a_json(), gate=gate).reply("b", _b_json())
+    started = time.monotonic()
+    r = _submit(client)
+    assert r.status_code == 202
+    assert time.monotonic() - started < 2
+    job_id = r.json()["job_id"]
+    assert re.fullmatch(r"[0-9a-f]{32}", job_id)
+    assert client.get("/collections/jobs/" + job_id).json() == {"status": "running"}
+    gate.set()
+    assert _poll(client, job_id).json()["status"] == "ok"
+
+
+def test_poll_running_then_ok(client, fake_model):
+    fake_model.reply("a", _a_json()).reply("b", _b_json())
+    job_id = _submit(client).json()["job_id"]
+    r = _poll(client, job_id)
+    body = r.json()
+    assert r.status_code == 200
+    assert body["status"] == "ok"
+    assert body["memory"]["push"]["title"] == "10.18 · 达拉斯植物园 · 傍晚"
+
+
+def test_rejected_job_reads_rejected(client, fake_model):
+    fake_model.reply("a", "x").reply("a", "y")
+    job_id = _submit(client).json()["job_id"]
+    assert _poll(client, job_id).json() == {
+        "status": "rejected", "reason": "check_failed", "message": "AI 的结果没通过检查"}
+
+
+def test_unknown_job_404_expired(client):
+    r = client.get("/collections/jobs/" + "0" * 32)
+    assert r.status_code == 404
+    assert r.json() == {"status": "expired"}
+
+
+class _Clock:
+    def __init__(self):
+        self.now = 1000.0
+
+    def __call__(self):
+        return self.now
+
+
+def test_job_expires_after_ttl():
+    clock = _Clock()
+    store = jobs.JobStore(ttl=900, cap=300, clock=clock)
+    job_id = store.submit(lambda deadline: {"status": "ok", "memory": {}})
+    deadline = time.monotonic() + 2
+    while store.get(job_id) == {"status": "running"} and time.monotonic() < deadline:
+        time.sleep(0.01)
+    clock.now += 899
+    assert store.get(job_id)["status"] == "ok"
+    clock.now += 2
+    assert store.get(job_id) is None
+
+
+def test_job_over_cap_reads_timeout():
+    clock = _Clock()
+    store = jobs.JobStore(ttl=900, cap=300, clock=clock)
+    release = threading.Event()
+    job_id = store.submit(lambda deadline: release.wait(5) and {"status": "ok", "memory": {}})
+    assert store.get(job_id) == {"status": "running"}
+    clock.now += 301
+    assert store.get(job_id) == {"status": "error", "reason": "timeout", "message": "AI 超时"}
+    release.set()
+    time.sleep(0.05)
+    assert store.get(job_id)["reason"] == "timeout"  # a late result does not overwrite it
+
+
+def test_crashed_job_reads_model_error():
+    store = jobs.JobStore()
+
+    def boom(deadline):
+        raise RuntimeError("bug")
+
+    job_id = store.submit(boom)
+    end = time.monotonic() + 2
+    while store.get(job_id) == {"status": "running"} and time.monotonic() < end:
+        time.sleep(0.01)
+    assert store.get(job_id)["reason"] == "model_error"
+
+
+def test_expired_job_on_the_route(client, fake_model):
+    clock = _Clock()
+    client.main.STORE = jobs.JobStore(clock=clock)
+    fake_model.reply("a", _a_json()).reply("b", _b_json())
+    job_id = _submit(client).json()["job_id"]
+    _poll(client, job_id)
+    clock.now += 3601
+    r = client.get("/collections/jobs/" + job_id)
+    assert (r.status_code, r.json()) == (404, {"status": "expired"})
+
+
+def _assert_400(r, fake_model):
+    assert r.status_code == 400
+    assert r.json() == {"status": "error", "reason": "bad_request", "message": "提交的照片或信息不完整"}
+    assert fake_model.calls == []
+
+
+def test_eleven_photos_400_no_model_call(client, fake_model):
+    meta = _meta()
+    ids = ["P{}".format(i) for i in range(1, 12)]
+    meta["photos"] = [dict(meta["photos"][0], id=pid) for pid in ids]
+    _assert_400(_submit(client, meta, _files(ids)), fake_model)
+
+
+def test_zero_photos_400(client, fake_model):
+    _assert_400(_submit(client, _meta(photos=[]), []), fake_model)
+
+
+def test_filename_mismatch_400(client, fake_model):
+    _assert_400(_submit(client, files=_files(["P1", "P2", "P3", "P4", "X5"])), fake_model)
+    _assert_400(_submit(client, files=_files(["P1", "P2", "P3", "P4"])), fake_model)
+
+
+def test_duplicate_ids_400(client, fake_model):
+    meta = _meta()
+    meta["photos"][1]["id"] = "P1"
+    _assert_400(_submit(client, meta, _files(["P1", "P1", "P3", "P4", "P5"])), fake_model)
+
+
+def test_bad_meta_json_400(client, fake_model):
+    _assert_400(_submit(client, "{not json"), fake_model)
+    _assert_400(_submit(client, "[]"), fake_model)
+
+
+@pytest.mark.parametrize("field", ["group_key", "date", "weekday", "start_time", "end_time",
+                                   "raw_count", "covers_all", "recent_question_types", "photos"])
+def test_missing_meta_field_400(client, fake_model, field):
+    meta = _meta()
+    del meta[field]
+    _assert_400(_submit(client, meta), fake_model)
+
+
+def test_bad_taken_at_400(client, fake_model):
+    meta = _meta()
+    meta["photos"][0]["taken_at"] = "yesterday"
+    _assert_400(_submit(client, meta), fake_model)
+
+
+def test_oversized_photo_400(client, fake_model):
+    big = {"P1": b"\xff\xd8" + b"0" * (5 * 1024 * 1024)}
+    _assert_400(_submit(client, files=_files(data=big)), fake_model)
+
+
+def test_not_multipart_400(client, fake_model):
+    _assert_400(client.post("/collections/compose", json={"meta": "{}"}), fake_model)
+
+
+def test_photos_not_written_to_disk(client, fake_model, tmp_log, monkeypatch):
+    writes = []
+    real_open = builtins.open
+
+    def spy_open(file, mode="r", *args, **kwargs):
+        if any(m in mode for m in ("w", "a", "x", "+")):
+            writes.append(str(file))
+        return real_open(file, mode, *args, **kwargs)
+
+    def no_write_bytes(self, data):
+        raise AssertionError("Path.write_bytes called on " + str(self))
+
+    monkeypatch.setattr(builtins, "open", spy_open)
+    monkeypatch.setattr(Path, "write_bytes", no_write_bytes)
+    fake_model.reply("a", _a_json()).reply("b", _b_json())
+    job_id = _submit(client).json()["job_id"]
+    assert _poll(client, job_id).json()["status"] == "ok"
+    assert writes == [str(tmp_log)]
+    logged = tmp_log.read_bytes()
+    for data in IMAGES.values():
+        assert data not in logged
+
+
+def test_two_jobs_do_not_mix(client, fake_model):
+    def a_for(messages):
+        ids = []
+        for part in messages[1]["content"]:
+            if part["type"] == "text":
+                m = re.match(r"^(\w+)｜", part["text"])
+                if m:
+                    ids.append(m.group(1))
+        raw = json.loads(_a_json())
+        for photo, pid in zip(raw["photos"], ids):
+            photo["id"] = pid
+        raw["photos"] = raw["photos"][: len(ids)]
+        raw["selected_ids"] = ids[:4]
+        raw["peak_id"] = ids[3]
+        return json.dumps(raw, ensure_ascii=False)
+
+    def b_for(messages):
+        texts_ = [p["text"] for p in messages[1]["content"] if p["type"] == "text"]
+        peak = next(re.match(r"^(\w+)｜", t).group(1) for t in texts_ if "｜封面｜" in t)
+        return _b_json(candidates=[{"text": "台中央，落下一束光", "photo_ids": [peak]}])
+
+    fake_model.respond("a", a_for, times=2).respond("b", b_for, times=2)
+    m1 = _meta(group_key="g1")
+    m2 = _meta(group_key="g2", place="休斯敦")
+    for p in m2["photos"]:
+        p["id"] = p["id"].replace("P", "Q")
+    q_files = [("photos", (pid.replace("P", "Q") + ".jpg", data, "image/jpeg"))
+               for pid, data in IMAGES.items()]
+    j1 = _submit(client, m1).json()["job_id"]
+    j2 = _submit(client, m2, q_files).json()["job_id"]
+    r1 = _poll(client, j1).json()["memory"]
+    r2 = _poll(client, j2).json()["memory"]
+    assert (r1["id"], r1["push"]["coverPhotoId"]) == ("g1", "P4")
+    assert (r2["id"], r2["push"]["coverPhotoId"]) == ("g2", "Q4")
+    assert r2["ending"]["factLine"] == "10.18 · 休斯敦"
+    assert all(p["id"].startswith("P") for p in r1["story"]["photos"])
+    assert all(p["id"].startswith("Q") for p in r2["story"]["photos"])
+
+
+@pytest.mark.parametrize("field,value", [
+    ("weekday", 0), ("weekday", 8), ("weekday", "7"), ("weekday", True),
+    ("raw_count", 0), ("raw_count", "23"),
+    ("start_time", 1403), ("end_time", None),
+    ("recent_question_types", ["sound", 2]), ("recent_question_types", "sound"),
+])
+def test_bad_meta_types_400(client, fake_model, field, value):
+    _assert_400(_submit(client, _meta(**{field: value})), fake_model)
+
+
+@pytest.mark.parametrize("field,value", [
+    ("labels", ["food_drink", 3]), ("labels", "food_drink"),
+    ("faces", "2"), ("faces", True),
+    ("favorite", "yes"), ("edited", 1),
+    ("represents", 0), ("represents", "1"),
+])
+def test_bad_photo_types_400(client, fake_model, field, value):
+    meta = _meta()
+    meta["photos"][0][field] = value
+    _assert_400(_submit(client, meta), fake_model)
+
+
+def test_optional_photo_fields_may_be_null(client, fake_model):
+    meta = _meta()
+    meta["photos"][0].update(faces=None, favorite=None, edited=None)
+    fake_model.reply("a", _a_json()).reply("b", _b_json())
+    r = _submit(client, meta)
+    assert r.status_code == 202
+    assert _poll(client, r.json()["job_id"]).json()["status"] == "ok"
+
+
+def test_non_image_upload_400(client, fake_model):
+    _assert_400(_submit(client, files=_files(data={"P1": b"hello, not a photo"})), fake_model)
+
+
+def _png(w, h, mode="RGB", pixels=None):
+    import io
+
+    from PIL import Image
+
+    img = Image.frombytes(mode, (w, h), pixels) if pixels else Image.new(mode, (w, h))
+    out = io.BytesIO()
+    img.save(out, "PNG")
+    return out.getvalue()
+
+
+def test_png_upload_400(client, fake_model):
+    # Review: Pillow inflates a PNG's text chunks while reading its header
+    # (up to 64 MB a file); the phone sends JPEG only.
+    _assert_400(_submit(client, files=_files(data={"P1": _png(8, 8)})), fake_model)
+
+
+def test_multi_frame_jpeg_400(client, fake_model):
+    import io
+
+    from PIL import Image
+
+    out = io.BytesIO()
+    Image.new("RGB", (800, 600)).save(out, "MPO", save_all=True,
+                                       append_images=[Image.new("RGB", (2000, 2000))])
+    mpo = out.getvalue()
+    assert mpo[:3] == b"\xff\xd8\xff"
+    _assert_400(_submit(client, files=_files(data={"P1": mpo})), fake_model)
+
+
+def _claims_size(data, w, h):
+    """`data` with its JPEG frame header (SOF0) patched to claim w x h."""
+    at = data.index(b"\xff\xc0") + 5
+    return data[:at] + h.to_bytes(2, "big") + w.to_bytes(2, "big") + data[at + 4:]
+
+
+def test_heic_upload_400(client, fake_model):
+    # Pillow cannot read a HEIC's size, so it cannot be checked; the phone sends JPEG.
+    heic = b"\x00\x00\x00\x18ftypheic" + b"0" * 32
+    _assert_400(_submit(client, files=_files(data={"P1": heic})), fake_model)
+
+
+def test_jpeg_that_does_not_open_400(client, fake_model):
+    _assert_400(_submit(client, files=_files(data={"P1": b"\xff\xd8\xff\xe0not-a-jpeg"})), fake_model)
+
+
+@pytest.mark.filterwarnings("ignore::PIL.Image.DecompressionBombWarning")  # Pillow saying so
+def test_small_file_of_huge_pixels_400(client, fake_model):
+    # Review of api#97: a small file whose header claims 12000 x 12000
+    # would decode to hundreds of MB.
+    bomb = _claims_size(jpeg(), 12000, 12000)
+    assert len(bomb) < 1024
+    _assert_400(_submit(client, files=_files(data={"P1": bomb})), fake_model)
+
+
+def test_long_side_over_1024_px_400(client, fake_model):
+    _assert_400(_submit(client, files=_files(data={"P1": jpeg(1025, 10)})), fake_model)
+
+
+def test_long_side_of_1024_px_accepted(client, fake_model):
+    fake_model.reply("a", _a_json()).reply("b", _b_json())
+    r = _submit(client, files=_files(data={"P1": jpeg(1024, 768), "P2": jpeg(768, 1024)}))
+    assert r.status_code == 202
+    assert _poll(client, r.json()["job_id"]).json()["status"] == "ok"
+
+
+def test_photo_over_1_mb_400(client, fake_model):
+    import os
+
+    import io
+
+    from PIL import Image
+
+    out = io.BytesIO()
+    Image.frombytes("RGB", (1000, 1000), os.urandom(3 * 1000 * 1000)).save(out, "JPEG", quality=100)
+    noisy = out.getvalue()  # its size is allowed
+    assert len(noisy) > 1024 * 1024
+    _assert_400(_submit(client, files=_files(data={"P1": noisy})), fake_model)
+
+
+def test_job_finishing_after_cap_reads_timeout():
+    clock = _Clock()
+    store = jobs.JobStore(ttl=900, cap=300, clock=clock)
+
+    def late(deadline):
+        clock.now += 301
+        return {"status": "ok", "memory": {}}
+
+    job_id = store.submit(late)
+    end = time.monotonic() + 2
+    while store.get(job_id) == {"status": "running"} and time.monotonic() < end:
+        time.sleep(0.01)
+    assert store.get(job_id) == {"status": "error", "reason": "timeout", "message": "AI 超时"}
+
+
+def _wait_done(store, job_id):
+    end = time.monotonic() + 2
+    while store.get(job_id) == {"status": "running"} and time.monotonic() < end:
+        time.sleep(0.01)
+
+
+def test_batch_poll_returns_each_status(client):
+    store = client.main.STORE = jobs.JobStore()
+    release = threading.Event()
+    ok_body = {"status": "ok", "memory": {"id": "g1"}}
+    rejected_body = {"status": "rejected", "reason": "sensitive", "message": "x"}
+    running = store.submit(lambda deadline: release.wait(5) and ok_body)
+    ok = store.submit(lambda deadline: ok_body)
+    rejected = store.submit(lambda deadline: rejected_body)
+    _wait_done(store, ok)
+    _wait_done(store, rejected)
+    unknown = "0" * 32
+    r = client.get("/collections/jobs", params={"ids": ",".join([running, ok, rejected, unknown])})
+    release.set()
+    assert r.status_code == 200
+    assert r.json() == {"jobs": {
+        running: {"status": "running"},
+        ok: ok_body,
+        rejected: rejected_body,
+        unknown: {"status": "expired"},
+    }}
+
+
+def test_batch_poll_dedupes_and_skips_empty(client):
+    store = client.main.STORE = jobs.JobStore()
+    job = store.submit(lambda deadline: {"status": "ok", "memory": {}})
+    _wait_done(store, job)
+    r = client.get("/collections/jobs", params={"ids": "{},,{}, zz ,".format(job, job)})
+    assert r.status_code == 200
+    assert r.json() == {"jobs": {job: {"status": "ok", "memory": {}}, "zz": {"status": "expired"}}}
+
+
+@pytest.mark.parametrize("ids", [None, "", ",", " , ,", ",".join("id{}".format(i) for i in range(21))])
+def test_batch_poll_rejects_empty_and_over_twenty(client, ids):
+    r = client.get("/collections/jobs", params={} if ids is None else {"ids": ids})
+    assert r.status_code == 400
+    assert r.json()["reason"] == "bad_request"
+
+
+def test_batch_poll_twenty_distinct_ids_ok(client):
+    ids = ",".join("id{}".format(i) for i in range(20))
+    r = client.get("/collections/jobs", params={"ids": ids})
+    assert r.status_code == 200 and len(r.json()["jobs"]) == 20
+
+
+def test_batch_poll_duplicates_do_not_count_toward_limit(client):
+    ids = ",".join(["same"] * 30)
+    r = client.get("/collections/jobs", params={"ids": ids})
+    assert r.status_code == 200 and list(r.json()["jobs"]) == ["same"]
+
+
+@pytest.mark.parametrize("bucket_id", ["food", "scenery", "animal", "city", "indoor", "event", "other"])
+def test_meta_bucket_accepts_each_of_seven(client, fake_model, bucket_id):
+    fake_model.reply("a", _a_json()).reply("b", _b_json())
+    r = _submit(client, _meta(bucket=bucket_id))
+    assert r.status_code == 202
+
+
+@pytest.mark.parametrize("value", ["sky", "people", "", None, 3, True, ["food"], "Food"])
+def test_meta_bucket_must_be_one_of_seven(client, fake_model, value):
+    _assert_400(_submit(client, _meta(bucket=value)), fake_model)
+
+
+def test_meta_bucket_missing_400(client, fake_model):
+    meta = _meta()
+    del meta["bucket"]
+    _assert_400(_submit(client, meta), fake_model)
+
+
+def test_tz_is_optional_and_logged(client, fake_model, tmp_log):
+    fake_model.reply("a", _a_json()).reply("b", _b_json())
+    job_id = _submit(client, _meta(tz="America/Chicago")).json()["job_id"]
+    assert _poll(client, job_id).json()["status"] == "ok"
+    entry = json.loads(tmp_log.read_text(encoding="utf-8").splitlines()[-1])
+    assert entry["tz"] == "America/Chicago" and entry["bucket"] == "event"
+    fake_model.reply("a", _a_json()).reply("b", _b_json())
+    assert _submit(client, _meta()).status_code == 202  # missing tz is fine
+
+
+@pytest.mark.parametrize("value", [3, ["UTC"], "x" * 65])
+def test_bad_tz_400(client, fake_model, value):
+    _assert_400(_submit(client, _meta(tz=value)), fake_model)
+
+
+def test_tz_of_64_chars_accepted(client, fake_model):
+    fake_model.reply("a", _a_json()).reply("b", _b_json())
+    assert _submit(client, _meta(tz="x" * 64)).status_code == 202
+
+
+def test_png_is_refused_without_opening_it(monkeypatch):
+    # Opening is what inflates a PNG's text chunks, so the check must not open it.
+    import compose
+
+    png = _png(8, 8)
+    opened = []
+    monkeypatch.setattr(compose.Image, "open", lambda *a, **k: opened.append(a))
+    assert compose.jpeg_size(png) is None
+    assert opened == []
+
+
+def test_jpeg_padded_with_empty_segments_is_refused_fast():
+    # Review: Pillow walks every segment before the image data in Python;
+    # 1 MB of empty APP1 segments took 0.7 s on the event loop.
+    import compose
+
+    good = jpeg(768, 768)
+    bad = good[:2] + b"\xff\xe1\x00\x02" * 250000 + good[2:]
+    started = time.monotonic()
+    assert compose.jpeg_size(bad) is None
+    assert time.monotonic() - started < 0.1
+
+
+def test_jpeg_with_a_quarter_mb_before_its_image_data_is_refused():
+    import compose
+
+    good = jpeg(768, 768)
+    big_app = b"\xff\xe2\xff\xff" + b"\x00" * 0xfffd  # one 64 KB APP2 segment
+    assert compose.jpeg_size(good[:2] + big_app * 4 + good[2:]) is None
+    assert compose.jpeg_size(good[:2] + big_app * 3 + good[2:]) == (768, 768)
+
+
+def test_jpeg_with_exif_is_sized():
+    import io
+
+    import compose
+    from PIL import Image
+
+    img = Image.new("RGB", (768, 576))
+    exif = Image.Exif()
+    exif[0x0112] = 6  # orientation
+    out = io.BytesIO()
+    img.save(out, "JPEG", exif=exif.tobytes(), quality=82)
+    assert compose.jpeg_size(out.getvalue()) == (768, 576)

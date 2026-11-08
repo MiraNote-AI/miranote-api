@@ -1,0 +1,9 @@
+{
+  "sensitive": "这组照片涉及敏感场景，不推",
+  "skip_screenshots": "这组大多是截图或资料，不推",
+  "too_few_selected": "精选不到 3 张",
+  "check_failed": "AI 的结果没通过检查",
+  "timeout": "AI 超时",
+  "model_error": "AI 出错了",
+  "bad_request": "提交的照片或信息不完整"
+}
