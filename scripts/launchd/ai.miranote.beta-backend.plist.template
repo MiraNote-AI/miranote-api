@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Template for one beta backend. install_backend_services.sh fills it in once
+  per service and writes ai.miranote.beta-<name>.plist into
+  ~/Library/LaunchAgents.
+
+  One job per service rather than one for all five, so launchd restarts
+  exactly the service that died and the other four never notice.
+
+  Same shape as ai.miranote.beta-tunnel, for the same reasons. A LaunchAgent:
+  the venvs and .env files live in the user's home, and on a FileVault Mac
+  nothing is reachable before someone logs in anyway. caffeinate wraps the
+  server, so the keep-awake lasts exactly as long as the server and cannot
+  outlive it. caffeinate execs the server in place and holds the assertion
+  from a child, so the pid launchd watches is uvicorn itself and a crash is
+  seen directly.
+
+  The command is the one start_backends.sh runs: loopback only (the tunnel is
+  the only way in), the repository root on PYTHONPATH, and --app-dir for chat
+  alone, which imports as a package from the repository root. The other four
+  run "main:app" from their working directory and must not get --app-dir:
+  uvicorn puts it on sys.path instead of the working directory.
+
+  Nothing is inherited from a login shell. Every key the services use comes
+  from their .env files; PATH is set because launchd starts jobs with
+  /usr/bin:/bin:/usr/sbin:/sbin and voice-to-text runs ffmpeg by name from the
+  Homebrew prefix. PYTHONUNBUFFERED makes the last lines before a crash reach
+  the log instead of dying in a buffer.
+
+  ProcessType is Standard, not Background like the tunnel: Background lets
+  macOS throttle CPU and I/O, and /cutout and /transcribe already run close to
+  Cloudflare's 125 s limit.
+
+  ThrottleInterval only delays a job that dies within that many seconds of
+  starting. Every start of image, voice and collections makes paid probe
+  calls, so a crash loop is held to one start every 30 s; a service that
+  crashes after running a while is restarted at once.
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>__LABEL__</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/bin/caffeinate</string>
+        <string>-s</string>
+        <string>__UVICORN__</string>
+__APP_DIR_ARGS__
+        <string>__APP__</string>
+        <string>--host</string>
+        <string>127.0.0.1</string>
+        <string>--port</string>
+        <string>__PORT__</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>__WORKDIR__</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PYTHONPATH</key>
+        <string>__API_ROOT__</string>
+        <key>PATH</key>
+        <string>__PATH__</string>
+        <key>LANG</key>
+        <string>en_US.UTF-8</string>
+        <key>PYTHONUNBUFFERED</key>
+        <string>1</string>
+    </dict>
+
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>ThrottleInterval</key>
+    <integer>30</integer>
+
+    <key>StandardOutPath</key>
+    <string>__LOG__</string>
+    <key>StandardErrorPath</key>
+    <string>__LOG__</string>
+
+    <key>ProcessType</key>
+    <string>Standard</string>
+</dict>
+</plist>
