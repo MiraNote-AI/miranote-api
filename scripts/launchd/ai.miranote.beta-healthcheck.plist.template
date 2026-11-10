@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Template. install_backend_services.sh fills in the log directory and writes
+  the result into ~/Library/LaunchAgents.
+
+  Runs once each time it is loaded -- at login, alongside the backends and the
+  tunnel -- and records whether everything came up: first each backend on
+  loopback, then each public hostname through the tunnel. It changes nothing.
+  The record is appended to healthcheck.log in the log directory, and
+  launchctl print shows a non-zero last exit code if any URL never answered.
+
+  A single curl rather than a script, so the job depends on nothing in the
+  checkout. Each URL is retried every 3 s for up to 10 minutes: the image
+  service loads its models before it opens its port. fail plus
+  retry-all-errors makes a Cloudflare 502 (tunnel up, backend not yet) count
+  as "not yet" too. Each URL writes one line: the /health body, then the URL,
+  the status and the server's Date header; a URL that never answered writes
+  status 000 or its HTTP error and the last curl error instead.
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>ai.miranote.beta-healthcheck</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/bin/curl</string>
+        <string>--silent</string>
+        <string>--fail</string>
+        <string>--retry</string>
+        <string>300</string>
+        <string>--retry-delay</string>
+        <string>3</string>
+        <string>--retry-max-time</string>
+        <string>600</string>
+        <string>--retry-all-errors</string>
+        <string>--connect-timeout</string>
+        <string>5</string>
+        <string>--max-time</string>
+        <string>15</string>
+        <string>--write-out</string>
+        <string>  &lt;- %{url} %{http_code} %header{date}%{errormsg}\n</string>
+        <string>http://127.0.0.1:8001/health</string>
+        <string>http://127.0.0.1:8002/health</string>
+        <string>http://127.0.0.1:8003/health</string>
+        <string>http://127.0.0.1:8005/health</string>
+        <string>http://127.0.0.1:8006/health</string>
+        <string>https://beta-text.miranote.app/health</string>
+        <string>https://beta-image.miranote.app/health</string>
+        <string>https://beta-chat.miranote.app/health</string>
+        <string>https://beta-voice.miranote.app/health</string>
+        <string>https://beta-collections.miranote.app/health</string>
+    </array>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>StandardOutPath</key>
+    <string>__LOGS__/healthcheck.log</string>
+    <key>StandardErrorPath</key>
+    <string>__LOGS__/healthcheck.log</string>
+
+    <key>ProcessType</key>
+    <string>Background</string>
+</dict>
+</plist>
