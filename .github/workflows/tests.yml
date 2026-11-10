@@ -41,6 +41,9 @@ jobs:
           - suite: photo-collections
             workdir: poc/photo-collections
             tests: tests/
+          # image-generation is left out: its runtime is Python 3.13 (SAM-2
+          # needs >= 3.10) and its suite fails on dev with google-genai 3.x.
+          # Tracked in api#104.
     steps:
       - uses: actions/checkout@v4
 
@@ -48,6 +51,8 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.9'  # the code must stay Python 3.9-compatible
+          cache: pip
+          cache-dependency-path: poc/${{ matrix.suite }}/requirements.txt
 
       # CPU-only torch: the suites never run a model, so the CUDA wheels
       # would only slow the install down.

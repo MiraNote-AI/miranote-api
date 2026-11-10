@@ -172,3 +172,6 @@ def client(load_main, fake_model):
     with TestClient(main.app, headers={"Authorization": "Bearer test-token"}) as c:
         c.main = main
         yield c
+    # Wait for this test's compose jobs: a worker still running after the
+    # test would call the next test's FakeModel and fail that test instead.
+    c.main.STORE._pool.shutdown(wait=True)
