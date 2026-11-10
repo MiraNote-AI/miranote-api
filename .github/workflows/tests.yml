@@ -1,6 +1,6 @@
 # .github/workflows/tests.yml -- repo-local (not synced from MiraNote-AI/.github).
-# Runs the five offline pytest suites the verify-repo skill lists for this
-# repo, so a PR's test result is visible without trusting a local run.
+# Runs the offline pytest suite of every POC service, so a PR's test result
+# is visible without trusting a local run.
 # Every model call is stubbed inside the suites: no network, no API keys.
 
 name: Tests
@@ -41,16 +41,20 @@ jobs:
           - suite: photo-collections
             workdir: poc/photo-collections
             tests: tests/
-          # image-generation is left out: its runtime is Python 3.13 (SAM-2
-          # needs >= 3.10) and its suite fails on dev with google-genai 3.x.
-          # Tracked in api#104.
+          # The one 3.13 service: SAM-2 needs Python >= 3.10, and main.py
+          # imports it at load. The suite still never loads a model.
+          - suite: image-generation
+            workdir: poc/image-generation
+            tests: tests/
+            python: '3.13'
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Python 3.9
+      - name: Setup Python ${{ matrix.python || '3.9' }}
         uses: actions/setup-python@v5
         with:
-          python-version: '3.9'  # the code must stay Python 3.9-compatible
+          # The code must stay Python 3.9-compatible, except image-generation.
+          python-version: ${{ matrix.python || '3.9' }}
           cache: pip
           cache-dependency-path: poc/${{ matrix.suite }}/requirements.txt
 
