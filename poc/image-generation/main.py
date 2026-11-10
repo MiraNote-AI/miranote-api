@@ -16,7 +16,9 @@ from contextlib import asynccontextmanager, contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
+import httpx
 from fastapi import FastAPI, HTTPException, UploadFile
+from fastapi.responses import JSONResponse
 from PIL import Image, ImageFilter
 from pydantic import BaseModel
 from rembg import remove, new_session
@@ -1014,6 +1016,21 @@ async def cutout_image(
     }
 
 
+# /stylize's own failures. "reason" is the stable code an app can branch on,
+# "message" is the sentence to show -- the shape photo-collections already
+# answers with. The status alone cannot carry it: the app reads 502 as "the
+# server is not running", which is not what a blank answer from the model means.
+UNREADABLE_IMAGE_DETAIL = "that picture could not be read; try a different one"
+IMAGE_TOO_LARGE_DETAIL = "that picture is too large to edit; try a smaller one"
+EDIT_TIMEOUT_DETAIL = "the edit took too long; try again"
+PROVIDER_ERROR_DETAIL = "the image model failed on that one; try again"
+
+
+def _edit_error(status: int, reason: str, message: str) -> JSONResponse:
+    return JSONResponse({"status": "error", "reason": reason, "message": message},
+                        status_code=status)
+
+
 @app.post("/stylize")
 async def stylize_image(
     file: UploadFile,
@@ -1021,22 +1038,46 @@ async def stylize_image(
     prompt: str = "",         # custom style description (used when no/unknown preset)
     temperature: float | None = None,  # 0 = faithful to original; higher = more creative
 ):
-    raw = _shrink_for_model(await file.read())
+    # Every failure below answers in one JSON shape with its own status, never a
+    # bare 500: "status 500" was all a tester could report (api #96), and it
+    # reads the same as a crash.
+    try:
+        raw = _shrink_for_model(await file.read())
+        transparent = _is_transparent(raw)
+    except Image.DecompressionBombError:
+        return _edit_error(413, "image_too_large", IMAGE_TOO_LARGE_DETAIL)
+    except OSError as error:
+        # Empty, truncated, or a format Pillow cannot open (HEIC among them).
+        print(f"[stylize] unreadable upload: {str(error)[:200]}")
+        return _edit_error(400, "unreadable_image", UNREADABLE_IMAGE_DETAIL)
     try:
         # Transparency is how a sticker announces itself. The app never tells us
         # which it sent, and it does not have to: a photo is opaque, a sticker is
         # a cutout. Asking a photo for a flat backdrop would replace the scene
         # the user wanted edited, so this must not fire on one.
         instruction = style_presets.build_instruction(
-            style=style, prompt=prompt,
-            cut_out_afterwards=_is_transparent(raw))
+            style=style, prompt=prompt, cut_out_afterwards=transparent)
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        return _edit_error(400, "bad_request", str(e))
 
     temp = config.STYLE_TEMPERATURE if temperature is None else temperature
-    processed = await asyncio.to_thread(
-        stylizer.stylize, raw, instruction, config.STYLE_MODEL, temp
-    )
+    try:
+        processed = await asyncio.to_thread(
+            stylizer.stylize, raw, instruction, config.STYLE_MODEL, temp
+        )
+    except stylizer.NoImage as error:
+        print(f"[stylize] no image from {config.STYLE_MODEL}: {str(error)[:300]}")
+        if error.refused:
+            return _edit_error(422, "edit_refused", REFUSED_DETAIL)
+        return _edit_error(502, "no_image", EMPTY_DETAIL)
+    except httpx.TimeoutException:
+        print(f"[stylize] {config.STYLE_MODEL} timed out")
+        return _edit_error(504, "edit_timeout", EDIT_TIMEOUT_DETAIL)
+    except Exception as error:                      # noqa: BLE001 - reported below
+        print(f"[stylize] {config.STYLE_MODEL} failed: {str(error)[:300]}")
+        if fallback.is_rate_limited(error):
+            return _edit_error(503, "busy", QUOTA_DETAIL)
+        return _edit_error(502, "provider_error", PROVIDER_ERROR_DETAIL)
     return {
         "image": base64.b64encode(processed).decode(),
         "style_used": style or "custom",

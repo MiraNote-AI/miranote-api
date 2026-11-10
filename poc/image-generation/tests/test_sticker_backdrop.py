@@ -107,7 +107,8 @@ class WiringTests(unittest.TestCase):
     def test_the_endpoint_decides_from_the_pixels(self):
         import inspect
         source = inspect.getsource(main.stylize_image)
-        self.assertIn("cut_out_afterwards=_is_transparent(raw)", source)
+        self.assertIn("transparent = _is_transparent(raw)", source)
+        self.assertIn("cut_out_afterwards=transparent", source)
 
 
 if __name__ == "__main__":
