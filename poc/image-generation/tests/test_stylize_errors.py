@@ -11,11 +11,14 @@ from __future__ import annotations
 
 import io
 import os
+import struct
 import unittest
+import zlib
 from types import SimpleNamespace
 from unittest import mock
 
 import httpx
+from google.genai import errors, types
 from PIL import Image
 
 import main
@@ -31,13 +34,54 @@ def _png(size=(32, 32)) -> bytes:
     return buf.getvalue()
 
 
-def _response(parts=(), finish_reason=None):
+def _response(parts=(), finish_reason=None, prompt_feedback=None):
     candidate = SimpleNamespace(
         content=SimpleNamespace(parts=list(parts)),
         finish_reason=finish_reason,
         safety_ratings=None,
     )
-    return SimpleNamespace(candidates=[candidate], prompt_feedback=None)
+    return SimpleNamespace(candidates=[candidate], prompt_feedback=prompt_feedback)
+
+
+def _words_only(prompt_feedback=None):
+    return _response([SimpleNamespace(inline_data=None, text="The picture is blue.")],
+                     finish_reason="FinishReason.STOP", prompt_feedback=prompt_feedback)
+
+
+def _chunk(kind: bytes, data: bytes) -> bytes:
+    return (struct.pack(">I", len(data)) + kind + data
+            + struct.pack(">I", zlib.crc32(kind + data)))
+
+
+def _broken_png() -> bytes:
+    """An RGBA PNG whose pixels span two IDAT chunks, the second one's type
+    zeroed. Image.open succeeds; decoding raises SyntaxError("broken PNG")."""
+    buf = io.BytesIO()
+    Image.effect_noise((64, 64), 64).convert("RGBA").save(buf, format="PNG")
+    png = buf.getvalue()
+    out, pos, idat = [png[:8]], 8, b""
+    while pos < len(png):
+        size = struct.unpack(">I", png[pos:pos + 4])[0]
+        kind, data = png[pos + 4:pos + 8], png[pos + 8:pos + 8 + size]
+        pos += 12 + size
+        if kind == b"IDAT":
+            idat += data
+            continue
+        if kind == b"IEND":
+            half = len(idat) // 2
+            second = _chunk(b"IDAT", idat[half:])
+            out += [_chunk(b"IDAT", idat[:half]), second[:4] + b"\0\0\0\0" + second[8:]]
+        out.append(_chunk(kind, data))
+    return b"".join(out)
+
+
+def _truncated_jpeg() -> bytes:
+    """The first third of an 800x600 JPEG: under the 1536 px cap and opaque,
+    so neither the shrink nor the transparency check decodes it."""
+    buf = io.BytesIO()
+    Image.effect_noise((800, 600), 64).convert("RGB").save(buf, format="JPEG")
+    jpeg = buf.getvalue()
+    return jpeg[:len(jpeg) // 3]
 
 
 def _image_response():
@@ -51,7 +95,8 @@ HEIC = b"\x00\x00\x00\x18ftypheic\x00\x00\x00\x00mif1heic" + b"\x00" * 64
 
 
 class StylizeErrorTests(unittest.IsolatedAsyncioTestCase):
-    async def _post(self, data=None, prompt="make it warmer", client=None):
+    async def _post(self, data=None, prompt="make it warmer", client=None,
+                    send_file=True):
         stub = client or mock.Mock()
         if client is None:
             stub.models.generate_content.return_value = _image_response()
@@ -61,11 +106,11 @@ class StylizeErrorTests(unittest.IsolatedAsyncioTestCase):
                 base_url="http://probe",
                 headers={"Authorization": "Bearer test-token"},
             ) as http:
+                upload = ("image.png", _png() if data is None else data, "image/png")
                 response = await http.post(
                     "/stylize",
                     params={"prompt": prompt},
-                    files={"file": ("image.png", _png() if data is None else data,
-                                    "image/png")},
+                    files={"file" if send_file else "other": upload},
                 )
         return response, stub
 
@@ -108,6 +153,21 @@ class StylizeErrorTests(unittest.IsolatedAsyncioTestCase):
         self.assertEditError(response, 400, "unreadable_image")
         stub.models.generate_content.assert_not_called()
 
+    async def test_a_png_that_breaks_while_decoding_is_a_400(self):
+        response, stub = await self._post(data=_broken_png())
+        self.assertEditError(response, 400, "unreadable_image")
+        stub.models.generate_content.assert_not_called()
+
+    async def test_a_truncated_jpeg_is_a_400_without_a_model_call(self):
+        response, stub = await self._post(data=_truncated_jpeg())
+        self.assertEditError(response, 400, "unreadable_image")
+        stub.models.generate_content.assert_not_called()
+
+    async def test_no_file_part_is_a_422_in_the_same_shape(self):
+        response, stub = await self._post(send_file=False)
+        self.assertEditError(response, 422, "bad_request")
+        stub.models.generate_content.assert_not_called()
+
     async def test_an_image_past_the_pixel_limit_is_a_413(self):
         # 32x32 is past twice this limit, which is where Pillow refuses to open.
         with mock.patch.object(Image, "MAX_IMAGE_PIXELS", 100):
@@ -127,13 +187,27 @@ class StylizeErrorTests(unittest.IsolatedAsyncioTestCase):
         self.assertEditError(response, 422, "edit_refused")
         self.assertNotIn("IMAGE_SAFETY", response.text)
 
-    async def test_an_answer_in_words_only_is_a_502(self):
-        words = self._model_answering(_response(
-            [SimpleNamespace(inline_data=None, text="The picture is blue.")],
-            finish_reason="FinishReason.STOP"))
-        response, _ = await self._post(client=words)
-        self.assertEditError(response, 502, "no_image")
+    async def test_an_answer_in_words_only_is_a_500(self):
+        # 500, not 502: shipped apps read 502 as "the server is not running",
+        # and Cloudflare replaces an origin's 502 body with its own page.
+        response, _ = await self._post(client=self._model_answering(_words_only()))
+        self.assertEditError(response, 500, "no_image")
         self.assertNotIn("The picture is blue.", response.text)
+
+    async def test_an_unblocked_prompt_feedback_is_not_a_refusal(self):
+        # The SDK object prints as "block_reason=None ...", which used to
+        # match the "BLOCK" refusal marker.
+        feedback = types.GenerateContentResponsePromptFeedback()
+        response, _ = await self._post(
+            client=self._model_answering(_words_only(feedback)))
+        self.assertEditError(response, 500, "no_image")
+
+    async def test_vertex_deadline_exceeded_is_a_504(self):
+        deadline = errors.ServerError(504, {"error": {
+            "code": 504, "status": "DEADLINE_EXCEEDED", "message": "Deadline expired"}})
+        response, _ = await self._post(client=self._model_raising(deadline))
+        self.assertEditError(response, 504, "edit_timeout")
+        self.assertNotIn("DEADLINE_EXCEEDED", response.text)
 
     async def test_a_timeout_is_a_504(self):
         response, _ = await self._post(
@@ -146,10 +220,10 @@ class StylizeErrorTests(unittest.IsolatedAsyncioTestCase):
         self.assertEditError(response, 503, "busy")
         self.assertNotIn("RESOURCE_EXHAUSTED", response.text)
 
-    async def test_any_other_provider_failure_is_a_502(self):
+    async def test_any_other_provider_failure_is_a_500(self):
         response, _ = await self._post(
             client=self._model_raising(Exception("500 INTERNAL")))
-        self.assertEditError(response, 502, "provider_error")
+        self.assertEditError(response, 500, "provider_error")
         self.assertNotIn("INTERNAL", response.text)
 
 
