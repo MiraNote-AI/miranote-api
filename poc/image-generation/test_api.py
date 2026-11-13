@@ -143,7 +143,7 @@ def test_stylize(image_path: str, style: str = "", prompt: str = "", temperature
     with open(image_path, "rb") as f:
         resp = requests.post(f"{BASE_URL}/stylize", files={"file": f}, params=params)
     if resp.status_code in (400, 404):
-        print(f"  {resp.status_code}: {resp.json().get('detail')}")
+        print(f"  {resp.status_code}: {resp.json().get('message')}")
         return
     resp.raise_for_status()
     elapsed = time.time() - start

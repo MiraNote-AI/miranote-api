@@ -9,7 +9,7 @@ change rather than a code change. _complete routes on that id.
 
 from pathlib import Path
 
-from shared.vertex_client import _get_client
+from shared.vertex_client import _get_client, generate_config
 from generate import dashscope_text
 
 
@@ -18,7 +18,8 @@ def _complete(prompt: str, model: str) -> str | None:
     qwen-* ids go to DashScope. None when the provider returned no text."""
     if model.startswith("qwen"):
         return dashscope_text.complete(prompt, model)
-    return _get_client().models.generate_content(model=model, contents=prompt).text
+    return _get_client().models.generate_content(
+        model=model, contents=prompt, config=generate_config()).text
 
 
 _PROMPT_DIR = Path(__file__).parent

@@ -131,6 +131,8 @@ def yanyi_loaded_main(monkeypatch):
     main = importlib.util.module_from_spec(spec)
     sys.modules["voice_to_text_main"] = main
     spec.loader.exec_module(main)
+    # Startup probes YanYi; unstubbed, that is a request to the real host.
+    monkeypatch.setattr(main, "yanyi_health", lambda **kwargs: True)
     return main, calls
 
 

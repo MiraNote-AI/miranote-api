@@ -16,7 +16,25 @@ import io
 from google.genai import types
 from PIL import Image
 
-from shared.vertex_client import _get_client, _extract_image_bytes
+from generate import fallback
+from shared.vertex_client import _get_client, _extract_image_bytes, generate_config
+
+# Below the app's 110s request timeout and Cloudflare's 125s edge timeout, so a
+# stalled model call ends here as a 504 the app can explain, not as the phone
+# giving up on its own. The SDK's default is no timeout at all.
+TIMEOUT_SECONDS = 100
+
+
+class NoImage(Exception):
+    """The model answered, but without an image. `refused` says it declined.
+
+    Kept apart from provider errors because the advice differs: a refusal will
+    not succeed on a retry of the same words, a blank answer usually will.
+    """
+
+    def __init__(self, refused: bool, why: str):
+        super().__init__(why)
+        self.refused = refused
 
 
 def stylize(image_bytes: bytes, instruction: str, model: str, temperature: float = 0) -> bytes:
@@ -25,6 +43,9 @@ def stylize(image_bytes: bytes, instruction: str, model: str, temperature: float
     Low temperature + fixed seed keep the restyle faithful to the original photo
     (the default ~1.0 lets the model reinvent content); callers can raise
     temperature for more creative reinterpretation.
+
+    Raises NoImage when the model answers without an image; provider errors
+    and timeouts propagate unchanged.
     """
     mime = "image/png" if image_bytes[:8].startswith(b"\x89PNG") else "image/jpeg"
     response = _get_client().models.generate_content(
@@ -33,7 +54,7 @@ def stylize(image_bytes: bytes, instruction: str, model: str, temperature: float
             types.Part.from_bytes(data=image_bytes, mime_type=mime),
             instruction,
         ],
-        config=types.GenerateContentConfig(
+        config=generate_config(
             # TEXT as well as IMAGE: Gemini 3.x image models expect both and
             # reject an IMAGE-only request. border.py has carried this since it
             # first called a 3.x model; this path only needed it once
@@ -43,9 +64,13 @@ def stylize(image_bytes: bytes, instruction: str, model: str, temperature: float
             response_modalities=["TEXT", "IMAGE"],
             temperature=temperature,
             seed=0,
+            http_options=types.HttpOptions(timeout=TIMEOUT_SECONDS * 1000),
         ),
     )
-    raw = _extract_image_bytes(response)
+    try:
+        raw = _extract_image_bytes(response)
+    except RuntimeError as error:
+        raise NoImage(fallback.is_safety_refusal(response), str(error)) from error
     # Normalize to PNG so the output format matches the rest of the pipeline.
     img = Image.open(io.BytesIO(raw))
     buf = io.BytesIO()

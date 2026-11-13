@@ -26,13 +26,14 @@ def test_health_needs_no_token(anonymous):
 
 
 def test_a_valid_token_gets_past_the_gate(anonymous):
-    """Not a 401, whatever the endpoint then decides to do with the request."""
-    r = anonymous.post(
-        "/chat",
-        json={"message": "hi"},
-        headers={"Authorization": "Bearer test-token"},
-    )
-    assert r.status_code != 401
+    """The gate lets the request through: the router's 404, not the gate's 401.
+
+    An unrouted path on purpose. POST /chat with a valid token went on to a
+    real chat completion -- to api.openai.com with CI's placeholder key, or
+    with the real key from a developer's poc/chatbot/.env.
+    """
+    r = anonymous.get("/no-such-route", headers={"Authorization": "Bearer test-token"})
+    assert r.status_code == 404
 
 
 def test_cors_preflight_is_not_rejected(anonymous):

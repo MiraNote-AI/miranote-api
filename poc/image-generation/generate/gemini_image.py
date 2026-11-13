@@ -13,7 +13,7 @@ answers with raw bytes rather than a URL.
 
 from concurrent.futures import ThreadPoolExecutor
 
-from shared.vertex_client import _get_client
+from shared.vertex_client import _get_client, generate_config
 from generate import fallback
 
 
@@ -24,6 +24,7 @@ def generate(model: str, prompt: str, aspect_ratio: str, n: int) -> list[bytes]:
         response = client.models.generate_content(
             model=model,
             contents=fallback.build_prompt(prompt, aspect_ratio),
+            config=generate_config(),
         )
         parts = fallback.image_parts(response)
         return parts[0] if parts else None
