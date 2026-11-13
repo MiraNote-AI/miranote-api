@@ -575,11 +575,17 @@ service never accepts it (8.4).
 2. The app runs Sign in with Apple again and gets a fresh authorization
    code.
 3. `DELETE /me` with that code. The server exchanges it for Apple tokens
+   (with a client secret signed by the Sign in with Apple key, step 9)
    and immediately calls Apple's `/auth/revoke`, then sets
-   `deletion_requested_at` and revokes all `sessions`. If Apple's revoke
-   fails, deletion still proceeds and the failure is logged for a retry.
-4. The app signs out and shows "Your account is deleted" -- that screen
-   is the confirmation (we hold no email to send one).
+   `deletion_requested_at` and revokes all `sessions`. If the exchange
+   or the revoke still fails after a few retries inside the request,
+   deletion proceeds and the failure is logged (user id only). There is
+   no later retry: the code is single-use and short-lived, and we keep
+   no Apple token that could revoke. The user can still remove MiraNote
+   under Sign in with Apple in their Apple ID settings.
+4. The app signs out and shows "Your account is deleted. The rest of
+   your server data is erased within 24 hours." -- that screen is the
+   confirmation (we hold no email to send one).
 5. The purge job (hourly) runs within 24 hours. Signing in again with
    the same Apple ID before the purge runs purges the old account first,
    then creates a new, empty one.
@@ -594,11 +600,13 @@ service never accepts it (8.4).
 | `app_store_notifications` | nothing to strip: payloads are stored without `appAccountToken` (4.1), so renewals that keep arriving for the chain do not bring the deleted id back | 1 year from receipt |
 | `ai_usage` | `user_id` set to null | 13 months from the request |
 | `app_attest_keys`, DeviceCheck bits | untouched (not linked to a user) | 90 days unused |
-| Application logs | not rewritten; they carry only user id and request id, never content | 30 days |
-| Backups | not rewritten | Neon 7-day restore window + nightly `pg_dump` in R2 kept 30 days |
+| Application logs | not rewritten; they carry only user id and request id, never content; a retention job on each host deletes them (steps 12, 13) | 30 days |
+| Neon branches | `dev` is a schema-only branch (no rows from `main`); a branch with data from `main`, e.g. to try a migration on real rows, is deleted the same day | same day |
+| Backups | not rewritten | Neon restore window (6 hours on Free, raised to 7 days on Launch) + nightly `pg_dump` in R2 kept 30 days |
 
-So deleted data is gone from every backup within 30 days. The privacy
-policy states these periods.
+So deleted data is gone from every copy within 30 days of the purge. A
+data branch of `main` is a copy the purge never reaches, which is why
+it does not outlive the day. The privacy policy states these periods.
 
 ### 7.3 App Privacy label
 
@@ -646,22 +654,26 @@ changes only `DATABASE_URL` and the host.
     (the first query after that is 0.3-0.5 s slower), 6-hour restore
     window.
   - Backups: nightly encrypted `pg_dump` to an R2 bucket
-    (`miranote-pg-backups`, R2 free tier), kept 30 days.
-  - API: the `poc/accounts/` service runs on the team lead's Mac behind the
-    existing Cloudflare tunnel as its own hostname
+    (`miranote-pg-backups`, R2 free tier, 30-day lifecycle rule), run
+    by a launchd job on the Mac; the encryption key is kept outside R2.
+  - API: the `poc/accounts/` service runs on the team lead's Mac behind
+    the existing Cloudflare tunnel as its own hostname
     (`beta-accounts.miranote.app`), independent of the other beta
     services. Secrets in a local `.env`, never in the repo.
 - **Phase 2 -- public TestFlight and 1.0 (recommended, pending
   team-lead confirmation).**
-  - Database: **Neon Launch**, same project. No monthly minimum, 7-day
-    point-in-time restore, encrypted at rest, branches (`main` = prod,
-    `dev`) for testing migrations. Scale-to-zero off (no cold queries on
-    Apple's webhooks).
+  - Database: **Neon Launch**, same project. No monthly minimum,
+    point-in-time restore with the history window raised to 7 days
+    (Launch's maximum; the default is 1 day), encrypted at rest,
+    branches (`main` = prod, `dev` schema-only, 7.2) for testing
+    migrations. Scale-to-zero off (no cold queries on Apple's
+    webhooks).
   - API: **FastAPI on Fly.io `iad`**, 2 x shared-cpu-1x 1 GB, always
     running, under a `miranote` Fly org. Same metro as Neon us-east-1
     (1-2 ms per query); the team already runs mirabot on Fly. Domain
     `api.miranote.app` (Cloudflare DNS -> Fly). Secrets in Fly secrets.
-  - Backups: unchanged (R2, 30 days).
+  - Backups: unchanged (R2, 30 days); the nightly `pg_dump` moves to a
+    scheduled Fly machine.
   - Cost (DB + hosting only, AI excluded): about $20-35/month during
     public TestFlight, $35-55 at 1k users, $120-200 at 10k.
 - **Fallback:** Fly Managed Postgres ($38/month, private network,
@@ -685,7 +697,7 @@ behind Cloudflare too), so it lands before public TestFlight.
 
 - `poc/accounts/` -- new FastAPI service, in the same flat layout as the
   other services under `poc/` (port 8007 on the Mac):
-  - built (#108, #109): `GET /health` (no token; `SELECT 1`),
+  - in #108 and #109: `GET /health` (no token; `SELECT 1`),
     `POST /auth/apple`, `POST /auth/refresh`, `POST /auth/signout`,
     `GET /.well-known/jwks.json`, `GET /me`;
   - to come: `/auth/apple/notifications`, `DELETE /me`,
@@ -745,24 +757,31 @@ Postgres.
 9. App Store Connect: subscription group `Plus` with monthly ($5.99) and
    yearly ($39.99), the 2-month introductory offer (not yet live),
    Billing Grace Period on, Family Sharing off; an In-App Purchase key
-   for the Server API; a DeviceCheck key; Server Notifications V2 and
-   the SIWA server-to-server notification URL ->
-   `beta-accounts.miranote.app`.
+   for the Server API; Server Notifications V2, Production and Sandbox
+   URLs -> `beta-accounts.miranote.app`. Developer account: a Sign in
+   with Apple key (client secret for the code exchange and revoke at
+   deletion, 7.1), a DeviceCheck key, and the SIWA server-to-server
+   notification URL (3.3) -> `beta-accounts.miranote.app`.
 10. Neon Free: org `miranote`, project in `aws-us-east-1`, Postgres 17,
-    branches `main` and `dev`.
+    branches `main` and a schema-only `dev` (7.2).
 11. Cloudflare: tunnel hostname `beta-accounts.miranote.app` on the team
-    lead's Mac; R2 bucket `miranote-pg-backups` with 30-day retention.
-12. Run `poc/accounts/` on the Mac against Neon; end-to-end Sandbox tests
-    from internal TestFlight: purchase, renewal, grace, refund and
-    `REFUND_REVERSED`, offer-code redemption outside the app, Restore,
-    deletion.
+    lead's Mac; R2 bucket `miranote-pg-backups` with a 30-day lifecycle
+    rule.
+12. Run `poc/accounts/` on the Mac against Neon, with launchd jobs for
+    the nightly `pg_dump` and for deleting its logs after 30 days (the
+    beta services' launchd logs have no rotation today); end-to-end
+    Sandbox tests from internal TestFlight: purchase, renewal, grace,
+    refund and `REFUND_REVERSED`, offer-code redemption outside the app,
+    Restore, deletion.
 
 **Phase 2 -- public TestFlight and 1.0:**
 
-13. Upgrade Neon to Launch (scale-to-zero off); Fly.io org `miranote`
-    with a deploy token; DNS `api.miranote.app` -> Fly; deploy
-    `poc/accounts/` and the AI services to Fly `iad`; repoint the App Store
-    and SIWA notification URLs to `api.miranote.app`.
+13. Upgrade Neon to Launch (scale-to-zero off, history window 7 days);
+    Fly.io org `miranote` with a deploy token; DNS `api.miranote.app`
+    -> Fly; deploy `poc/accounts/` and the AI services to Fly `iad`,
+    with the nightly `pg_dump` as a scheduled machine and no log copy
+    kept longer than 30 days; repoint the App Store and SIWA
+    notification URLs to `api.miranote.app`.
 14. iOS (separate issues): sign-in at first server-AI use, paywall with
     3.1.2 disclosures, Restore in paywall and Settings, deletion with
     SIWA re-run, the taste switch, App Attest, on-device mood, Declared
