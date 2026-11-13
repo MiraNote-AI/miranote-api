@@ -35,8 +35,10 @@ Most damaging first.
 - `beta_auth.py` -- the token gate and rate limit in front of every service
 - `poc/*/main.py` -- the HTTP endpoints the app calls
 - `poc/*/*client*.py`, `poc/photo-collections/llm.py`,
-  `poc/image-generation/shared/vertex_client.py` -- calls to model and
-  speech providers, and where their keys are read
+  `poc/image-generation/shared/vertex_client.py`,
+  `poc/image-generation/generate/` (the DashScope and Gemini providers),
+  `poc/*/config.py` -- calls to model and speech providers, and where
+  their keys are read
 - `.env.example`, `poc/*/.env.example` -- the token and provider-key names
 - `scripts/`, `scripts/launchd/`, `start-all.sh` -- the beta deploy: the
   Cloudflare tunnel, launchd jobs that start and restart every backend; a
@@ -58,6 +60,7 @@ per suite (`pip install -r poc/<suite>/requirements.txt`), no keys:
 
 ```
 PYTHONPATH=. LLM_API_KEY=x python -m pytest poc/chatbot/tests
+PYTHONPATH=. python -m pytest tests    # beta_auth, in the chatbot venv
 PYTHONPATH=. python -m pytest poc/retrieval/tests
 ```
 
