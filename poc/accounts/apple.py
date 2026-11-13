@@ -42,6 +42,12 @@ class InvalidIdentityToken(Exception):
     a short reason for the log; it never contains the token."""
 
 
+class AppleKeysUnavailable(Exception):
+    """The token's kid is not cached and the last fetch of Apple's keys
+    failed, so we cannot tell a valid token from a bad one. The caller
+    should retry later; it is not the token's fault."""
+
+
 @dataclass(frozen=True)
 class AppleIdentity:
     sub: str
@@ -55,6 +61,7 @@ class AppleKeys:
         self._clock = clock
         self._keys: Dict[str, Any] = {}
         self._fetched_at: Optional[float] = None
+        self._last_fetch_failed = False
         self._lock = asyncio.Lock()
 
     async def aclose(self) -> None:
@@ -65,9 +72,14 @@ class AppleKeys:
             if self._needs_fetch(kid):
                 try:
                     await self._fetch()
+                    self._last_fetch_failed = False
                 except Exception as exc:  # noqa: BLE001 -- fall back to the cache
+                    self._last_fetch_failed = True
                     log.warning("apple keys fetch failed", extra={"error": type(exc).__name__})
             key = self._keys.get(kid)
+            unavailable = key is None and self._last_fetch_failed
+        if unavailable:
+            raise AppleKeysUnavailable()
         if key is None:
             raise InvalidIdentityToken("unknown kid")
         return key

@@ -97,6 +97,14 @@ async def sign_in_with_apple(body: AppleSignIn, request: Request):
     except apple.InvalidIdentityToken as exc:
         log.info("apple token refused", extra={"reason": str(exc)})
         raise _unauthorized("invalid identity token")
+    except apple.AppleKeysUnavailable:
+        # Our outage, not a bad token: the app should retry, not sign out.
+        log.warning("apple token not checked: apple keys unavailable")
+        raise HTTPException(
+            503,
+            detail="sign-in is unavailable, try again",
+            headers={"Retry-After": str(apple.REFETCH_SECONDS)},
+        )
 
     now = _now()
     async with request.app.state.engine.begin() as conn:

@@ -41,7 +41,7 @@ gate on this service: every route checks its own credential.
 
 | route | body | answer |
 |---|---|---|
-| `POST /auth/apple` | `{"identity_token", "nonce"}` | token pair, or 401 |
+| `POST /auth/apple` | `{"identity_token", "nonce"}` | token pair; 401; or 503 when Apple's keys cannot be fetched (retry) |
 | `POST /auth/refresh` | `{"refresh_token"}` | new token pair, or 401 (sign in again) |
 | `POST /auth/signout` | `{"refresh_token"}` | 204, always |
 | `GET /.well-known/jwks.json` | | our public signing keys |

@@ -181,6 +181,30 @@ def test_apple_keys_are_cached_and_unknown_kids_refetch_rarely(client, fake_appl
     assert fake_apple.fetches == 1
 
 
+def test_apple_keys_unreachable_is_503_not_401(clean_db, fake_apple, monkeypatch):
+    # A network failure on our side must not look like a bad token to the app.
+    apple_up = {"value": False}
+
+    def handler(request):
+        if not apple_up["value"]:
+            raise httpx.ConnectError("apple unreachable")
+        return fake_apple.handler(request)
+
+    monkeypatch.setattr(main, "APPLE_TRANSPORT", httpx.MockTransport(handler))
+    with TestClient(main.app) as c:
+        r = sign_in(c, fake_apple.token())
+        assert r.status_code == 503
+        assert r.headers["Retry-After"] == str(apple.REFETCH_SECONDS)
+        assert run_sql("SELECT count(*) FROM users") == [(0,)]
+
+        # Apple is back; the next fetch is allowed a minute after the last one.
+        apple_up["value"] = True
+        c.app.state.apple_keys._fetched_at -= apple.REFETCH_SECONDS
+        assert sign_in(c, fake_apple.token()).status_code == 200
+        # With the keys cached, an unknown kid is the token's fault again.
+        assert sign_in(c, fake_apple.token(kid="rotated-away")).status_code == 401
+
+
 # --- /auth/refresh -----------------------------------------------------------
 
 
