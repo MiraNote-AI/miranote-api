@@ -58,6 +58,7 @@ per suite (`pip install -r poc/<suite>/requirements.txt`), no keys:
 
 ```
 PYTHONPATH=. LLM_API_KEY=x python -m pytest poc/chatbot/tests
+PYTHONPATH=. python -m pytest tests    # beta_auth, in the chatbot venv
 PYTHONPATH=. python -m pytest poc/retrieval/tests
 ```
 
