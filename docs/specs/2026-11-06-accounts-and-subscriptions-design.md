@@ -209,7 +209,7 @@ PostgreSQL. All ids are UUIDs; all times are `timestamptz` in UTC.
 | type, subtype | text | e.g. `DID_FAIL_TO_RENEW / GRACE_PERIOD` |
 | original_transaction_id | text null | |
 | signed_date | timestamptz | |
-| payload | jsonb | decoded, verified payload; kept 1 year |
+| payload | jsonb | decoded, verified payload **without** `appAccountToken` (the owner lives only in `subscriptions.user_id`); kept 1 year |
 | processed_at | timestamptz | |
 
 `ai_usage` -- one row per AI request; the only source of quotas
@@ -298,7 +298,8 @@ means for the privacy label.
 ### 5.1 One rule: recompute from Apple's snapshot
 
 Every input (app sync, notification, Server API call) yields Apple's
-signed transaction info and renewal info. We verify both with Apple's
+signed transaction info and renewal info; the app sync sends both (5.3).
+We verify both with Apple's
 `app-store-server-library` (Python) and **recompute the whole row** from
 them, instead of a per-notification-type state machine. A snapshot whose
 signed date is older than `last_signed_date` is stored (if it came from a
@@ -332,31 +333,54 @@ Every verified payload must also have `bundleId` = our bundle id.
 
 ### 5.3 App sync and ownership
 
-`POST /subscriptions/sync` (signed in) with the JWS transactions from
-`Transaction.currentEntitlements`. The app calls it after a purchase, on
-launch when signed in, and on Restore. For each transaction:
+`POST /subscriptions/sync` (signed in). The app finds its chains with
+`Transaction.currentEntitlements` and, for each one, sends both
+Apple-signed JWS strings of its `Product.SubscriptionInfo.Status`: the
+transaction (`transaction.jwsRepresentation`) and the renewal info
+(`renewalInfo.jwsRepresentation`). The transaction alone is not enough:
+the grace period end, `auto_renew`, the pending product and billing
+retry exist only in the renewal info, so a row recomputed from the
+transaction alone would lock a grace-period user out (5.1). The app
+calls it after a purchase, on launch when signed in, and on Restore.
+For each chain:
 
-1. Verify JWS, `bundleId`, environment (5.2).
-2. If `appAccountToken` is present, it must equal the caller's user id.
-   Otherwise reject that transaction (403). A signed transaction is not
-   a secret; this stops a paying user from sharing theirs.
-3. If `appAccountToken` is absent (offer code redeemed in the App Store,
-   purchase made before sign-in):
+1. Verify both JWS, `bundleId`, environment (5.2), and that both name
+   the same `originalTransactionId`.
+2. If `appAccountToken` names the caller, the chain is the caller's.
+3. If `appAccountToken` names another **live** user, reject that chain
+   (403). A signed transaction is not a secret; this stops a paying
+   user from sharing theirs.
+4. If `appAccountToken` is absent (offer code redeemed in the App Store,
+   purchase made before sign-in) or names no live user (its account was
+   deleted, section 7):
    - chain unowned -> link it to the caller, then call the Server API
-     **Set App Account Token** with the caller's id, so later
-     notifications carry the user;
+     **Set App Account Token** with the caller's id (it also replaces an
+     old token), so later notifications carry the user;
    - chain owned by the caller -> no change;
-   - chain owned by another account -> reject (409), app shows "this
-     purchase belongs to another MiraNote account".
-4. Upsert the row from the snapshot (5.1).
+   - chain owned by another account -> reject (409).
+5. Upsert the row from the snapshot (5.1).
+
+On a 403 or 409 the app shows "this purchase belongs to another
+MiraNote account" with a link to support.
 
 **Reclaiming an unowned chain.** A chain becomes unowned when its
-account is deleted (section 7). The server cannot tell whether the same
-Apple ID is asking, so the rule is: the first account that sends it in a
-Restore (or a launch sync) and passes step 3 gets it. Every link is
-logged (user id, chain id, source) and rate-limited: a chain can be
-re-linked at most once per 30 days (`linked_at`), and one user can link
-at most 3 chains per 24 h.
+account is deleted (section 7). Its transactions keep carrying the
+deleted account's id as `appAccountToken` until Set App Account Token
+replaces it; that is why step 4 treats a token that names no live user
+like an absent one (otherwise the paying user could never get the chain
+back). The server cannot tell whether the same Apple ID is asking, so
+the rule is: the first account that sends it in a Restore (or a launch
+sync) and passes step 4 gets it. Every link is logged (user id, chain
+id, source) and rate-limited: a chain can be re-linked at most once per
+30 days (`linked_at`), and one user can link at most 3 chains per 24 h.
+
+**A chain owned by another live account** (decided 2026-11-13): 1.0
+rejects the sync as above and has no self-service transfer. Support
+moves a chain by hand: the user sends the order ID from Apple's receipt
+email, support calls the Server API **Look Up Order ID** to confirm the
+order belongs to that chain, sets `user_id` to the user's account and
+calls Set App Account Token. The move is logged like any other link.
+(Look Up Order ID does not work in Sandbox.)
 
 **Restore Purchases** (Guideline 3.1.1) is in the paywall and in
 Settings. Signed out -> sign in first -> `AppStore.sync()` -> send
@@ -378,8 +402,17 @@ that carries signed transaction/renewal info triggers a recompute (5.1).
 | `CONSUMPTION_REQUEST` | stored; not answered in 1.0 (it needs the user's consent) |
 | `TEST`, anything else | stored; 200 |
 
-A notification with no `appAccountToken` for an unknown chain creates an
-unowned row; the next launch sync links it (5.3).
+A notification is stored and applied in **one transaction**: if
+applying fails, nothing is stored and Apple's retry applies it again (a
+`notification_uuid` already stored is skipped, so storing first and
+applying later would lose that update).
+
+A notification sets `user_id` only on an unowned row, and only when its
+`appAccountToken` names a live user; it never moves an owned chain.
+Renewals of a deleted account's chain keep arriving with that account's
+id, and writing it to `user_id` would fail the foreign key and make
+Apple retry forever. A notification without such a token creates or
+updates an unowned row; the next launch sync links it (5.3).
 
 ### 5.5 Repair path
 
@@ -502,7 +535,7 @@ ship, and is never accepted by the production AI endpoints.
 | `users`, `sessions` | deleted | -- |
 | `taste_events` | deleted | -- |
 | `subscriptions` | `user_id` set to null (pseudonymized); reclaimable by Restore (5.3) | 13 months after the chain's last expiry |
-| `app_store_notifications` | `appAccountToken` removed from `payload` | 1 year from receipt |
+| `app_store_notifications` | nothing to strip: payloads are stored without `appAccountToken` (4.1), so renewals that keep arriving for the chain do not bring the deleted id back | 1 year from receipt |
 | `ai_usage` | `user_id` set to null | 13 months from the request |
 | `app_attest_keys`, DeviceCheck bits | untouched (not linked to a user) | 90 days unused |
 | Application logs | not rewritten; they carry only user id and request id, never content | 30 days |
