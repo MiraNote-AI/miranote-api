@@ -25,7 +25,7 @@ def _tables():
 
 def test_upgrade_creates_exactly_the_tier1_tables(migrated):
     assert _tables() == set(TABLES) | {"alembic_version"}
-    assert run_sql("SELECT version_num FROM alembic_version") == [("0001",)]
+    assert run_sql("SELECT version_num FROM alembic_version") == [("0002",)]
 
 
 def test_downgrade_to_base_drops_everything_and_upgrade_restores_it(migrated):
@@ -35,6 +35,49 @@ def test_downgrade_to_base_drops_everything_and_upgrade_restores_it(migrated):
 
     command.upgrade(migrated, "head")
     assert _tables() == set(TABLES) | {"alembic_version"}
+
+
+def _plan(sql):
+    """EXPLAIN with sequential scans priced out: the tables are empty, so the
+    plan shows whether an index fits the query, not what the planner would
+    pick on real data. (On empty tables the per-user and per-device windows
+    tie between indexes, so they are not pinned here.)"""
+
+    async def _run():
+        engine = db.create_engine(TEST_URL, poolclass=NullPool)
+        try:
+            async with engine.begin() as conn:
+                await conn.execute(text("SET LOCAL enable_seqscan = off"))
+                rows = await conn.execute(text("EXPLAIN " + sql))
+                return "\n".join(r[0] for r in rows)
+        finally:
+            await engine.dispose()
+
+    return asyncio.run(_run())
+
+
+# Queries that run across every user, and the index each one needs: the
+# cost kill switch (design 6.3) and revoking one sign-in (3.2).
+_INDEXED_QUERIES = [
+    (
+        "cost kill switch",
+        "SELECT sum(cost_usd) FROM ai_usage WHERE feature = 'image_generate' "
+        "AND status <> 'failed' AND created_at > now() - interval '24 hours'",
+        "ix_ai_usage_feature_created_at",
+    ),
+    (
+        "revoke a sign-in",
+        "UPDATE sessions SET revoked_at = now() "
+        "WHERE family_id = '00000000-0000-0000-0000-000000000002' AND revoked_at IS NULL",
+        "ix_sessions_family_id",
+    ),
+]
+
+
+def test_the_cross_user_queries_have_an_index(migrated):
+    for name, sql, index in _INDEXED_QUERIES:
+        plan = _plan(sql)
+        assert index in plan and "Index Cond" in plan, (name, plan)
 
 
 def test_every_id_is_uuid_and_every_time_is_timestamptz(migrated):

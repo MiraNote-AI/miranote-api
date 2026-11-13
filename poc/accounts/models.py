@@ -70,7 +70,7 @@ class Session(Base):
     user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
-    family_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    family_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
     token_hash: Mapped[str] = mapped_column(Text, nullable=False, unique=True)  # SHA-256
     replaced_at: Mapped[Optional[dt.datetime]] = _ts(nullable=True)
     created_at: Mapped[dt.datetime] = _ts(now=True)
@@ -142,6 +142,8 @@ class AiUsage(Base):
         CheckConstraint("user_id IS NULL OR device_key_id IS NULL", name="ck_ai_usage_device_key_signed_out_only"),
         Index("ix_ai_usage_user_id_created_at", "user_id", "created_at"),
         Index("ix_ai_usage_device_key_id_created_at", "device_key_id", "created_at"),
+        # The cost kill switch (6.3): per feature, over every user.
+        Index("ix_ai_usage_feature_created_at", "feature", "created_at"),
     )
 
     # Sent by the client: a retry with the same id is not charged twice.
