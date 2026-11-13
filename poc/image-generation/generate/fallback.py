@@ -42,7 +42,8 @@ def build_prompt(prompt: str, aspect_ratio: str) -> str:
 #
 # Deliberately excluded, because a retry of the same prompt can still succeed:
 # NO_IMAGE (the model simply produced none), IMAGE_OTHER, OTHER, MAX_TOKENS,
-# and the 3.0 additions CONTINUATION, MALFORMED_RESPONSE, TOO_MANY_TOOL_CALLS.
+# and the members new since 2.12.1 (the SDK on beta): TOO_MANY_TOOL_CALLS
+# (2.17.0), CONTINUATION (2.27.0) and MALFORMED_RESPONSE (3.0.0).
 _REFUSAL_MARKERS = ("SAFETY", "PROHIBITED", "BLOCK", "RECITATION", "SPII")
 
 

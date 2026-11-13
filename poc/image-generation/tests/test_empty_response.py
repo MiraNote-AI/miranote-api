@@ -171,10 +171,12 @@ REFUSING = {
 RETRYABLE = {
     "FINISH_REASON_UNSPECIFIED", "STOP", "MAX_TOKENS", "LANGUAGE", "OTHER",
     "MALFORMED_FUNCTION_CALL", "UNEXPECTED_TOOL_CALL", "NO_IMAGE", "IMAGE_OTHER",
-    # Added in google-genai 3.0. CONTINUATION is a token-limit stop (the SDK
-    # resends with the continuation token by default, so it rarely reaches
-    # us), MALFORMED_RESPONSE a broken reply, TOO_MANY_TOOL_CALLS a tool loop
-    # (we pass no tools): none is the model declining the prompt.
+    # New since google-genai 2.12.1, the SDK beta runs: TOO_MANY_TOOL_CALLS
+    # (2.17.0), CONTINUATION (2.27.0) and MALFORMED_RESPONSE (3.0.0).
+    # CONTINUATION is a token-limit stop (shared.vertex_client turns off the
+    # SDK's automatic resend, so it reaches us and gets main.py's one retry),
+    # MALFORMED_RESPONSE a broken reply, TOO_MANY_TOOL_CALLS a tool loop (we
+    # pass no tools): none is the model declining the prompt.
     "CONTINUATION", "MALFORMED_RESPONSE", "TOO_MANY_TOOL_CALLS",
 }
 
