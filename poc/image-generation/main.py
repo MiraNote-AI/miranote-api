@@ -17,6 +17,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import httpx
+try:                    # google-genai >= 3.0 sends through httpx2, a fork with
+    import httpx2       # its own exception classes
+except ImportError:     # google-genai 2.x: httpx only
+    httpx2 = None
 from fastapi import FastAPI, HTTPException, Request, UploadFile
 from fastapi.exception_handlers import request_validation_exception_handler
 from fastapi.exceptions import RequestValidationError
@@ -1031,6 +1035,10 @@ EDIT_TIMEOUT_DETAIL = "the edit took too long; try again"
 PROVIDER_ERROR_DETAIL = "the image model failed on that one; try again"
 MISSING_FILE_DETAIL = "send the picture as a 'file' upload"
 
+# A client-side timeout, from whichever transport the SDK was built on.
+_MODEL_TIMEOUTS = tuple(cls for cls in (httpx.TimeoutException,
+                                        getattr(httpx2, "TimeoutException", None)) if cls)
+
 
 def _edit_error(status: int, reason: str, message: str) -> JSONResponse:
     return JSONResponse({"status": "error", "reason": reason, "message": message},
@@ -1091,7 +1099,7 @@ async def stylize_image(
         if error.refused:
             return _edit_error(422, "edit_refused", REFUSED_DETAIL)
         return _edit_error(500, "no_image", EMPTY_DETAIL)
-    except httpx.TimeoutException:
+    except _MODEL_TIMEOUTS:
         print(f"[stylize] {config.STYLE_MODEL} timed out")
         return _edit_error(504, "edit_timeout", EDIT_TIMEOUT_DETAIL)
     except Exception as error:                      # noqa: BLE001 - reported below

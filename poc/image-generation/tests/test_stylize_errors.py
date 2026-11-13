@@ -12,12 +12,15 @@ from __future__ import annotations
 import io
 import os
 import struct
+import threading
 import unittest
 import zlib
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from types import SimpleNamespace
 from unittest import mock
 
 import httpx
+from google import genai
 from google.genai import errors, types
 from PIL import Image
 
@@ -92,6 +95,18 @@ def _image_response():
 # The start of an iPhone photo as it leaves the camera roll. Pillow has no HEIC
 # decoder without a plugin this service does not install.
 HEIC = b"\x00\x00\x00\x18ftypheic\x00\x00\x00\x00mif1heic" + b"\x00" * 64
+
+
+class _Stalled(BaseHTTPRequestHandler):
+    """A model endpoint that reads the request and never answers."""
+    release = threading.Event()
+
+    def do_POST(self):
+        self.rfile.read(int(self.headers.get("Content-Length", 0)))
+        self.release.wait(10)
+
+    def log_message(self, *args):
+        pass
 
 
 class StylizeErrorTests(unittest.IsolatedAsyncioTestCase):
@@ -212,6 +227,24 @@ class StylizeErrorTests(unittest.IsolatedAsyncioTestCase):
     async def test_a_timeout_is_a_504(self):
         response, _ = await self._post(
             client=self._model_raising(httpx.ReadTimeout("timed out")))
+        self.assertEditError(response, 504, "edit_timeout")
+
+    async def test_a_timeout_in_the_real_sdk_is_a_504(self):
+        """The SDK's own client against a server that never answers, not a
+        stub: google-genai 3.x sends through httpx2, whose ReadTimeout is not
+        an httpx.TimeoutException."""
+        _Stalled.release.clear()
+        server = ThreadingHTTPServer(("127.0.0.1", 0), _Stalled)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        self.addCleanup(_Stalled.release.set)
+        # A proxy from the environment must not stand between us and 127.0.0.1.
+        with mock.patch.dict(os.environ, {"NO_PROXY": "127.0.0.1", "no_proxy": "127.0.0.1"}):
+            client = genai.Client(api_key="test-not-a-key", http_options=types.HttpOptions(
+                base_url=f"http://127.0.0.1:{server.server_address[1]}"))
+        with mock.patch.object(stylizer, "TIMEOUT_SECONDS", 1):
+            response, _ = await self._post(client=client)
         self.assertEditError(response, 504, "edit_timeout")
 
     async def test_an_exhausted_quota_is_a_503(self):
