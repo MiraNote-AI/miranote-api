@@ -91,7 +91,16 @@ async def lifespan(app: FastAPI):
         await app.state.apple_keys.aclose()
 
 
-app = FastAPI(title="MiraNote Accounts", version="0.1.0", lifespan=lifespan)
+# No /docs, /redoc or /openapi.json: there is no beta gate in front of this
+# service, and the other services serve theirs only behind it.
+app = FastAPI(
+    title="MiraNote Accounts",
+    version="0.1.0",
+    lifespan=lifespan,
+    docs_url=None,
+    redoc_url=None,
+    openapi_url=None,
+)
 
 
 # No beta gate: every route proves its caller itself (an Apple identity

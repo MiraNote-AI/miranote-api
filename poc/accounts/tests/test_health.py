@@ -39,6 +39,13 @@ def test_no_beta_gate_unknown_routes_are_404(client):
     assert client.get("/nope").status_code == 404
 
 
+def test_api_docs_are_not_served(client):
+    # With no beta gate in front, FastAPI's docs would be public; the other
+    # services serve theirs only behind the gate.
+    for path in ("/docs", "/redoc", "/openapi.json"):
+        assert client.get(path).status_code == 404, path
+
+
 def test_request_log_has_no_body_token_or_query(client):
     buf = io.StringIO()
     handler = logging.StreamHandler(buf)
