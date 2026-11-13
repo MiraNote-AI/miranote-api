@@ -99,7 +99,10 @@ def is_safety_refusal(response) -> bool:
         str(getattr(candidate, "finish_reason", "") or "")
         for candidate in _candidates(response)
     ]
-    signals.append(str(getattr(response, "prompt_feedback", "") or ""))
+    # The block reason, not the whole object: an unblocked SDK prompt_feedback
+    # prints as "block_reason=None ..." and would match the "BLOCK" marker.
+    feedback = getattr(response, "prompt_feedback", None)
+    signals.append(str(getattr(feedback, "block_reason", feedback) or ""))
     joined = " ".join(signals).upper()
     return any(marker in joined for marker in _REFUSAL_MARKERS)
 

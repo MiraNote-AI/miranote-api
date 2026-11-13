@@ -71,6 +71,16 @@ class SafetyRefusalTests(unittest.TestCase):
             fallback.is_safety_refusal(_response(prompt_feedback="BLOCKED: SAFETY"))
         )
 
+    def test_the_sdk_prompt_feedback_is_read_by_its_block_reason(self):
+        """Unblocked, the SDK object prints "block_reason=None ...", which
+        must not match the "BLOCK" marker (api #103)."""
+        from google.genai import types
+        unblocked = types.GenerateContentResponsePromptFeedback()
+        blocked = types.GenerateContentResponsePromptFeedback(
+            block_reason=types.BlockedReason.SAFETY)
+        self.assertFalse(fallback.is_safety_refusal(_response(prompt_feedback=unblocked)))
+        self.assertTrue(fallback.is_safety_refusal(_response(prompt_feedback=blocked)))
+
     def test_an_ordinary_blank_is_not_a_refusal(self):
         """The case a retry is actually for."""
         self.assertFalse(fallback.is_safety_refusal(_response(finish_reason="STOP")))
