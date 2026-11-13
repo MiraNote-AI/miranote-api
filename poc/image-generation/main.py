@@ -1074,9 +1074,11 @@ async def stylize_image(
         transparent = _is_transparent(raw)
     except Image.DecompressionBombError:
         return _edit_error(413, "image_too_large", IMAGE_TOO_LARGE_DETAIL)
-    except (OSError, SyntaxError) as error:
+    except (OSError, SyntaxError, ValueError) as error:
         # Empty, truncated, or a format Pillow cannot open (HEIC among them).
-        # SyntaxError is Pillow's "broken PNG file", raised while decoding.
+        # SyntaxError is Pillow's "broken PNG file", raised while decoding;
+        # ValueError is what it raises for some broken headers ("Truncated
+        # IHDR chunk").
         print(f"[stylize] unreadable upload: {str(error)[:200]}")
         return _edit_error(400, "unreadable_image", UNREADABLE_IMAGE_DETAIL)
     try:

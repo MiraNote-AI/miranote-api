@@ -78,6 +78,14 @@ def _broken_png() -> bytes:
     return b"".join(out)
 
 
+def _short_header_png() -> bytes:
+    """A valid PNG whose IHDR length field says 12, not 13. Image.open raises
+    ValueError("Truncated IHDR chunk"), neither OSError nor SyntaxError."""
+    png = bytearray(_png())
+    png[8:12] = struct.pack(">I", 12)
+    return bytes(png)
+
+
 def _truncated_jpeg() -> bytes:
     """The first third of an 800x600 JPEG: under the 1536 px cap and opaque,
     so neither the shrink nor the transparency check decodes it."""
@@ -170,6 +178,11 @@ class StylizeErrorTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_a_png_that_breaks_while_decoding_is_a_400(self):
         response, stub = await self._post(data=_broken_png())
+        self.assertEditError(response, 400, "unreadable_image")
+        stub.models.generate_content.assert_not_called()
+
+    async def test_a_png_with_a_short_header_is_a_400(self):
+        response, stub = await self._post(data=_short_header_png())
         self.assertEditError(response, 400, "unreadable_image")
         stub.models.generate_content.assert_not_called()
 
