@@ -11,10 +11,22 @@ import os
 
 from dotenv import load_dotenv
 from google import genai
+from google.genai import types
 
 load_dotenv()
 
 _client = None
+
+# google-genai 2.30 added automatic continuation, on by default: when a reply
+# ends with finish_reason CONTINUATION and carries a continuation_token,
+# generate_content sends the request again, with no cap, and each hop is
+# billed. That is an automatic retry inside the SDK, under the image buckets
+# config.py describes (1/min per base model), so every call turns it off.
+# Checked rather than assumed: google-genai 2.12.1, on beta until its venv is
+# upgraded, has no such field and rejects it with a ValidationError.
+_HAS_AUTOMATIC_CONTINUATION = (
+    "automatic_continuation" in types.GenerateContentConfig.model_fields
+)
 
 
 def _get_client():
@@ -26,6 +38,18 @@ def _get_client():
             location=os.environ["LOCATION"],
         )
     return _client
+
+
+def generate_config(**fields) -> types.GenerateContentConfig | None:
+    """The config for a generate_content call through this client: `fields`,
+    with automatic continuation off where the installed SDK has it.
+
+    None when there is nothing to set, so a call that passed no config before
+    still passes none on an SDK without the field.
+    """
+    if _HAS_AUTOMATIC_CONTINUATION:
+        fields["automatic_continuation"] = False
+    return types.GenerateContentConfig(**fields) if fields else None
 
 
 def _extract_image_bytes(response) -> bytes:

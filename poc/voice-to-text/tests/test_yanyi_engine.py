@@ -186,6 +186,8 @@ def test_the_yanyi_engine_refuses_to_start_without_a_key(monkeypatch):
 def test_health_says_yanyi_is_reachable_once_probed(yanyi_app, monkeypatch):
     test_client, main, _ = yanyi_app
     monkeypatch.setattr(main, "yanyi_health", lambda **kwargs: True)
+    # yanyi_app sets LLM_API_KEY, so startup would also probe the LLM provider.
+    monkeypatch.setattr(main, "_check_llm", lambda: None)
     with TestClient(main.app, headers={"Authorization": "Bearer test-token"}) as started:
         assert started.get("/health").json()["yanyi"] == "ok"
 
@@ -201,6 +203,7 @@ def test_health_says_yanyi_is_unreachable_without_killing_the_service(
         raise OSError("connection refused")
 
     monkeypatch.setattr(main, "yanyi_health", boom)
+    monkeypatch.setattr(main, "_check_llm", lambda: None)
     with TestClient(main.app, headers={"Authorization": "Bearer test-token"}) as started:
         body = started.get("/health").json()
     assert body["status"] == "ok"

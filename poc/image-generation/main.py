@@ -32,7 +32,7 @@ from rembg import remove, new_session
 import beta_auth
 
 import config
-from shared.vertex_client import _get_client
+from shared.vertex_client import _get_client, generate_config
 from generate import (fallback, prompt_expander, generate_presets,
                       image_providers, dashscope_text)
 from generate.http_client import ProviderError
@@ -164,7 +164,8 @@ def _one_image(model: str, prompt: str, aspect_ratio: str) -> tuple[bytes | None
     """One image from one call: (image, refused).
 
     Split out of _call_model so the retry loop around it is identical on both
-    providers. The Gemini branch is the pre-DashScope code verbatim, which is
+    providers. The Gemini branch is the pre-DashScope code verbatim, apart from
+    generate_config() turning off the SDK's automatic continuation, which is
     what makes IMAGE_MODEL=<config.MODEL_ID> a real rollback rather than an
     untested one.
 
@@ -175,6 +176,7 @@ def _one_image(model: str, prompt: str, aspect_ratio: str) -> tuple[bytes | None
         response = _get_client().models.generate_content(
             model=model,
             contents=fallback.build_prompt(prompt, aspect_ratio),
+            config=generate_config(),
         )
         parts = fallback.image_parts(response)
         if parts:
@@ -1150,6 +1152,7 @@ async def describe_image(file: UploadFile, prompt: str = None):
                 types.Part.from_bytes(data=raw, mime_type=file.content_type or "image/png"),
                 question,
             ],
+            config=generate_config(),
         )
         return (response.text or "").strip()
 
