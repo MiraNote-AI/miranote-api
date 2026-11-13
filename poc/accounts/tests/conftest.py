@@ -30,6 +30,22 @@ if not TEST_URL:
     )
 os.environ["DATABASE_URL"] = TEST_URL
 
+
+def new_ec_key_pem() -> str:
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric import ec
+
+    return (
+        ec.generate_private_key(ec.SECP256R1())
+        .private_bytes(serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8, serialization.NoEncryption())
+        .decode()
+    )
+
+
+# A throwaway signing key for this run; tests that rotate set their own.
+os.environ["ACCOUNTS_SIGNING_KEY"] = new_ec_key_pem()
+os.environ.pop("ACCOUNTS_PREVIOUS_PUBLIC_KEY", None)
+
 from alembic import command  # noqa: E402
 from alembic.config import Config  # noqa: E402
 from sqlalchemy import text  # noqa: E402

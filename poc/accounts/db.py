@@ -50,7 +50,11 @@ def engine_args(raw_url: str) -> Tuple[URL, Dict[str, Any]]:
 
 def create_engine(raw_url: str, **kw: Any) -> AsyncEngine:
     url, connect_args = engine_args(raw_url)
-    return create_async_engine(url, connect_args=connect_args, pool_pre_ping=True, **kw)
+    # hide_parameters: an error's message, which uvicorn logs on a 500, would
+    # otherwise end with the bound values (refresh-token hashes, Apple subs).
+    return create_async_engine(
+        url, connect_args=connect_args, pool_pre_ping=True, hide_parameters=True, **kw
+    )
 
 
 async def ping(engine: AsyncEngine, timeout: float) -> bool:

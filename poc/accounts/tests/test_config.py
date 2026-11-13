@@ -2,10 +2,16 @@
 
 from __future__ import annotations
 
+import asyncio
+
 import pytest
+from sqlalchemy import text
+from sqlalchemy.exc import DBAPIError
+from sqlalchemy.pool import NullPool
 
 import config
 import db
+from tests.conftest import TEST_URL
 
 NEON_STYLE = (
     "postgresql://user:pw@ep-x-pooler.us-east-1.aws.neon.tech/neondb"
@@ -40,3 +46,23 @@ def test_non_postgres_url_is_refused_without_echoing_it():
     with pytest.raises(ValueError) as err:
         db.engine_args("mysql://user:hunter2@host/db")
     assert "hunter2" not in str(err.value)
+
+
+def test_database_errors_do_not_carry_bound_parameters(migrated):
+    # On a 500, uvicorn logs the exception message with its traceback, and
+    # SQLAlchemy puts the bound parameters (refresh-token hashes, Apple subs)
+    # in that message unless the engine hides them.
+    async def _fail():
+        engine = db.create_engine(TEST_URL, poolclass=NullPool)
+        try:
+            async with engine.connect() as conn:
+                await conn.execute(
+                    text("SELECT * FROM no_such_table WHERE token_hash = :h"), {"h": "secret-hash-value"}
+                )
+        finally:
+            await engine.dispose()
+
+    with pytest.raises(DBAPIError) as err:
+        asyncio.run(_fail())
+    assert "no_such_table" in str(err.value)
+    assert "secret-hash-value" not in str(err.value)
