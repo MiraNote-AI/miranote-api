@@ -2,8 +2,9 @@
 
 - **Date:** 2026-11-06, revised 2026-11-13
 - **Status:** Revised after review (Maverick, #99) and the team lead's
-  data-plan decisions of 2026-11-13. Ready for a second review; no code
-  until approved.
+  data-plan decisions of 2026-11-13, then after a second review the same
+  day, which settled the four open questions (section 11). Steps 1-2 of
+  the build plan are in review as #108 and #109.
 - **Issue:** miranote-api #95
 - **Scope:** the smallest backend that can sign a user in, know whether
   they pay, meter AI cost, learn from their choices, and delete them on
@@ -307,12 +308,17 @@ Rules:
   Signed out: events are dropped on the device, not queued. Turning the
   switch off stops collection and deletes the user's collected events
   (`DELETE /me/taste-events`).
+- Off means no personalization, not only no upload (decided
+  2026-11-13): with the switch off the app also stops on-device style
+  ranking and shows the default order, stops recording choices on the
+  device, and clears its on-device style profile.
 
 ### 4.3 Profiles
 
 - **Style profile** (preferred layouts, fonts, colors, sticker styles,
   tone option): computed **on device** in 1.0 from the device's own
-  choices. The server only aggregates events across users for product
+  choices, only while the taste switch is on (4.2). The server only
+  aggregates events across users for product
   analytics and model comparison. Server-side or cross-device
   personalization waits until it is needed.
 - **Life profile** (people, places, themes): phase 2, on device only,
@@ -552,9 +558,13 @@ in-memory session goes away. This keeps "nothing stored" true and lets
 two Fly machines serve any request without Redis or a session table.
 Photo push compose logs keep only `request_id`.
 
-Photo push in 1.0 is assumed to be an on-device local notification that
-calls the compose endpoint, so no APNs device-token table (open question
-2).
+Photo push in 1.0 is an on-device local notification (decided
+2026-11-13). A local notification cannot call the server when it fires,
+so the app composes ahead of time: when it comes to the front it picks
+the photos, calls the compose endpoint (counted as `photo_push`) and
+schedules a local notification with the result, as the iOS
+`PushScheduler` already does. No server APNs, no device tokens and no
+device-token table in 1.0.
 
 ### 6.7 The beta token
 
@@ -660,8 +670,8 @@ changes only `DATABASE_URL` and the host.
     the existing Cloudflare tunnel as its own hostname
     (`beta-accounts.miranote.app`), independent of the other beta
     services. Secrets in a local `.env`, never in the repo.
-- **Phase 2 -- public TestFlight and 1.0 (recommended, pending
-  team-lead confirmation).**
+- **Phase 2 -- public TestFlight and 1.0 (decided 2026-11-13).** The
+  design stays provider-agnostic (8.1).
   - Database: **Neon Launch**, same project. No monthly minimum,
     point-in-time restore with the history window raised to 7 days
     (Launch's maximum; the default is 1 day), encrypted at rest,
@@ -784,8 +794,9 @@ Postgres.
     notification URLs to `api.miranote.app`.
 14. iOS (separate issues): sign-in at first server-AI use, paywall with
     3.1.2 disclosures, Restore in paywall and Settings, deletion with
-    SIWA re-run, the taste switch, App Attest, on-device mood, Declared
-    Age Range.
+    SIWA re-run, the taste switch (off also stops on-device ranking,
+    4.2), App Attest, on-device mood, photo push composed ahead as a
+    local notification (6.6), Declared Age Range.
 15. Before charging: Neon paid plan in place, privacy policy and App
     Privacy label updated (section 7.3), production AI endpoints refuse
     the beta token, China-routing trigger checked (section 10).
@@ -822,8 +833,8 @@ Postgres.
   provider-agnostic.
 - 2026-11-13 -- Phase 1 (internal testing) costs nothing: Neon Free +
   R2 backups + `poc/accounts/` on the team lead's Mac behind the tunnel.
-  Phase 2 (Neon Launch + Fly.io `iad`) is recommended, pending
-  confirmation.
+- 2026-11-13 -- Phase 2 (public TestFlight and 1.0): Neon Launch +
+  Fly.io `iad`, as proposed in 8.2. The design stays provider-agnostic.
 - 2026-11-13 -- Personal developer account for now; record
   `apple_team_id`; migrate with transfer identifiers later.
 - 2026-11-13 -- Mood hybrid: on device where available, otherwise
@@ -835,16 +846,30 @@ Postgres.
   `ai_usage` ledger for quotas; App Attest key table in tier 1.
 - 2026-11-13 -- China-provider routing deferred, trigger: 2,000 users or
   before charging, whichever first.
+- 2026-11-13 -- Photo push is an on-device local notification, composed
+  when the app comes to the front; no server APNs and no device tokens
+  in 1.0 (6.6).
+- 2026-11-13 -- A chain owned by another live account: the sync is
+  rejected; no self-service transfer in 1.0; support moves it by hand
+  (5.3).
+- 2026-11-13 -- Taste switch off also stops on-device style ranking:
+  off means no personalization, not only no upload (4.2).
 
 ### Open
 
-1. Confirm the phase 2 providers, Neon Launch + Fly.io `iad` (team
-   lead), before step 13. Phase 1 is decided.
-2. Photo push: on-device local notification (assumed here, no new
-   table) or server APNs (adds a device-token table)?
-3. When a chain is owned by another live account, 1.0 rejects the sync
-   (5.3). Is a support-assisted transfer enough, or do we want
-   self-service transfer on Restore?
-4. Should turning the taste switch off also stop the on-device style
-   ranking (default order instead)? The switch name says "personalize",
-   so I'd say yes.
+1. **Sandbox entitlements are free.** Public TestFlight purchases are
+   Sandbox and cost nothing, so any tester gets Plus chat, expand and
+   photo-push caps; only images are lowered (5.2). Proposal: Sandbox
+   caps on every metered feature, high enough for App Review. Decide
+   before public TestFlight (step 13).
+2. **App Attest unavailable** (unsupported device, or Apple's service
+   failing) on a signed-in request. Proposal: allow it, since the
+   account, its caps and the kill switch still apply; signed-out `/mood`
+   still requires it (neutral color otherwise, 6.5).
+3. **Re-link limit after deletion.** It counts from `linked_at`, so a
+   user who deletes and re-creates their account within 30 days of the
+   last link cannot Restore their own subscription until then.
+   Proposal: keep the limit; support moves the chain (5.3).
+4. **Product ids.** `app.miranote.plus.*` differs from the bundle id
+   `ai.miranote.app`, and a product id can never be reused once
+   created. Confirm before step 9.
