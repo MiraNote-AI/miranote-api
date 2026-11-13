@@ -21,7 +21,7 @@ import os
 from google.genai import types
 from PIL import Image, ImageChops, ImageFilter
 
-from shared.vertex_client import _get_client, _extract_image_bytes
+from shared.vertex_client import _get_client, _extract_image_bytes, generate_config
 
 # Solid background color for the canvas handed to Gemini (ai_outline). Magenta is
 # rare in real subjects/borders, so it contrasts cleanly with the decoration.
@@ -64,7 +64,7 @@ def _gemini_generate_image(image_bytes: bytes | None, instruction: str, model: s
         response = _get_client().models.generate_content(
             model=model,
             contents=contents,
-            config=types.GenerateContentConfig(
+            config=generate_config(
                 # Gemini 3.x image models expect TEXT+IMAGE; _extract_image_bytes
                 # ignores any text part and returns the inline image.
                 response_modalities=["TEXT", "IMAGE"],
