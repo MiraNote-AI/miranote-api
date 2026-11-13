@@ -65,6 +65,14 @@ jobs:
           pip install --extra-index-url https://download.pytorch.org/whl/cpu \
             -r poc/${{ matrix.suite }}/requirements.txt
 
+      # The YanYi client re-encodes uploads with ffmpeg, and its 9 tests skip
+      # without it. The runner image has none.
+      - name: Install ffmpeg
+        if: matrix.suite == 'voice-to-text'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ffmpeg
+
       - name: Run pytest
         working-directory: ${{ matrix.workdir }}
         env:
