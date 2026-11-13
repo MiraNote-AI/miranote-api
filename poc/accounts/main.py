@@ -2,11 +2,12 @@
 MiraNote -- Accounts API (port 8007)
 
 Users, sessions, subscriptions and the AI usage ledger (design
-docs/specs/2026-11-06-accounts-and-subscriptions-design.md). Step 1 of
-api #95: the schema and the service around it; the routes come in later
-steps.
+docs/specs/2026-11-06-accounts-and-subscriptions-design.md). Steps 1-2
+of api #95: the schema, the service around it, and Sign in with Apple with
+our own tokens (auth.py).
 
     GET /health -> {"status", "db"}; 503 when the database does not answer
+    /auth/*, /.well-known/jwks.json, /me -> see auth.py
 """
 
 from __future__ import annotations
@@ -18,13 +19,16 @@ import sys
 import time
 from contextlib import asynccontextmanager
 
+import httpx
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-import beta_auth
+import apple
+import auth
 import config
 import db
+import tokens
 
 log = logging.getLogger("accounts")
 
@@ -66,29 +70,35 @@ def _setup_logging() -> None:
 _setup_logging()
 
 
+# Tests swap in an httpx.MockTransport serving a fake Apple JWKS.
+APPLE_TRANSPORT = None
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Create the engine and probe the database once, so the log says at
     startup whether it is reachable. The service still starts when it is not
     (Neon may be waking up); /health answers 503 until it is."""
+    app.state.signer = tokens.Signer(config.signing_key_pem(), config.previous_public_key_pem())
     app.state.engine = db.create_engine(config.database_url())
+    app.state.apple_keys = apple.AppleKeys(httpx.AsyncClient(timeout=5, transport=APPLE_TRANSPORT))
     ok = await db.ping(app.state.engine, config.HEALTH_DB_TIMEOUT_SECONDS)
     log.info("startup", extra={"db": "ok" if ok else "unreachable"})
     try:
         yield
     finally:
         await app.state.engine.dispose()
+        await app.state.apple_keys.aclose()
 
 
 app = FastAPI(title="MiraNote Accounts", version="0.1.0", lifespan=lifespan)
 
 
-# Reachable from the public internet through the Cloudflare tunnel, so every
-# request needs a beta token until step 2 brings our own tokens. Starlette
-# makes the last-added middleware the outermost, so the order below is:
-# CORS (answers a browser preflight, which carries no token) -> request log
-# (so a rejected request is logged too) -> beta gate -> route.
-beta_auth.install(app)
+# No beta gate: every route proves its caller itself (an Apple identity
+# token, one of our refresh tokens, or current_user), and the shared beta
+# token would collide with our own Bearer tokens. Starlette makes the
+# last-added middleware the outermost: CORS -> request log -> route.
+app.include_router(auth.router)
 
 
 # Logs method, path, status and time only. Never the body, the headers or

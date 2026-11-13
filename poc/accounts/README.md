@@ -2,9 +2,9 @@
 
 Users, sessions, subscriptions and the AI usage ledger for the paid flow
 (api #95). Design: `docs/specs/2026-11-06-accounts-and-subscriptions-design.md`
-(#99). This is step 1: the tier 1 schema (section 4.1) as Alembic
-migrations, and a FastAPI service with `/health`. Sign in with Apple,
-subscriptions and quotas come in later steps.
+(#99). Step 1: the tier 1 schema (section 4.1) as Alembic migrations, and
+a FastAPI service with `/health`. Step 2: Sign in with Apple and our own
+tokens (section 3). Subscriptions and quotas come in later steps.
 
 Stack: FastAPI, SQLAlchemy 2 (async) + asyncpg, Alembic, PostgreSQL 17.
 Only standard Postgres, written for a transaction-mode pooler (no statement
@@ -25,7 +25,7 @@ cache, no session-level `SET`), so Neon's pooled URL works as is.
 cd poc/accounts
 python3.9 -m venv .venv
 .venv/bin/pip install -r requirements.txt
-cp .env.example .env        # fill DATABASE_URL
+cp .env.example .env        # fill DATABASE_URL and ACCOUNTS_SIGNING_KEY
 ```
 
 `DATABASE_URL` is required; there is no default. Neon's pooled connection
@@ -33,8 +33,54 @@ string can be pasted as is (`?sslmode=require&channel_binding=require`):
 `db.py` maps `sslmode` to asyncpg's `ssl` and drops `channel_binding`,
 which asyncpg does not support. `.env` is gitignored; never commit it.
 
-The beta token is `BETA_TOKENS` in the repo-root `.env` (shared by every
-service). Without it every request except `/health` answers 401.
+`ACCOUNTS_SIGNING_KEY` is required too: the EC P-256 private key (PEM)
+that signs our access tokens (see Keys below). There is no beta-token
+gate on this service: every route checks its own credential.
+
+## Sign-in API
+
+| route | body | answer |
+|---|---|---|
+| `POST /auth/apple` | `{"identity_token", "nonce"}` | token pair, or 401 |
+| `POST /auth/refresh` | `{"refresh_token"}` | new token pair, or 401 (sign in again) |
+| `POST /auth/signout` | `{"refresh_token"}` | 204, always |
+| `GET /.well-known/jwks.json` | | our public signing keys |
+| `GET /me` | `Authorization: Bearer <access>` | `{"id"}`, or 401 |
+
+A token pair is `{"access_token", "refresh_token", "token_type": "Bearer",
+"expires_in": 3600, "user_id"}`.
+
+- `/auth/apple` verifies Apple's identity token against
+  `https://appleid.apple.com/auth/keys` (cached 24 h; an unknown `kid`
+  refetches at most once a minute): RS256, `iss`, `aud` =
+  `APPLE_BUNDLE_ID` (default `ai.miranote.app`), `exp`, and
+  `nonce` = SHA-256 hex of the raw `nonce` the app sends. Users are keyed
+  by (`APPLE_TEAM_ID`, `sub`); the default team is `W7U365VR4U`. The
+  authorization code is not exchanged, no Apple refresh token is stored,
+  no email or name either.
+- Access tokens: ES256 JWT, 1 h, `kid` header, `iss` `miranote-accounts`,
+  `aud` `miranote`, `sub` = our user id. `current_user` in `auth.py` is the
+  dependency later routes use.
+- Refresh tokens: opaque, 60 days, only the SHA-256 is stored in
+  `sessions`, rotated on every use. A replaced token used again within
+  10 s gets a fresh pair (two refreshes in parallel at launch); after
+  that it revokes the whole sign-in (every token of that family).
+- Sign-out revokes the sign-in the refresh token belongs to. Access
+  tokens already issued stay valid until they expire (at most 1 h).
+
+## Keys
+
+The kid is the RFC 7638 thumbprint of the public key, so there is nothing
+else to configure. Make a key:
+
+```bash
+openssl ecparam -name prime256v1 -genkey -noout | openssl pkcs8 -topk8 -nocrypt
+```
+
+To rotate: put the new private key in `ACCOUNTS_SIGNING_KEY`, the old
+key's public PEM (`openssl ec -pubout` on the old key) in
+`ACCOUNTS_PREVIOUS_PUBLIC_KEY`, restart; after one hour (one access-token
+lifetime) remove `ACCOUNTS_PREVIOUS_PUBLIC_KEY` and restart again.
 
 ## Migrations
 
@@ -101,9 +147,11 @@ docker run -d --name accounts-pg -p 55432:5432 \
   -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=accounts_test postgres:17
 export ACCOUNTS_TEST_DATABASE_URL='postgresql://postgres:postgres@localhost:55432/accounts_test'
 cd poc/accounts
-PYTHONPATH=.:../.. .venv/bin/python -m pytest tests/ -v
+PYTHONPATH=. .venv/bin/python -m pytest tests/ -v
 ```
 
 (Homebrew works too: `brew install postgresql@17`, start it, `createdb
 accounts_test`, and use that URL.) CI runs the same suite with a
-`postgres:17` service container: `.github/workflows/accounts.yml`.
+`postgres:17` service container: `.github/workflows/accounts.yml`. Apple
+is faked with a locally generated key served as a JWKS through
+`httpx.MockTransport`: the tests never reach the network beyond Postgres.
