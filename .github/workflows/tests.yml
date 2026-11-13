@@ -10,6 +10,11 @@ on:
   push:
     branches: [main, dev]
 
+# The jobs only read the code. The repo's default token can write, and each
+# job installs and runs whatever versions PyPI serves that day.
+permissions:
+  contents: read
+
 jobs:
   pytest:
     name: pytest (${{ matrix.suite }})
