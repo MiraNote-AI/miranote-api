@@ -21,6 +21,9 @@ jobs:
     # Pinned: ubuntu-latest moved to 26.04, where setup-python has no 3.9
     # (the code must stay 3.9-compatible). 3.9 is still built for 24.04.
     runs-on: ubuntu-24.04
+    # Each job takes a few minutes at most; a hang should not hold a runner
+    # for GitHub's default of 6 hours.
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
