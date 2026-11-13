@@ -18,7 +18,7 @@ from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response
 from pydantic import BaseModel
-from sqlalchemy import select, update
+from sqlalchemy import delete, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncConnection
 
@@ -108,6 +108,24 @@ async def sign_in_with_apple(body: AppleSignIn, request: Request):
 
     now = _now()
     async with request.app.state.engine.begin() as conn:
+        # Signing in again before the purge has run gives a new, empty
+        # account: the old one is purged first (design 3.1, 7.1 step 5).
+        # Today the purge is deleting the users row; its foreign keys drop
+        # the sessions and set user_id to null on subscriptions and ai_usage
+        # (7.2). When the purge does more (step 8), call it here.
+        purged = (
+            await conn.execute(
+                delete(users)
+                .where(
+                    users.c.apple_team_id == config.APPLE_TEAM_ID,
+                    users.c.apple_sub == identity.sub,
+                    users.c.deletion_requested_at.is_not(None),
+                )
+                .returning(users.c.id)
+            )
+        ).scalar_one_or_none()
+        if purged is not None:
+            log.info("purged an account marked for deletion at sign-in", extra={"user_id": str(purged)})
         stmt = insert(users).values(apple_sub=identity.sub, apple_team_id=config.APPLE_TEAM_ID)
         # DO UPDATE (a no-op) rather than DO NOTHING so RETURNING also gives
         # the id of an existing user, in one statement and race-free.

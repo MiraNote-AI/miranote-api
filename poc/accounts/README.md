@@ -57,7 +57,9 @@ A token pair is `{"access_token", "refresh_token", "token_type": "Bearer",
   `nonce` = SHA-256 hex of the raw `nonce` the app sends. Users are keyed
   by (`APPLE_TEAM_ID`, `sub`); the default team is `W7U365VR4U`. The
   authorization code is not exchanged, no Apple refresh token is stored,
-  no email or name either.
+  no email or name either. Signing in again while the account is marked
+  for deletion purges it first and creates a new, empty account (design
+  7.1): its sessions go, its subscriptions and usage stay with no owner.
 - Access tokens: ES256 JWT, 1 h, `kid` header, `iss` `miranote-accounts`,
   `aud` `miranote`, `sub` = our user id. `current_user` in `auth.py` is the
   dependency later routes use.

@@ -171,6 +171,41 @@ def test_repeat_sign_in_is_the_same_user_with_a_new_session(client, fake_apple):
     assert other["user_id"] != first["user_id"]
 
 
+def test_sign_in_while_marked_for_deletion_purges_the_old_account_first(client, fake_apple):
+    # Design 3.1 step 3 and 7.1 step 5: signing in again before the purge
+    # has run purges the old account, then creates a new, empty one.
+    old = sign_in(client, fake_apple.token()).json()
+    run_sql(
+        "INSERT INTO subscriptions (original_transaction_id, user_id, product_id, status, "
+        "expires_at, auto_renew, environment, last_signed_date) VALUES ('otid-1', :uid, "
+        "'app.miranote.plus.monthly', 'active', now(), true, 'Sandbox', now())",
+        uid=old["user_id"],
+    )
+    run_sql(
+        "INSERT INTO ai_usage (request_id, user_id, feature, model, units, environment, status) "
+        "VALUES (gen_random_uuid(), :uid, 'chat', 'm', 1, 'Sandbox', 'ok')",
+        uid=old["user_id"],
+    )
+    other = sign_in(client, fake_apple.token(sub="009999.other.0002")).json()
+    run_sql("UPDATE users SET deletion_requested_at = now() WHERE id = :uid", uid=old["user_id"])
+
+    r = sign_in(client, fake_apple.token())
+    assert r.status_code == 200
+    new = r.json()
+    assert new["user_id"] != old["user_id"]
+    assert me(client, new["access_token"]).json() == {"id": new["user_id"]}
+    assert sorted(str(row[0]) for row in run_sql("SELECT id FROM users")) == sorted(
+        [new["user_id"], other["user_id"]]
+    )
+    assert run_sql("SELECT deletion_requested_at FROM users WHERE id = :uid", uid=new["user_id"]) == [(None,)]
+    # The old sign-in is gone; its subscription and usage stay, unowned (7.2).
+    assert refresh(client, old["refresh_token"]).status_code == 401
+    assert run_sql("SELECT user_id FROM subscriptions") == [(None,)]
+    assert run_sql("SELECT user_id FROM ai_usage") == [(None,)]
+    # Another account is untouched.
+    assert refresh(client, other["refresh_token"]).status_code == 200
+
+
 def test_apple_keys_are_cached_and_unknown_kids_refetch_rarely(client, fake_apple):
     sign_in(client, fake_apple.token())
     sign_in(client, fake_apple.token())
