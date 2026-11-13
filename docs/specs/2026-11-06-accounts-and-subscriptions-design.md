@@ -318,9 +318,9 @@ Rules:
 - **Style profile** (preferred layouts, fonts, colors, sticker styles,
   tone option): computed **on device** in 1.0 from the device's own
   choices, only while the taste switch is on (4.2). The server only
-  aggregates events across users for product
-  analytics and model comparison. Server-side or cross-device
-  personalization waits until it is needed.
+  aggregates events across users for product analytics and model
+  comparison. Server-side or cross-device personalization waits until
+  it is needed.
 - **Life profile** (people, places, themes): phase 2, on device only,
   sent with a request when Mira needs it, never stored on the server.
 
@@ -336,11 +336,11 @@ means for the privacy label.
 ### 5.1 One rule: recompute from Apple's snapshot
 
 Every input (app sync, notification, Server API call) yields Apple's
-signed transaction info and renewal info; the app sync sends both (5.3).
-We verify both with Apple's
-`app-store-server-library` (Python) and **recompute the whole row** from
-them, instead of a per-notification-type state machine. A snapshot whose
-signed date is older than `last_signed_date` is stored (if it came from a
+signed transaction info and renewal info; the app sync sends both
+(5.3). We verify both with Apple's `app-store-server-library` (Python)
+and **recompute the whole row** from them, instead of a
+per-notification-type state machine. A snapshot whose signed date is
+older than `last_signed_date` is stored (if it came from a
 notification) but not applied.
 
 Derived `status`:
@@ -421,8 +421,8 @@ calls Set App Account Token. The move is logged like any other link.
 (Look Up Order ID does not work in Sandbox.)
 
 **Restore Purchases** (Guideline 3.1.1) is in the paywall and in
-Settings. Signed out -> sign in first -> `AppStore.sync()` -> send
-`currentEntitlements` to `/subscriptions/sync`.
+Settings. Signed out -> sign in first -> `AppStore.sync()` -> send each
+chain's transaction and renewal info to `/subscriptions/sync` (above).
 
 ### 5.4 App Store Server Notifications V2
 
@@ -470,7 +470,8 @@ stays the authority for server AI.
 The AI services (chat, expand, image, photo push, mood) import one
 shared guard module. Per request it:
 
-1. verifies the access JWT against our JWKS (no network hop);
+1. verifies the access JWT against our cached JWKS (no network hop
+   except the refetch on an unknown `kid`, 3.2);
 2. reads the user's row and entitlement from Postgres (one query; a
    deleted user or a refunded subscription is refused at once, so there
    is no 1 h access-token lag for entitlement);
@@ -507,9 +508,8 @@ Caps live in config, not code, and start at the values in section 2.
 
 Each feature has a daily budget in USD (sum of `cost_usd` over the
 rolling 24 h, read through the (`feature`, `created_at`) index). Over
-budget, that feature returns 503 for everyone until
-it drops back or the budget is raised. This bounds the damage of a bug
-or an abuse wave.
+budget, that feature returns 503 for everyone until it drops back or
+the budget is raised. This bounds the damage of a bug or an abuse wave.
 
 ### 6.4 App Attest and DeviceCheck
 
@@ -537,12 +537,12 @@ Hybrid, decided 2026-11-13:
 
 1. On devices with Apple Intelligence, mood runs on device (Apple
    Foundation Models). Nothing reaches the server.
-2. Elsewhere the app calls `POST /mood`. It is the one endpoint allowed
-   **signed out**, and only with a valid App Attest assertion. Signed-out
-   calls are limited per device key (start: 30 per rolling 24 h,
-   counted on `ai_usage.device_key_id`); signed-in calls are limited
-   per user (start: also 30 per rolling 24 h). `/mood` costs money, so
-   it has a cap like everything else (section 2).
+2. Elsewhere the app calls `POST /mood`. It is the one AI endpoint
+   allowed **signed out**, and only with a valid App Attest assertion.
+   Signed-out calls are limited per device key (start: 30 per rolling
+   24 h, counted on `ai_usage.device_key_id`); signed-in calls are
+   limited per user (start: also 30 per rolling 24 h). `/mood` costs
+   money, so it has a cap like everything else (section 2).
 3. The server sends the page text to the model, returns the tone/color,
    and discards both. The `ai_usage` row holds no text and no mood.
 4. If neither path is available, the page gets a neutral color.
@@ -553,10 +553,10 @@ The client sends the conversation history with each request (the last
 20 turns). The server enforces that: it refuses more than 20 turns or a
 history over a size limit set in config, so a modified client cannot
 turn one counted turn into an arbitrarily long model call. The server
-keeps no session -- the current 1-hour
-in-memory session goes away. This keeps "nothing stored" true and lets
-two Fly machines serve any request without Redis or a session table.
-Photo push compose logs keep only `request_id`.
+keeps no session -- the current 1-hour in-memory session goes away.
+This keeps "nothing stored" true and lets two Fly machines serve any
+request without Redis or a session table. Photo push compose logs keep
+only `request_id`.
 
 Photo push in 1.0 is an on-device local notification (decided
 2026-11-13). A local notification cannot call the server when it fires,
