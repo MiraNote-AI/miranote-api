@@ -1034,6 +1034,7 @@ IMAGE_TOO_LARGE_DETAIL = "that picture is too large to edit; try a smaller one"
 EDIT_TIMEOUT_DETAIL = "the edit took too long; try again"
 PROVIDER_ERROR_DETAIL = "the image model failed on that one; try again"
 MISSING_FILE_DETAIL = "send the picture as a 'file' upload"
+BAD_PARAMETER_DETAIL = "check {} in the request"
 
 # A client-side timeout, from whichever transport the SDK was built on.
 _MODEL_TIMEOUTS = tuple(cls for cls in (httpx.TimeoutException,
@@ -1047,11 +1048,18 @@ def _edit_error(status: int, reason: str, message: str) -> JSONResponse:
 
 @app.exception_handler(RequestValidationError)
 async def _validation_error(request: Request, exc: RequestValidationError):
-    """FastAPI's own 422 (a /stylize POST with no `file` part) in /stylize's
-    error shape, so 422 means one shape there. Other routes keep the default."""
-    if request.url.path == "/stylize":
+    """FastAPI's own 422 for /stylize -- no `file` part, or a parameter that
+    does not parse, such as `temperature=warm` -- in /stylize's error shape,
+    so 422 means one shape there. Other routes keep the default."""
+    if request.url.path != "/stylize":
+        return await request_validation_exception_handler(request, exc)
+    problems = exc.errors()
+    print(f"[stylize] bad request: {str(problems)[:300]}")
+    fields = sorted({str(p["loc"][-1]) for p in problems if p.get("loc")})
+    if "file" in fields or not fields:
         return _edit_error(422, "bad_request", MISSING_FILE_DETAIL)
-    return await request_validation_exception_handler(request, exc)
+    names = ", ".join(f"'{name}'" for name in fields)
+    return _edit_error(422, "bad_request", BAD_PARAMETER_DETAIL.format(names))
 
 
 @app.post("/stylize")

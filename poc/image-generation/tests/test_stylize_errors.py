@@ -9,6 +9,7 @@ no model is called.
 
 from __future__ import annotations
 
+import contextlib
 import io
 import os
 import struct
@@ -119,7 +120,7 @@ class _Stalled(BaseHTTPRequestHandler):
 
 class StylizeErrorTests(unittest.IsolatedAsyncioTestCase):
     async def _post(self, data=None, prompt="make it warmer", client=None,
-                    send_file=True):
+                    send_file=True, params=None):
         stub = client or mock.Mock()
         if client is None:
             stub.models.generate_content.return_value = _image_response()
@@ -132,7 +133,7 @@ class StylizeErrorTests(unittest.IsolatedAsyncioTestCase):
                 upload = ("image.png", _png() if data is None else data, "image/png")
                 response = await http.post(
                     "/stylize",
-                    params={"prompt": prompt},
+                    params={"prompt": prompt, **(params or {})},
                     files={"file" if send_file else "other": upload},
                 )
         return response, stub
@@ -194,6 +195,19 @@ class StylizeErrorTests(unittest.IsolatedAsyncioTestCase):
     async def test_no_file_part_is_a_422_in_the_same_shape(self):
         response, stub = await self._post(send_file=False)
         self.assertEditError(response, 422, "bad_request")
+        self.assertEqual(response.json()["message"], main.MISSING_FILE_DETAIL)
+        stub.models.generate_content.assert_not_called()
+
+    async def test_a_bad_parameter_is_a_422_that_names_it(self):
+        """Not the missing-file message: the file is there. The cause goes
+        to the log as well."""
+        log = io.StringIO()
+        with contextlib.redirect_stdout(log):
+            response, stub = await self._post(params={"temperature": "warm"})
+        self.assertEditError(response, 422, "bad_request")
+        self.assertNotEqual(response.json()["message"], main.MISSING_FILE_DETAIL)
+        self.assertIn("temperature", response.json()["message"])
+        self.assertIn("temperature", log.getvalue())
         stub.models.generate_content.assert_not_called()
 
     async def test_an_image_past_the_pixel_limit_is_a_413(self):
