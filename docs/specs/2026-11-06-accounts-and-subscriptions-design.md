@@ -93,43 +93,65 @@ registering the App Attest key is signed out too (6.4).
 Sign in with Apple only: one login for an iOS-only app, satisfies
 Guideline 4.8, and gives a stable user id (`sub`) with no password.
 
-1. The app runs `ASAuthorizationAppleIDProvider` with a nonce and gets
-   an identity token (JWT signed by Apple).
-2. `POST /auth/apple` with the identity token. The server verifies it
-   against Apple's keys (`https://appleid.apple.com/auth/keys`): issuer,
-   audience = our bundle id, expiry, nonce.
+1. The app makes a random nonce, runs `ASAuthorizationAppleIDProvider`
+   with its SHA-256, and gets an identity token (JWT signed by Apple)
+   whose `nonce` claim is that hash.
+2. `POST /auth/apple` with the identity token and the raw nonce. The
+   server verifies the token against Apple's keys
+   (`https://appleid.apple.com/auth/keys`, cached 24 h; an unknown `kid`
+   refetches at most once a minute): RS256, issuer, audience = our
+   bundle id (`ai.miranote.app`), expiry (60 s leeway), and `nonce` =
+   SHA-256 of the raw nonce. The nonce comes from the app, not from the
+   server: it binds the token to that sign-in request without a nonce
+   table, but a captured (token, nonce) pair can be replayed until the
+   token expires, so TLS is what protects it.
 3. The server finds or creates the `users` row by
-   (`apple_team_id`, `apple_sub`) and returns its own tokens: an access
-   token (JWT, ES256, 1 h, `kid` header) and a refresh token (opaque,
-   60 days, stored hashed, rotated on every use).
+   (`apple_team_id`, `apple_sub`) in one `INSERT ... ON CONFLICT ...
+   RETURNING` (race-free; a row marked for deletion is purged first,
+   7.1) and returns its own tokens: an access token (JWT, ES256, 1 h,
+   `kid` header, `iss` `miranote-accounts`, `aud` `miranote`, `sub` =
+   user id) and a refresh token (opaque, stored hashed, rotated on every
+   use, valid 60 days from issue; each rotation starts a new 60 days, so
+   a user who opens the app at least every 60 days stays signed in).
 4. The app keeps both in the Keychain and sends
    `Authorization: Bearer <access>` to every backend.
 
-We do **not** exchange the authorization code and do **not** store an
-Apple refresh token. Revocation at deletion re-runs Sign in with Apple
-(section 7). We do not store the user's email or name.
+We do **not** exchange the authorization code at sign-in and do **not**
+store an Apple refresh token. Revocation at deletion re-runs Sign in
+with Apple (section 7). We do not store the user's email or name.
 
 ### 3.2 Our tokens
 
-- **Rotation with reuse detection.** Each refresh token belongs to a
-  `family_id`. Using it returns a new pair and marks the old one
-  replaced. If a replaced token is used again after a 10-second grace,
-  the whole family is revoked (stolen-token case) and the user signs in
-  again.
+- **Rotation with reuse detection.** `POST /auth/refresh`. Each refresh
+  token belongs to a `family_id`. Using it returns a new pair and marks
+  the old one replaced (`SELECT ... FOR UPDATE`, so parallel refreshes
+  of one token run one after the other). If a replaced token is used
+  again after a 10-second grace, the whole family is revoked
+  (stolen-token case) and the user signs in again.
 - **Concurrent refresh.** Within the 10-second grace, the just-replaced
-  token returns the same new pair, so two parallel requests on launch do
-  not log the user out.
-- **Signing keys.** ES256 keys with `kid`; the public keys are served at
-  `/.well-known/jwks.json` and cached by the AI services. Rotation keeps
-  the old key published for 1 h (one access-token lifetime).
+  token gets a fresh pair in the same family, so two parallel requests
+  on launch do not log the user out. It cannot be the same pair: only
+  hashes are stored. The cost: a stolen token replayed within those
+  10 s forks the family without being detected, and both branches keep
+  working until the family is revoked.
+- **Sign-out.** `POST /auth/signout` with the refresh token revokes its
+  family. Access tokens already issued keep working until they expire
+  (at most 1 h), because the guard (6.1) checks the user row and the
+  entitlement, not sessions. Deletion and refunds still cut off at once.
+- **Signing keys.** ES256 (P-256) keys; the `kid` is the key's RFC 7638
+  thumbprint. The public keys are served at `/.well-known/jwks.json` and
+  cached by the AI services, which refetch on an unknown `kid` (at most
+  once a minute) so a new key works at once. Rotation: the new key
+  signs, and the old public key stays published and accepted for 1 h
+  (one access-token lifetime).
 
 ### 3.3 Sign in with Apple server-to-server notifications
 
 `POST /auth/apple/notifications` (configured in the developer account),
 verified as Apple-signed JWTs:
 
-- `consent-revoked`: revoke all sessions; the user signs in again on the
-  next server-AI use.
+- `consent-revoked`: revoke all sessions; the user signs in again when
+  the current access token expires (at most 1 h, see Sign-out in 3.2).
 - `account-deleted`: treat as an account deletion (section 7).
 - `email-disabled`, `email-enabled`: logged and ignored (no email
   stored).
@@ -181,7 +203,12 @@ PostgreSQL. All ids are UUIDs; all times are `timestamptz` in UTC.
 | family_id | uuid | one sign-in = one family (reuse detection) |
 | token_hash | text unique | SHA-256 of the refresh token |
 | replaced_at | timestamptz null | set on rotation |
-| created_at, expires_at, revoked_at | timestamptz | |
+| created_at, expires_at | timestamptz | `expires_at` = 60 days after issue |
+| revoked_at | timestamptz null | sign-out, reuse detected, consent revoked, deletion |
+
+Every refresh adds a row, so a daily job deletes rows past
+`expires_at`. That changes no answer: an expired token is refused
+before the reuse check.
 
 `subscriptions` -- one row per Apple renewal chain
 
@@ -207,7 +234,8 @@ PostgreSQL. All ids are UUIDs; all times are `timestamptz` in UTC.
 | column | type | notes |
 |---|---|---|
 | notification_uuid | text pk | Apple retries; a seen uuid is skipped |
-| type, subtype | text | e.g. `DID_FAIL_TO_RENEW / GRACE_PERIOD` |
+| type | text | e.g. `DID_FAIL_TO_RENEW` |
+| subtype | text null | e.g. `GRACE_PERIOD` |
 | original_transaction_id | text null | |
 | signed_date | timestamptz | |
 | payload | jsonb | decoded, verified payload **without** `appAccountToken` (the owner lives only in `subscriptions.user_id`); kept 1 year |
@@ -532,7 +560,8 @@ calls the compose endpoint, so no APNs device-token table (open question
 
 `BETA_TOKENS` (in `beta_auth.py`) can be extracted from any TestFlight
 IPA. It keeps working on the beta Mac backends until sign-in builds
-ship, and is never accepted by the production AI endpoints.
+ship, and is never accepted by the production AI endpoints. The accounts
+service never accepts it (8.4).
 
 ## 7. Account deletion, retention and privacy label
 
@@ -618,7 +647,7 @@ changes only `DATABASE_URL` and the host.
     window.
   - Backups: nightly encrypted `pg_dump` to an R2 bucket
     (`miranote-pg-backups`, R2 free tier), kept 30 days.
-  - API: the `accounts/` service runs on the team lead's Mac behind the
+  - API: the `poc/accounts/` service runs on the team lead's Mac behind the
     existing Cloudflare tunnel as its own hostname
     (`beta-accounts.miranote.app`), independent of the other beta
     services. Secrets in a local `.env`, never in the repo.
@@ -654,9 +683,20 @@ behind Cloudflare too), so it lands before public TestFlight.
 
 ### 8.4 Service layout
 
-- `accounts/` -- new FastAPI service: `/auth/*`, `/me`,
-  `/subscriptions/sync`, `/appstore/notifications`, taste events, purge
-  and retention jobs, Alembic migrations.
+- `poc/accounts/` -- new FastAPI service, in the same flat layout as the
+  other services under `poc/` (port 8007 on the Mac):
+  - built (#108, #109): `GET /health` (no token; `SELECT 1`),
+    `POST /auth/apple`, `POST /auth/refresh`, `POST /auth/signout`,
+    `GET /.well-known/jwks.json`, `GET /me`;
+  - to come: `/auth/apple/notifications`, `DELETE /me`,
+    `/subscriptions/sync`, `/appstore/notifications`,
+    `/attest/challenge`, `/attest`, `/events`, `/me/taste-events`,
+    purge and retention jobs;
+  - Alembic migrations.
+
+  It does not accept the beta token: every route checks its own
+  credential (Apple identity token, refresh token or access token), and
+  unknown paths are 404.
 - A shared guard module (section 6.1) imported by every AI service; each
   AI service gets `DATABASE_URL` and the JWKS URL.
 
@@ -673,12 +713,14 @@ Postgres.
 
 **Can start now (local Postgres 17, no new accounts):**
 
-1. Alembic migrations for every table in section 4; Postgres service
-   container in CI. -> verify: `alembic upgrade head` and `downgrade`
-   run clean in CI.
-2. `accounts/` skeleton: `/auth/apple` (identity-token checks tested
-   with fixture keys), our tokens with rotation, reuse detection and
-   concurrent-refresh grace, JWKS, `/me`.
+1. Alembic migrations for the tier 1 tables (4.1; `taste_events` comes
+   with step 7); Postgres service container in CI
+   (`.github/workflows/accounts.yml`). -> verify: `alembic upgrade head`
+   and `downgrade` run clean in CI. (#108)
+2. `poc/accounts/` skeleton: `/auth/apple` (identity-token checks
+   tested with fixture keys), our tokens with rotation, reuse detection
+   and concurrent-refresh grace, `/auth/refresh`, `/auth/signout`,
+   JWKS, `/me`. (#109)
 3. Subscription core: recompute-from-snapshot, entitlement function,
    `/subscriptions/sync` ownership rules, reclaim rate limits,
    `/appstore/notifications` idempotency. -> verify: table-driven tests
@@ -692,8 +734,9 @@ Postgres.
 6. App Attest: `/attest/challenge`, `/attest` and `app_attest_keys`
    (tested with Apple's documented sample attestation); signed-out
    `/mood` with per-device limits.
-7. Taste events: `POST /events` (batch), registered-name check,
-   `DELETE /me/taste-events`, 18-month retention job.
+7. Taste events: the `taste_events` migration, `POST /events` (batch),
+   registered-name check, `DELETE /me/taste-events`, 18-month retention
+   job.
 8. Deletion: `DELETE /me` (Apple revoke mocked), purge job, retention
    jobs for every row of 7.2.
 
@@ -709,7 +752,7 @@ Postgres.
     branches `main` and `dev`.
 11. Cloudflare: tunnel hostname `beta-accounts.miranote.app` on the team
     lead's Mac; R2 bucket `miranote-pg-backups` with 30-day retention.
-12. Run `accounts/` on the Mac against Neon; end-to-end Sandbox tests
+12. Run `poc/accounts/` on the Mac against Neon; end-to-end Sandbox tests
     from internal TestFlight: purchase, renewal, grace, refund and
     `REFUND_REVERSED`, offer-code redemption outside the app, Restore,
     deletion.
@@ -718,7 +761,7 @@ Postgres.
 
 13. Upgrade Neon to Launch (scale-to-zero off); Fly.io org `miranote`
     with a deploy token; DNS `api.miranote.app` -> Fly; deploy
-    `accounts/` and the AI services to Fly `iad`; repoint the App Store
+    `poc/accounts/` and the AI services to Fly `iad`; repoint the App Store
     and SIWA notification URLs to `api.miranote.app`.
 14. iOS (separate issues): sign-in at first server-AI use, paywall with
     3.1.2 disclosures, Restore in paywall and Settings, deletion with
@@ -759,7 +802,7 @@ Postgres.
 - 2026-11-13 -- Postgres via SQLAlchemy 2 async + asyncpg + Alembic,
   provider-agnostic.
 - 2026-11-13 -- Phase 1 (internal testing) costs nothing: Neon Free +
-  R2 backups + `accounts/` on the team lead's Mac behind the tunnel.
+  R2 backups + `poc/accounts/` on the team lead's Mac behind the tunnel.
   Phase 2 (Neon Launch + Fly.io `iad`) is recommended, pending
   confirmation.
 - 2026-11-13 -- Personal developer account for now; record
