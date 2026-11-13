@@ -1,0 +1,10 @@
+fastapi>=0.110
+uvicorn>=0.29
+openai>=1.0
+python-dotenv>=1.0
+python-multipart>=0.0.9
+jieba>=0.42
+httpx>=0.27
+pytest>=8.0
+# Shrinks the photos calls B and C see (compose.py); also tools/probe_model.py and run_h1.py
+Pillow>=10.0

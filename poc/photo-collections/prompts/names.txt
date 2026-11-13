@@ -1,0 +1,123 @@
+{
+  "weekdays": {
+    "1": "周一",
+    "2": "周二",
+    "3": "周三",
+    "4": "周四",
+    "5": "周五",
+    "6": "周六",
+    "7": "周日"
+  },
+  "dayparts": {
+    "morning": "上午",
+    "noon": "中午",
+    "afternoon": "下午",
+    "evening": "傍晚",
+    "night": "夜晚"
+  },
+  "buckets": {
+    "food": "美食饮品",
+    "scenery": "自然风光",
+    "animal": "宠物与动物",
+    "city": "城市街头",
+    "indoor": "室内居家",
+    "event": "活动演出",
+    "other": "其他"
+  },
+  "subject_types": {
+    "food": "吃的",
+    "drink": "喝的",
+    "person": "人",
+    "animal": "动物",
+    "object": "物件",
+    "scenery": "景色"
+  },
+  "fact_line": "{md} · {place}",
+  "push_title": "{fact} · {daypart}",
+  "cta": "留住这个{daypart}",
+  "t1": "{n} 张{x}，一个{weekday}的{daypart}",
+  "t2": "从{first}，到{last}",
+  "f0": "{n} 张照片，一个{weekday}的{daypart}",
+  "facts_line": "主体：{subjects}；描述：{description}；人数：{people}",
+  "sep": "、",
+  "list_sep": ", ",
+  "none": "无",
+  "a_favorite": "｜收藏",
+  "a_merged": "（连拍或近似重复合并）",
+  "b_count": "{name}出现在 {n} 张里",
+  "person_nouns": [
+    "人",
+    "个人",
+    "一个人",
+    "两个人",
+    "三个人",
+    "四个人",
+    "几个人",
+    "一群人",
+    "人群"
+  ],
+  "numerals": {
+    "零": 0,
+    "一": 1,
+    "二": 2,
+    "两": 2,
+    "三": 3,
+    "四": 4,
+    "五": 5,
+    "六": 6,
+    "七": 7,
+    "八": 8,
+    "九": 9,
+    "十": 10,
+    "百": 100
+  },
+  "forbidden_question_words": [
+    "又",
+    "一直没",
+    "好久没",
+    "别忘了",
+    "该",
+    "错过",
+    "再也",
+    "还没"
+  ],
+  "lianpai": "连拍",
+  "body_strip_end": "。",
+  "slot_tokens": {
+    "thing": "{物}",
+    "moment": "{画面}",
+    "daypart": "{时段}"
+  },
+  "b_cover": "｜封面",
+  "c_sentence": "{id}｜{text}",
+  "too_long_line": "- {text}（{n} 个字）",
+  "c_question": "{id}｜{text}",
+  "type_line": "  {id}｜{name}{note}｜{example}",
+  "question_pronouns": [
+    "他",
+    "她"
+  ],
+  "question_pronoun_allowed": [
+    "其他",
+    "吉他"
+  ],
+  "marker_words": [
+    "封面",
+    "photo_ids"
+  ],
+  "_echo_note": "Prompt annotations the model sometimes copies back (full check 2026-11-05): cut from the start and end of a sentence or question before the checks. Regexes.",
+  "echo_head": "^\\s*(?:[-*\u00b7]|\\d+[.\u3001])\\s*",
+  "echo_tail": [
+    "\\s*[|\uff5c]\\s*(?:style|type)\\s*[:\uff1a].*$",
+    "\\s*[|\uff5c]\\s*photo_ids.*$",
+    "\\s*[(\uff08]\\s*\\d+\\s*个字\\s*[)\uff09]\\s*$",
+    "\\s*[(\uff08]\\s*[a-z_]+\\s*[)\uff09]\\s*$"
+  ],
+  "marker_patterns": [
+    "\\d+\\s*个字",
+    "照片\\s*\\d",
+    "第\\s*[一二三四五六七八九十\\d]+\\s*张"
+  ],
+  "shorten_line": "{i}. {text}（{n} 个字）｜style：{style}｜photo_ids：{ids}",
+  "shorten_q_line": "{i}. {text}（{n} 个字）｜type：{type}"
+}

@@ -8,12 +8,29 @@
 # credits on every Wi-Fi the Mac ever joins, with no gate in front of them.
 # The tunnel itself is started separately by scripts/start_tunnel.sh.
 #
+# To have launchd start them at login and restart them when they die instead,
+# run scripts/install_backend_services.sh; this script then stands down.
+#
 # Usage: scripts/start_backends.sh
 set -u
 
 API_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 LOGS="$API_ROOT/logs/beta"
 mkdir -p "$LOGS"
+
+# The launchd jobs (install_backend_services.sh) and this script must never
+# both own the ports. This script kills whatever listens on them, launchd
+# brings its server straight back, and the two then race for every port.
+# Whichever owns them, the other stands down.
+for name in text image chat voice collections; do
+  if launchctl print "gui/$(id -u)/ai.miranote.beta-$name" >/dev/null 2>&1; then
+    echo "launchd runs the backends (ai.miranote.beta-$name is loaded) -- not starting a second set"
+    echo "   status:  scripts/status_backends.sh"
+    echo "   restart: launchctl kickstart -k gui/$(id -u)/ai.miranote.beta-<name>"
+    echo "   hand back to this script: scripts/disable_backend_services.sh"
+    exit 0
+  fi
+done
 
 # The four POCs have independent venvs and no package in common, so the repo
 # root goes on sys.path for all of them. PYTHONPATH rather than --app-dir:
@@ -27,6 +44,7 @@ SERVICES=(
   "image:image-generation:main:app:8002"
   "chat:chatbot:poc.chatbot.main:app:8003"
   "voice:voice-to-text:main:app:8005"
+  "collections:photo-collections:main:app:8006"
 )
 
 echo "== building the Apple Vision matte helper"
@@ -136,5 +154,6 @@ echo "      https://beta-text.miranote.app    -> :8001"
 echo "      https://beta-image.miranote.app   -> :8002"
 echo "      https://beta-chat.miranote.app    -> :8003"
 echo "      https://beta-voice.miranote.app   -> :8005"
+echo "      https://beta-collections.miranote.app -> :8006"
 echo "   Tunnel: scripts/start_tunnel.sh (separate lifecycle, start it too)"
 echo "   Stop everything: scripts/stop_backends.sh"

@@ -12,7 +12,7 @@ set -u
 
 TUNNEL_NAME="miranote-beta"
 TUNNEL_CONFIG="$HOME/.cloudflared/miranote.yml"
-HOSTS="beta-text beta-image beta-chat beta-voice"
+HOSTS="beta-text beta-image beta-chat beta-voice beta-collections"
 
 API_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 LOGS="$API_ROOT/logs/beta"
