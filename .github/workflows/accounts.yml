@@ -10,12 +10,19 @@ on:
   push:
     branches: [main, dev]
 
+# The job only reads the code, as in tests.yml: the repo's default token can
+# write, and the job installs whatever versions PyPI serves that day.
+permissions:
+  contents: read
+
 jobs:
   pytest:
     name: pytest (accounts, postgres 17)
     # Pinned like tests.yml: setup-python has no 3.9 on ubuntu 26.04, and
     # the code must stay 3.9-compatible.
     runs-on: ubuntu-24.04
+    # A hang should not hold a runner for GitHub's default of 6 hours.
+    timeout-minutes: 15
     services:
       postgres:
         image: postgres:17
