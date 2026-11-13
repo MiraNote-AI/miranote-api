@@ -10,12 +10,20 @@ on:
   push:
     branches: [main, dev]
 
+# The jobs only read the code. The repo's default token can write, and each
+# job installs and runs whatever versions PyPI serves that day.
+permissions:
+  contents: read
+
 jobs:
   pytest:
     name: pytest (${{ matrix.suite }})
     # Pinned: ubuntu-latest moved to 26.04, where setup-python has no 3.9
     # (the code must stay 3.9-compatible). 3.9 is still built for 24.04.
     runs-on: ubuntu-24.04
+    # Each job takes a few minutes at most; a hang should not hold a runner
+    # for GitHub's default of 6 hours.
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
@@ -25,9 +33,12 @@ jobs:
           # chatbot's main.py refuses to import without LLM_API_KEY (a local
           # run reads it from poc/chatbot/.env); its tests stub every call,
           # so CI gives it a placeholder that is never sent anywhere.
+          # The repo-root tests/ (beta_auth: the token gate and the rate
+          # limit) ride along: they run from the root and need only what
+          # chatbot's requirements install.
           - suite: chatbot
             workdir: .
-            tests: poc/chatbot/tests
+            tests: poc/chatbot/tests tests
             llm_key_placeholder: true
           - suite: retrieval
             workdir: .
@@ -41,6 +52,9 @@ jobs:
           - suite: photo-collections
             workdir: poc/photo-collections
             tests: tests/
+          # image-generation is left out: its runtime is Python 3.13 (SAM-2
+          # needs >= 3.10) and its suite fails on dev with google-genai 3.x.
+          # Tracked in api#104.
     steps:
       - uses: actions/checkout@v4
 
@@ -48,6 +62,8 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.9'  # the code must stay Python 3.9-compatible
+          cache: pip
+          cache-dependency-path: poc/${{ matrix.suite }}/requirements.txt
 
       # CPU-only torch: the suites never run a model, so the CUDA wheels
       # would only slow the install down.
@@ -56,6 +72,14 @@ jobs:
           python -m pip install --upgrade pip
           pip install --extra-index-url https://download.pytorch.org/whl/cpu \
             -r poc/${{ matrix.suite }}/requirements.txt
+
+      # The YanYi client re-encodes uploads with ffmpeg, and its 9 tests skip
+      # without it. The runner image has none.
+      - name: Install ffmpeg
+        if: matrix.suite == 'voice-to-text'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ffmpeg
 
       - name: Run pytest
         working-directory: ${{ matrix.workdir }}

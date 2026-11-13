@@ -34,12 +34,39 @@ Most damaging first.
 
 - `beta_auth.py` -- the token gate and rate limit in front of every service
 - `poc/*/main.py` -- the HTTP endpoints the app calls
-- `poc/*/*client*.py` -- calls to model and speech providers
-- `.env.example`, `start-all.sh`, `.github/workflows/`
+- `poc/*/*client*.py`, `poc/photo-collections/llm.py`,
+  `poc/image-generation/shared/vertex_client.py`,
+  `poc/image-generation/generate/` (the DashScope and Gemini providers),
+  `poc/*/config.py` -- calls to model and speech providers, and where
+  their keys are read
+- `.env.example`, `poc/*/.env.example` -- the token and provider-key names
+- `scripts/`, `scripts/launchd/`, `start-all.sh` -- the beta deploy: the
+  Cloudflare tunnel, launchd jobs that start and restart every backend; a
+  wrong bind address or a lost env file takes the beta down or opens it
+- `.github/workflows/`
 
 ## Skip
 
 - `poc/*/demo_data/`
+- `poc/image-generation/test_api.py` (a live smoke script, not a test),
+  `poc/photo-collections/tools/`, `poc/retrieval/scripts/` -- manual
+  scripts, never run by CI or the services. Not `vision_bench/`: it is
+  the binary that serves `/cutout`.
+
+## How to run the suites
+
+`.github/workflows/tests.yml` runs these on every PR, one Python 3.9 venv
+per suite (`pip install -r poc/<suite>/requirements.txt`), no keys:
+
+```
+PYTHONPATH=. LLM_API_KEY=x python -m pytest poc/chatbot/tests
+PYTHONPATH=. python -m pytest tests    # beta_auth, in the chatbot venv
+PYTHONPATH=. python -m pytest poc/retrieval/tests
+```
+
+and from `poc/voice-to-text`, `poc/text-clean-expand` and
+`poc/photo-collections`: `PYTHONPATH=.:../.. python -m pytest tests/`.
+The image-generation suite (Python 3.13) is not in CI yet: api#104.
 
 ## How to report
 
