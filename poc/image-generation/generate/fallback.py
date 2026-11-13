@@ -37,12 +37,16 @@ def build_prompt(prompt: str, aspect_ratio: str) -> str:
 # substrings of the name rather than against enum members, because the SDK
 # stringifies FinishReason as "FinishReason.IMAGE_SAFETY" and because the set
 # grows -- the IMAGE_* variants postdate the originals. Covers every refusing
-# member of google.genai.types.FinishReason as of SDK 2026-09: SAFETY,
+# member of google.genai.types.FinishReason as of SDK 3.0.0: SAFETY,
 # RECITATION, BLOCKLIST, PROHIBITED_CONTENT, SPII and the three IMAGE_* forms.
+# Plus MODEL_ARMOR, Vertex's Model Armor block: only SDK 3.3 names it, but
+# Vertex can send it now and every SDK parses it into a FinishReason anyway.
 #
 # Deliberately excluded, because a retry of the same prompt can still succeed:
-# NO_IMAGE (the model simply produced none), IMAGE_OTHER, OTHER, MAX_TOKENS.
-_REFUSAL_MARKERS = ("SAFETY", "PROHIBITED", "BLOCK", "RECITATION", "SPII")
+# NO_IMAGE (the model simply produced none), IMAGE_OTHER, OTHER, MAX_TOKENS,
+# and the members new since 2.12.1 (the SDK on beta): TOO_MANY_TOOL_CALLS
+# (2.17.0), CONTINUATION (2.27.0) and MALFORMED_RESPONSE (3.0.0).
+_REFUSAL_MARKERS = ("SAFETY", "PROHIBITED", "BLOCK", "RECITATION", "SPII", "ARMOR")
 
 
 def _candidates(response) -> list:

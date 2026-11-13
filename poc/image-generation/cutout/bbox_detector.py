@@ -4,7 +4,7 @@ from typing import Optional
 
 from google.genai import types
 
-from shared.vertex_client import _get_client
+from shared.vertex_client import _get_client, generate_config
 
 
 _SYSTEM_PROMPT = """You are an object detector for image cutouts.
@@ -76,7 +76,7 @@ def detect_bbox(image_bytes: bytes, target: str, model: str) -> Optional[tuple[f
         # how much it actually buys is a property of the model, not of the flag
         # -- do not build an A/B on the assumption that one call is the model's
         # answer. Evidence: test_output/bbox_model_ab/20260926_134013/
-        config=types.GenerateContentConfig(temperature=0, seed=0),
+        config=generate_config(temperature=0, seed=0),
     )
     raw = response.text or ""
     print(f"[bbox_detector] target={target!r} raw={raw!r}")

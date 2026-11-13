@@ -16,7 +16,7 @@ import io
 from google.genai import types
 from PIL import Image
 
-from shared.vertex_client import _get_client, _extract_image_bytes
+from shared.vertex_client import _get_client, _extract_image_bytes, generate_config
 
 
 def stylize(image_bytes: bytes, instruction: str, model: str, temperature: float = 0) -> bytes:
@@ -33,7 +33,7 @@ def stylize(image_bytes: bytes, instruction: str, model: str, temperature: float
             types.Part.from_bytes(data=image_bytes, mime_type=mime),
             instruction,
         ],
-        config=types.GenerateContentConfig(
+        config=generate_config(
             # TEXT as well as IMAGE: Gemini 3.x image models expect both and
             # reject an IMAGE-only request. border.py has carried this since it
             # first called a 3.x model; this path only needed it once

@@ -64,9 +64,9 @@ PYTHONPATH=. python -m pytest tests    # beta_auth, in the chatbot venv
 PYTHONPATH=. python -m pytest poc/retrieval/tests
 ```
 
-and from `poc/voice-to-text`, `poc/text-clean-expand` and
-`poc/photo-collections`: `PYTHONPATH=.:../.. python -m pytest tests/`.
-The image-generation suite (Python 3.13) is not in CI yet: api#104.
+and from `poc/voice-to-text`, `poc/text-clean-expand`,
+`poc/photo-collections` and `poc/image-generation` (Python 3.13, not 3.9):
+`PYTHONPATH=.:../.. python -m pytest tests/`.
 
 ## How to report
 

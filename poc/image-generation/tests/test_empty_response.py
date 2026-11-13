@@ -156,7 +156,9 @@ class GenerateEmptyResponseTests(unittest.TestCase):
             )
 
 
-from google.genai.types import FinishReason
+import warnings
+
+from google.genai.types import Candidate, FinishReason
 
 # Every FinishReason the SDK defines, split by the only question that matters
 # here: would retrying the same prompt have a chance? Pinned against the real
@@ -167,10 +169,20 @@ from google.genai.types import FinishReason
 REFUSING = {
     "SAFETY", "RECITATION", "BLOCKLIST", "PROHIBITED_CONTENT", "SPII",
     "IMAGE_SAFETY", "IMAGE_PROHIBITED_CONTENT", "IMAGE_RECITATION",
+    # Vertex's Model Armor block. Named by google-genai 3.3, not by the pinned
+    # 3.0.0, but Vertex can send it either way: see the MODEL_ARMOR test below.
+    "MODEL_ARMOR",
 }
 RETRYABLE = {
     "FINISH_REASON_UNSPECIFIED", "STOP", "MAX_TOKENS", "LANGUAGE", "OTHER",
     "MALFORMED_FUNCTION_CALL", "UNEXPECTED_TOOL_CALL", "NO_IMAGE", "IMAGE_OTHER",
+    # New since google-genai 2.12.1, the SDK beta runs: TOO_MANY_TOOL_CALLS
+    # (2.17.0), CONTINUATION (2.27.0) and MALFORMED_RESPONSE (3.0.0).
+    # CONTINUATION is a token-limit stop (shared.vertex_client turns off the
+    # SDK's automatic resend, so it reaches us and gets main.py's one retry),
+    # MALFORMED_RESPONSE a broken reply, TOO_MANY_TOOL_CALLS a tool loop (we
+    # pass no tools): none is the model declining the prompt.
+    "CONTINUATION", "MALFORMED_RESPONSE", "TOO_MANY_TOOL_CALLS",
 }
 
 
@@ -203,3 +215,21 @@ class RealFinishReasonTests(unittest.TestCase):
     def test_the_enum_renders_into_the_log_line_readably(self):
         reason = fallback.empty_reason(_response(finish_reason=FinishReason.IMAGE_SAFETY))
         self.assertIn("IMAGE_SAFETY", reason)
+
+    def test_a_model_armor_block_is_a_refusal_whatever_the_sdk_names(self):
+        """Vertex answers finish_reason MODEL_ARMOR when Model Armor blocks a
+        response ("not supported in Gemini API", so Vertex only). The canary
+        above reads the SDK's enum, which names it only from google-genai 3.3,
+        but every version parses the value off the wire into a FinishReason
+        anyway, so neither the pin nor the canary keeps it out."""
+        with warnings.catch_warnings():
+            # Older SDKs warn "MODEL_ARMOR is not a valid FinishReason".
+            warnings.simplefilter("ignore", UserWarning)
+            candidate = Candidate.model_validate(
+                {"finishReason": "MODEL_ARMOR", "content": {"parts": [{"text": "blocked"}]}}
+            )
+        response = SimpleNamespace(candidates=[candidate], prompt_feedback=None)
+        self.assertIn("MODEL_ARMOR", str(candidate.finish_reason))
+        self.assertTrue(fallback.is_safety_refusal(response))
+        exc, _ = _call_and_capture(response)
+        self.assertEqual(exc.detail, main.REFUSED_DETAIL, "a block is not a blank to retry")
