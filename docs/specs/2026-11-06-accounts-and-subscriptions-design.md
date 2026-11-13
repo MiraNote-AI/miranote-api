@@ -3,8 +3,8 @@
 - **Date:** 2026-11-06, revised 2026-11-13
 - **Status:** Revised after review (Maverick, #99) and the team lead's
   data-plan decisions of 2026-11-13, then after a second review the same
-  day, which settled the four open questions (section 11). Steps 1-2 of
-  the build plan are in review as #108 and #109.
+  day. Every open question is decided (section 11). Steps 1-2 of the
+  build plan are in review as #108 and #109.
 - **Issue:** miranote-api #95
 - **Scope:** the smallest backend that can sign a user in, know whether
   they pay, meter AI cost, learn from their choices, and delete them on
@@ -75,6 +75,8 @@ neither the text nor the result (section 6.5).
 
 Plus = image generation + photo push + high chat caps. Images always
 have a cap; "unlimited" is never promised for anything that costs money.
+Plus bought in Sandbox (App Review, TestFlight) costs nothing, so it
+gets lower caps on every feature (5.2).
 
 **Price:** $5.99/month and $39.99/year in one subscription group
 `Plus`. Launch window: a 2-month introductory offer; early testers get
@@ -218,7 +220,7 @@ before the reuse check.
 | original_transaction_id | text pk | Apple's id for the whole chain |
 | user_id | uuid fk null | null = unowned (offer code before sign-in, or deleted account) |
 | linked_at | timestamptz null | when `user_id` was last set; used for the reclaim rate limit |
-| product_id | text | `app.miranote.plus.monthly` or `.yearly` |
+| product_id | text | `ai.miranote.app.plus.monthly` or `ai.miranote.app.plus.yearly` (bundle id prefix) |
 | status | text | `active`, `grace`, `billing_retry`, `expired`, `revoked` (derived, for reporting) |
 | expires_at | timestamptz | from the latest transaction |
 | grace_period_expires_at | timestamptz null | from renewal info |
@@ -361,11 +363,25 @@ out. Billing Grace Period is turned on in App Store Connect.
 App Review buys with Sandbox accounts in the production build, and
 TestFlight purchases are Sandbox too. So the production service accepts
 **both** `Production` and `Sandbox` signed data (one verifier per
-environment) and tags each row. A Sandbox entitlement gets lower image
-caps (10 images per UTC month) so 300 public TestFlight testers cannot
-run up a real bill. Both the Production and Sandbox notification URLs in
-App Store Connect point at the one live service (the Mac in phase 1,
-Fly in phase 2; section 8.2).
+environment) and tags each row.
+
+Sandbox purchases cost nothing, so anyone in public TestFlight could
+otherwise get Plus for free. A Sandbox entitlement therefore has its own
+caps on **every** metered feature (decided 2026-11-13): well above what
+App Review needs to see each Plus feature work, far below Plus, so 300
+public TestFlight testers cannot run up a real bill:
+
+| Feature | Sandbox entitlement | (Plus, for comparison) |
+|---|---|---|
+| Mira chat | 30 turns per rolling 24 h | 200 |
+| Expand / polish | 30 per rolling 24 h | 300 |
+| Image generation and stylize / edit / borders | 10 per UTC month, shared | 100 |
+| Photo push | 1 per rolling 7 days | 1 per rolling 24 h |
+| `/mood` | 30 per rolling 24 h | 30 |
+
+Both the Production and Sandbox notification URLs in App Store Connect
+point at the one live service (the Mac in phase 1, Fly in phase 2;
+section 8.2).
 
 Every verified payload must also have `bundleId` = our bundle id.
 
@@ -411,14 +427,20 @@ the rule is: the first account that sends it in a Restore (or a launch
 sync) and passes step 4 gets it. Every link is logged (user id, chain
 id, source) and rate-limited: a chain can be re-linked at most once per
 30 days (`linked_at`), and one user can link at most 3 chains per 24 h.
+The 30 days count from the chain's last link, so a user who deletes
+their account and signs up again within 30 days of it cannot Restore
+their own subscription until then. That limit stays (decided
+2026-11-13); support moves the chain by hand, as below.
 
 **A chain owned by another live account** (decided 2026-11-13): 1.0
 rejects the sync as above and has no self-service transfer. Support
-moves a chain by hand: the user sends the order ID from Apple's receipt
-email, support calls the Server API **Look Up Order ID** to confirm the
-order belongs to that chain, sets `user_id` to the user's account and
-calls Set App Account Token. The move is logged like any other link.
-(Look Up Order ID does not work in Sandbox.)
+moves a chain by hand, for this case and for the re-link limit above:
+the user sends the order ID from Apple's receipt email, support calls
+the Server API **Look Up Order ID** to confirm the order belongs to that
+chain, sets `user_id` to the user's account and calls Set App Account
+Token. The move is logged like any other link and sets `linked_at`, but
+is not held back by the rate limits. (Look Up Order ID does not work in
+Sandbox.)
 
 **Restore Purchases** (Guideline 3.1.1) is in the paywall and in
 Settings. Signed out -> sign in first -> `AppStore.sync()` -> send each
@@ -522,6 +544,11 @@ the budget is raised. This bounds the damage of a bug or an abuse wave.
   signed by the server with a 5-minute expiry (no table; replaying an
   attestation only registers the same key again), and `POST /attest`
   verifies the attestation and stores the key.
+- **When App Attest is unavailable** (an unsupported device, or Apple's
+  service failing; decided 2026-11-13): a **signed-in** request is
+  allowed without an assertion, because the account, its caps and the
+  kill switch (6.3) still bound abuse. Signed-out `/mood` still
+  requires one; without it the page gets a neutral color (6.5).
 - **DeviceCheck** has two bits per device per team plus a "last updated"
   month; it cannot count. We use one bit only, meaning "the free image
   quota was granted on this device this month". When a free user first
@@ -764,11 +791,14 @@ Postgres.
 
 **Phase 1 setup ($0; team lead / account owner):**
 
-9. App Store Connect: subscription group `Plus` with monthly ($5.99) and
-   yearly ($39.99), the 2-month introductory offer (not yet live),
-   Billing Grace Period on, Family Sharing off; an In-App Purchase key
-   for the Server API; Server Notifications V2, Production and Sandbox
-   URLs -> `beta-accounts.miranote.app`. Developer account: a Sign in
+9. App Store Connect: subscription group `Plus` with monthly ($5.99,
+   `ai.miranote.app.plus.monthly`) and yearly ($39.99,
+   `ai.miranote.app.plus.yearly`); a product id is permanent once
+   created and can never be reused, so check both ids before saving.
+   The 2-month introductory offer (not yet live), Billing Grace Period
+   on, Family Sharing off; an In-App Purchase key for the Server API;
+   Server Notifications V2, Production and Sandbox URLs ->
+   `beta-accounts.miranote.app`. Developer account: a Sign in
    with Apple key (client secret for the code exchange and revoke at
    deletion, 7.1), a DeviceCheck key, and the SIWA server-to-server
    notification URL (3.3) -> `beta-accounts.miranote.app`.
@@ -854,22 +884,22 @@ Postgres.
   (5.3).
 - 2026-11-13 -- Taste switch off also stops on-device style ranking:
   off means no personalization, not only no upload (4.2).
+- 2026-11-13 -- Sandbox entitlements get their own caps on every
+  metered feature: chat 30 and expand 30 per rolling 24 h, photo push 1
+  per rolling 7 days, images 10 per UTC month (5.2).
+- 2026-11-13 -- App Attest unavailable on a signed-in request: allowed;
+  signed-out `/mood` still requires it (6.4).
+- 2026-11-13 -- The 30-day re-link limit also applies after deletion;
+  support moves the chain by hand (5.3).
+- 2026-11-13 -- Product ids follow the bundle id:
+  `ai.miranote.app.plus.monthly`, `ai.miranote.app.plus.yearly` (4.1,
+  step 9).
+- 2026-11-13 -- Starting defaults confirmed: signed-in `/mood` 30 per
+  rolling 24 h (6.5); taste switch off clears the on-device profile and
+  stops recording (4.2); notification payloads are stored without
+  `appAccountToken` (4.1); a retry of an `ok` `request_id` gets 409
+  (6.1).
 
 ### Open
 
-1. **Sandbox entitlements are free.** Public TestFlight purchases are
-   Sandbox and cost nothing, so any tester gets Plus chat, expand and
-   photo-push caps; only images are lowered (5.2). Proposal: Sandbox
-   caps on every metered feature, high enough for App Review. Decide
-   before public TestFlight (step 13).
-2. **App Attest unavailable** (unsupported device, or Apple's service
-   failing) on a signed-in request. Proposal: allow it, since the
-   account, its caps and the kill switch still apply; signed-out `/mood`
-   still requires it (neutral color otherwise, 6.5).
-3. **Re-link limit after deletion.** It counts from `linked_at`, so a
-   user who deletes and re-creates their account within 30 days of the
-   last link cannot Restore their own subscription until then.
-   Proposal: keep the limit; support moves the chain (5.3).
-4. **Product ids.** `app.miranote.plus.*` differs from the bundle id
-   `ai.miranote.app`, and a product id can never be reused once
-   created. Confirm before step 9.
+None.
