@@ -212,7 +212,22 @@ TEXT_PRICE_CNY_PER_MTOK = {
 PROMPT_EXTEND = False
 
 POLL_INTERVAL = 2.0    # seconds between task-status polls on the async shape
-IMAGE_TIMEOUT = 180.0  # per-image ceiling, including polling and download
+IMAGE_TIMEOUT = 180.0  # longest wait for one image call's reply, outside /generate
+
+# The whole of one /generate request: the wait for a slot, the expansion, the
+# image call and its download, and the matte. Every provider call inside it gets
+# at most what is left, so a stalled one ends as a 504 instead of outliving the
+# phone. Under the app's 60 s sticker limit so the slot is free by the time the
+# phone offers a retry (ios #169); a healthy request takes 8-10 s (the 20-image
+# bench of 2026-11-13: max 9.8 s, no retries).
+GENERATE_DEADLINE = 50.0
+
+# The expander only dresses the user's words up, and a failure already falls
+# back to them, so it gets a short leash and one retry: past this it is cheaper
+# to draw the plain words than to keep the image call waiting. A healthy
+# expansion took 1.6-3.4 s in the same bench.
+EXPANDER_TIMEOUT = 12.0
+EXPANDER_ATTEMPTS = 2
 
 # Which model generates each /generate mode. One entry per mode rather than one
 # global constant, because the 90-image bench says these three will not stay

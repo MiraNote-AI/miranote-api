@@ -46,7 +46,9 @@ def complete(prompt: str, model: str) -> str | None:
             "parameters": {"result_format": "message"},
         }
         url = config.DASHSCOPE_BASE_URL + _PATH
-    data = http_client.post_json(url, payload, KEY_ENV, timeout=60.0)
+    data = http_client.post_json(url, payload, KEY_ENV,
+                                 timeout=config.EXPANDER_TIMEOUT,
+                                 attempts=config.EXPANDER_ATTEMPTS)
     return text_of(data)
 
 

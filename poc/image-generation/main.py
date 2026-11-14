@@ -8,6 +8,7 @@ os.environ.setdefault("PYTORCH_ENABLE_MPS_FALLBACK", "1")
 
 import asyncio
 import base64
+import contextvars
 import io
 import re
 import time
@@ -34,7 +35,7 @@ import beta_auth
 import config
 from shared.vertex_client import _get_client, generate_config
 from generate import (fallback, prompt_expander, generate_presets,
-                      image_providers, dashscope_text)
+                      image_providers, dashscope_text, http_client)
 from generate.http_client import ProviderError
 from cutout import bbox_detector, sam_segmenter, grounding_dino, vision_matte
 from stylize import stylizer, style_presets
@@ -119,6 +120,8 @@ QUOTA_DETAIL = "image generation is busy right now; wait a moment and try again"
 # where it is useful.
 REFUSED_DETAIL = "the image model would not draw that one; try describing it differently"
 EMPTY_DETAIL = "no picture came back that time; try again"
+# config.GENERATE_DEADLINE ran out, in the queue or at the provider.
+TIMEOUT_DETAIL = "that picture took too long; try again"
 
 # One extra attempt when the model answers with nothing and did not refuse.
 # Not a general retry policy: quota rejections are never retried (section 7 of
@@ -252,15 +255,24 @@ def _call_model(prompt: str, aspect_ratio: str, model: str,
         return None, False
 
     # The images are independent; generate them concurrently so the whole
-    # request stays comfortably inside client timeouts.
+    # request stays comfortably inside client timeouts. Each runs in a copy of
+    # this thread's context so it keeps the request's time budget, which a pool
+    # thread would otherwise start without.
     try:
         with ThreadPoolExecutor(max_workers=config.NUMBER_OF_IMAGES) as pool:
-            results = list(pool.map(lambda _: _one(), range(config.NUMBER_OF_IMAGES)))
+            calls = [pool.submit(contextvars.copy_context().run, _one)
+                     for _ in range(config.NUMBER_OF_IMAGES)]
+            results = [call.result() for call in calls]
     except HTTPException:
         # _one_image already chose the status (503 for a spent budget). Re-raising
         # it unchanged matters: the branches below would relabel it 502, and the
         # app keys its message off the status code alone.
         raise
+    except http_client.Timeout as error:
+        # Out of time, not broken: 504 rather than the 502 below, which the app
+        # reads as "the server is not running".
+        print(f"[generate] {model} ran out of time: {str(error)[:200]}")
+        raise HTTPException(status_code=504, detail=TIMEOUT_DETAIL)
     except ProviderError as error:
         # Anything _classify_provider_error could not place. The provider's own
         # words go in the detail because nobody has triaged this shape yet.
@@ -343,9 +355,9 @@ class _NotFound(Exception):
 
 @contextmanager
 def _stage(timings: dict, name: str):
-    """Record one /cutout stage's wall-clock ms into `timings`.
+    """Record one /cutout or /generate stage's wall-clock ms into `timings`.
 
-    Only the prompt-guided branch is instrumented; the timings ride back on
+    In /cutout only the prompt-guided branch is instrumented; the timings ride back on
     the response so a caller can see which stage dominates without reading
     server logs. It is the cheapest way to tell a slow detector from a slow
     matte on a host nobody can attach a profiler to.
@@ -840,8 +852,43 @@ class GenerateRequest(BaseModel):
 
 @app.post("/generate")
 async def generate_images(req: GenerateRequest):
-    async with _generate_gate():
-        return await _generate(req)
+    """One /generate request inside config.GENERATE_DEADLINE, logged as one line.
+
+    The deadline covers the wait for a slot too. A slot is only ever held by a
+    request that is still inside its own deadline, so a phone that gave up on a
+    stalled call no longer leaves it occupying the slot for minutes (ios #169).
+    """
+    timings: dict = {}
+    status = 500
+    started = time.perf_counter()
+    try:
+        with http_client.budget(config.GENERATE_DEADLINE, timings):
+            gate = _generate_gate()
+            with _stage(timings, "queue"):
+                try:
+                    await asyncio.wait_for(gate.acquire(), timeout=http_client.remaining())
+                except asyncio.TimeoutError:
+                    error = HTTPException(status_code=504, detail=TIMEOUT_DETAIL)
+                    _record_generate_error(
+                        "queue", config.IMAGE_MODELS_BY_MODE.get(req.command, req.command), error)
+                    raise error from None
+            try:
+                response = await _generate(req, timings)
+            finally:
+                gate.release()
+        status = 200
+        response["timings"] = timings
+        return response
+    except HTTPException as error:
+        status = error.status_code
+        raise
+    finally:
+        timings["total"] = round((time.perf_counter() - started) * 1000, 1)
+        # One line per request, failures included, so a slow one can be pinned
+        # to a step from the beta Mac's log alone. Steps that did not run are
+        # absent rather than zero.
+        steps = " ".join(f"{name}={round(ms)}" for name, ms in timings.items())
+        print(f"[generate] {_now()} {req.command} {status} {steps}", flush=True)
 
 
 # command -> (prompt_expander attribute, generate_presets attribute). Held as
@@ -855,7 +902,7 @@ _COMMANDS = {
 }
 
 
-async def _generate(req: GenerateRequest):
+async def _generate(req: GenerateRequest, timings: dict):
     spec = _COMMANDS.get(req.command)
     if spec is None:
         raise HTTPException(status_code=400, detail=f"Unknown command: {req.command}")
@@ -894,7 +941,7 @@ async def _generate(req: GenerateRequest):
 
     expanded = True
     try:
-        prompt = await asyncio.to_thread(_fresh_prompt)
+        prompt = await asyncio.to_thread(_timed, timings, "expand", _fresh_prompt)
     except Exception as error:                      # noqa: BLE001 - reported below
         # Expansion only dresses the user's words up; losing it must not lose
         # the image. On 2026-10-15 qwen-turbo answered 429 to every call, and
@@ -910,7 +957,8 @@ async def _generate(req: GenerateRequest):
     # expander just failed, since a second try would only add its backoff.
     reprompt = _fresh_prompt if req.expand and expanded else None
     try:
-        images = await asyncio.to_thread(_call_model, prompt, ratio, model, reprompt)
+        images = await asyncio.to_thread(
+            _timed, timings, "model", _call_model, prompt, ratio, model, reprompt)
     except Exception as error:
         _record_generate_error("image", model, error)
         raise
@@ -922,7 +970,8 @@ async def _generate(req: GenerateRequest):
                 # to_thread, not a bare call: background removal is pixel work
                 # off the event loop either way, and rembg (still reachable by
                 # name) is seconds of CPU per image.
-                processed = await asyncio.to_thread(_remove_sticker_bg, raw, matte)
+                with _stage(timings, "matte"):
+                    processed = await asyncio.to_thread(_remove_sticker_bg, raw, matte)
             except vision_matte.VisionMatteUnavailable as e:
                 raise HTTPException(status_code=503, detail=str(e))
         else:
