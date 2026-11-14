@@ -864,7 +864,13 @@ async def generate_images(req: GenerateRequest):
     timings: dict = {}
     status = 500
     started = time.perf_counter()
+    # The caller's own string never reaches the log line or /health: a newline
+    # in it could forge a log line, and /health holds no user text.
+    command = req.command if req.command in _COMMANDS else "unknown"
     try:
+        if command == "unknown":
+            # Before the queue, so a typo neither waits for a slot nor holds one.
+            raise HTTPException(status_code=400, detail=f"Unknown command: {req.command}")
         with http_client.budget(config.GENERATE_DEADLINE, timings):
             gate = _generate_gate()
             with _stage(timings, "queue"):
@@ -872,8 +878,7 @@ async def generate_images(req: GenerateRequest):
                     await asyncio.wait_for(gate.acquire(), timeout=http_client.remaining())
                 except asyncio.TimeoutError:
                     error = HTTPException(status_code=504, detail=TIMEOUT_DETAIL)
-                    _record_generate_error(
-                        "queue", config.IMAGE_MODELS_BY_MODE.get(req.command, req.command), error)
+                    _record_generate_error("queue", config.IMAGE_MODELS_BY_MODE[command], error)
                     raise error from None
             try:
                 response = await _generate(req, timings)
@@ -891,7 +896,7 @@ async def generate_images(req: GenerateRequest):
         # to a step from the beta Mac's log alone. Steps that did not run are
         # absent rather than zero.
         steps = " ".join(f"{name}={round(ms)}" for name, ms in timings.items())
-        print(f"[generate] {_now()} {req.command} {status} {steps}", flush=True)
+        print(f"[generate] {_now()} {command} {status} {steps}", flush=True)
 
 
 # command -> (prompt_expander attribute, generate_presets attribute). Held as
@@ -937,9 +942,7 @@ def _expansion_failed(command: str, error: Exception) -> HTTPException:
 
 
 async def _generate(req: GenerateRequest, timings: dict):
-    spec = _COMMANDS.get(req.command)
-    if spec is None:
-        raise HTTPException(status_code=400, detail=f"Unknown command: {req.command}")
+    spec = _COMMANDS[req.command]  # checked by generate_images
     if not req.prompt:
         raise HTTPException(
             status_code=400, detail=f"prompt is required for {req.command}"
@@ -994,6 +997,11 @@ async def _generate(req: GenerateRequest, timings: dict):
         expanded = False
     ratio = config.ASPECT_RATIOS.get(req.command, "1:1")
     model = config.IMAGE_MODELS_BY_MODE[req.command]
+    left = http_client.remaining()
+    if left is not None and left < config.MIN_IMAGE_TIME:
+        error = HTTPException(status_code=504, detail=TIMEOUT_DETAIL)
+        _record_generate_error("image", model, error)
+        raise error
     # Nothing to vary when the caller asked for no expansion -- or when the
     # expander just failed, since a second try would only add its backoff.
     reprompt = _fresh_prompt if req.expand and expanded else None

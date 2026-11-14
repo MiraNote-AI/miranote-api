@@ -222,12 +222,19 @@ IMAGE_TIMEOUT = 180.0  # longest wait for one image call's reply, outside /gener
 # bench of 2026-11-13: max 9.8 s, no retries).
 GENERATE_DEADLINE = 50.0
 
-# The expander only dresses the user's words up, and a failure already falls
-# back to them, so it gets a short leash and one retry: past this it is cheaper
-# to draw the plain words than to keep the image call waiting. A healthy
-# expansion took 1.6-3.4 s in the same bench.
+# How long one expansion attempt may wait for its reply inside /generate. A
+# healthy expansion took 1.6-3.4 s in the same bench, with spikes to 8 s, so
+# this leaves room for a spike without letting a stalled call eat the image
+# call's share of the deadline. What a timeout leads to depends on the command:
+# art draws the user's words, the EXPANSION_REQUIRED commands get one more try
+# (main._expand). A 429 is backed off in http_client as usual, and the deadline
+# cuts that backoff short where it cannot be covered.
 EXPANDER_TIMEOUT = 12.0
-EXPANDER_ATTEMPTS = 2
+
+# Below this much time left, /generate answers 504 rather than start an image
+# call: none of the 60 benched calls drew and downloaded in under 4.7 s, so a
+# call started now would be paid for and then abandoned.
+MIN_IMAGE_TIME = 3.0
 
 # Commands that are never drawn from the user's bare words. For them a failed
 # expansion fails the request (retryable) instead of falling back, and a

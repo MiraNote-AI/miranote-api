@@ -18,6 +18,8 @@ from __future__ import annotations
 import asyncio
 import io
 import os
+import socket
+import threading
 import time
 import unittest
 from contextlib import redirect_stdout
@@ -25,6 +27,7 @@ from unittest import mock
 
 import httpx
 import requests
+import urllib3
 
 import config
 import main
@@ -98,23 +101,103 @@ class BudgetTests(unittest.TestCase):
 
     def test_timed_adds_up_repeated_steps(self):
         timings = {}
-        with http_client.budget(10.0, timings):
+        # Each block reads the clock twice: 0.0 -> 0.5 s, then 1.0 -> 1.25 s.
+        clock = iter([0.0, 0.5, 1.0, 1.25])
+        with mock.patch.object(http_client.time, "perf_counter",
+                               side_effect=lambda: next(clock)), \
+                http_client.budget(10.0, timings):
             with http_client.timed("model_request"):
                 pass
             with http_client.timed("model_request"):
                 pass
-        self.assertIn("model_request", timings)
+        self.assertEqual(timings["model_request"], 750.0)
 
     def test_timed_without_a_budget_is_a_no_op(self):
         with http_client.timed("model_request"):
             pass  # must not raise
 
-    def test_expander_gets_its_own_short_cap(self):
+    def _expander_timeout(self) -> float:
         with mock.patch.object(dashscope_text.http_client, "post_json",
                                return_value={"choices": [{"message": {"content": "x"}}]}) as post:
             dashscope_text.complete("a cat", "qwen3.8-flash")
-        self.assertEqual(post.call_args.kwargs["timeout"], config.EXPANDER_TIMEOUT)
-        self.assertLessEqual(post.call_args.kwargs["attempts"], 2)
+        return post.call_args.kwargs["timeout"]
+
+    def test_expander_gets_its_own_short_cap_inside_a_request(self):
+        with http_client.budget(50.0, {}):
+            self.assertEqual(self._expander_timeout(), config.EXPANDER_TIMEOUT)
+
+    def test_the_startup_probe_keeps_the_generous_timeout(self):
+        """Outside /generate (the startup probe) a slow first reply must not
+        report a working key as broken."""
+        self.assertEqual(self._expander_timeout(), 60.0)
+
+    def test_connect_and_read_together_fit_the_budget(self):
+        with mock.patch.object(http_client.requests, "request",
+                               return_value=_response(200)) as request, \
+                http_client.budget(4.0, {}):
+            http_client.post_json("https://x/generation", {}, "DASHSCOPE_API_KEY",
+                                  timeout=180.0)
+        connect, read = request.call_args.kwargs["timeout"]
+        self.assertLessEqual(connect + read, 4.0)
+
+    def test_a_stall_inside_the_body_is_a_timeout(self):
+        """requests reports a read timeout that hits mid-body as a
+        ConnectionError, not a Timeout; it must still answer 504."""
+        mid_body = requests.ConnectionError(
+            urllib3.exceptions.ReadTimeoutError(None, "/generation", "read timed out"))
+        with mock.patch.object(http_client.requests, "request", side_effect=mid_body):
+            with self.assertRaises(http_client.Timeout):
+                http_client.post_json("https://x/generation", {},
+                                      "DASHSCOPE_API_KEY")
+
+    def test_a_refused_connection_is_a_provider_error_not_a_crash(self):
+        refused = requests.ConnectionError("Connection refused")
+        with mock.patch.object(http_client.requests, "request", side_effect=refused):
+            with self.assertRaises(http_client.ProviderError) as caught:
+                http_client.post_json("https://x/generation", {},
+                                      "DASHSCOPE_API_KEY")
+        self.assertNotIsInstance(caught.exception, http_client.Timeout)
+
+
+class SlowDownloadTests(unittest.TestCase):
+    """fetch_image against a real socket on localhost that sends headers and
+    then stalls or trickles -- the shapes a mocked requests cannot show."""
+
+    def _serve(self, trickle: bool) -> str:
+        server = socket.socket()
+        server.bind(("127.0.0.1", 0))
+        server.listen(1)
+        self.addCleanup(server.close)
+
+        def _run():
+            conn, _ = server.accept()
+            with conn:
+                conn.recv(4096)
+                conn.sendall(b"HTTP/1.1 200 OK\r\nContent-Length: 100000\r\n\r\npartial")
+                for _ in range(20 if trickle else 0):
+                    time.sleep(0.2)
+                    try:
+                        conn.sendall(b"x")
+                    except OSError:
+                        return
+                time.sleep(3.0)
+
+        threading.Thread(target=_run, daemon=True).start()
+        return f"http://127.0.0.1:{server.getsockname()[1]}/img.png"
+
+    def _fetch_within(self, url: str, seconds: float) -> float:
+        started = time.monotonic()
+        with http_client.budget(seconds, {}):
+            with self.assertRaises(http_client.Timeout):
+                http_client.fetch_image(url)
+        return time.monotonic() - started
+
+    def test_a_download_that_stalls_mid_body_times_out_in_budget(self):
+        self.assertLess(self._fetch_within(self._serve(trickle=False), 1.0), 1.5)
+
+    def test_a_trickling_download_still_ends_at_the_deadline(self):
+        """One byte every 0.2 s never trips a 1 s read timeout on its own."""
+        self.assertLess(self._fetch_within(self._serve(trickle=True), 1.0), 1.5)
 
 
 class GenerateDeadlineTests(unittest.IsolatedAsyncioTestCase):
@@ -180,6 +263,25 @@ class GenerateDeadlineTests(unittest.IsolatedAsyncioTestCase):
         self.assertLess(elapsed, 2.0)
         generate.assert_not_called()
         self.assertEqual(main._generate_status["last_error"]["stage"], "queue")
+
+    async def test_no_image_call_is_started_without_time_to_finish_it(self):
+        with mock.patch.object(config, "GENERATE_DEADLINE", config.MIN_IMAGE_TIME / 2), \
+                mock.patch.object(main.image_providers, "generate",
+                                  return_value=[b"png"]) as generate:
+            response = await self._post()
+
+        self.assertEqual(response.status_code, 504)
+        generate.assert_not_called()
+
+    async def test_an_unknown_command_is_refused_before_the_queue(self):
+        out = io.StringIO()
+        with mock.patch.object(main, "_generate_gate") as gate, redirect_stdout(out):
+            response = await self._post({"command": "sticker\n[generate] fake", "prompt": "x"})
+
+        self.assertEqual(response.status_code, 400)
+        gate.assert_not_called()
+        self.assertIn("[generate] ", out.getvalue())
+        self.assertNotIn("fake", out.getvalue())
 
     async def test_a_timed_out_request_gives_its_slot_back(self):
         def _stalled(*args):

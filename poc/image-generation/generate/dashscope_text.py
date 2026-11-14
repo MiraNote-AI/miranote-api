@@ -46,9 +46,13 @@ def complete(prompt: str, model: str) -> str | None:
             "parameters": {"result_format": "message"},
         }
         url = config.DASHSCOPE_BASE_URL + _PATH
-    data = http_client.post_json(url, payload, KEY_ENV,
-                                 timeout=config.EXPANDER_TIMEOUT,
-                                 attempts=config.EXPANDER_ATTEMPTS)
+    # The short leash is for /generate, where the expansion competes with the
+    # image call for one deadline. Outside a request budget -- the startup
+    # probe, the bench -- a slow first call is no reason to report the key
+    # broken, so the generous default stays.
+    in_request = http_client.remaining() is not None
+    timeout = config.EXPANDER_TIMEOUT if in_request else 60.0
+    data = http_client.post_json(url, payload, KEY_ENV, timeout=timeout)
     return text_of(data)
 
 

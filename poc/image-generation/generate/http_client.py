@@ -20,6 +20,7 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 
 import requests
+import urllib3
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -86,13 +87,33 @@ def timed(name: str):
 
 
 def _timeout(read: float, what: str) -> tuple[float, float]:
-    """(connect, read) for one attempt, cut down to the budget's remainder."""
+    """(connect, read) for one attempt, cut down to the budget's remainder.
+
+    Inside a budget the two add up to no more than what is left, so a call that
+    connects slowly and then stalls still ends by the deadline."""
     left = remaining()
-    if left is not None:
-        if left <= 0:
-            raise Timeout(f"{what}: no time left in the request")
-        read = min(read, left)
-    return min(CONNECT_TIMEOUT, read), read
+    if left is None:
+        return min(CONNECT_TIMEOUT, read), read
+    if left <= 0:
+        raise Timeout(f"{what}: no time left in the request")
+    connect = min(CONNECT_TIMEOUT, left / 2)
+    return connect, min(read, left - connect)
+
+
+def _transport_error(what: str, error: Exception) -> ProviderError:
+    """The ProviderError for a call that never produced a whole response.
+
+    A read timeout that strikes while the body is arriving reaches us as a
+    ConnectionError (requests) or a bare ReadTimeoutError (urllib3), not as
+    requests.Timeout, so all three count as running out of time. Anything else
+    -- refused, reset, DNS -- is a ProviderError main.py can classify, rather
+    than a bare exception that surfaces as a 500."""
+    timed_out = (isinstance(error, (requests.Timeout, urllib3.exceptions.ReadTimeoutError))
+                 or any(isinstance(arg, urllib3.exceptions.ReadTimeoutError)
+                        for arg in error.args))
+    if timed_out:
+        return Timeout(f"{what} timed out: {type(error).__name__}")
+    return ProviderError(f"{what} failed: {type(error).__name__}")
 
 
 def api_key(env_var: str) -> str:
@@ -130,8 +151,8 @@ def _request(method: str, url: str, key_env: str, *, headers=None, json=None,
         try:
             response = requests.request(method, url, headers=head, json=json,
                                         timeout=_timeout(timeout, what))
-        except requests.Timeout as error:
-            raise Timeout(f"{what} timed out: {type(error).__name__}") from error
+        except requests.RequestException as error:
+            raise _transport_error(what, error) from error
         if response.ok:
             return response.json()
         pause = delay + random.uniform(0, 1)
@@ -166,11 +187,40 @@ def fetch_image(url: str, timeout: float = 60.0) -> bytes:
     every provider ends with this call and the pipeline keeps its list[bytes]
     contract -- main.py, the matte step and the benchmark stay unaware that
     anything but Gemini was involved.
+
+    Streamed, with the deadline checked between chunks: requests' read timeout
+    only bounds each gap between socket reads, so a ~1 MB image trickling in a
+    few bytes at a time would otherwise never trip it.
     """
+    what = "image download"
     try:
-        response = requests.get(url, timeout=_timeout(timeout, "image download"))
-    except requests.Timeout as error:
-        raise Timeout(f"image download timed out: {type(error).__name__}") from error
-    if not response.ok:
-        raise ProviderError(f"image download -> {response.status_code}")
-    return response.content
+        with requests.get(url, timeout=_timeout(timeout, what), stream=True) as response:
+            if not response.ok:
+                raise ProviderError(f"{what} -> {response.status_code}")
+            return _read_body(response, what)
+    except (requests.RequestException, urllib3.exceptions.HTTPError) as error:
+        raise _transport_error(what, error) from error
+
+
+_CHUNK = 64 * 1024
+
+
+def _read_body(response: requests.Response, what: str) -> bytes:
+    """The whole body, read inside the current budget (if any)."""
+    body = bytearray()
+    while True:
+        left = remaining()
+        if left is not None:
+            if left <= 0:
+                raise Timeout(f"{what}: no time left in the request")
+            # The socket's read timeout was set from the budget when the call
+            # began; a stall late in the body must not get that full amount again.
+            sock = getattr(getattr(response.raw, "connection", None), "sock", None)
+            if sock is not None:
+                sock.settimeout(left)
+        # read1, not read: it hands back whatever one socket read produced
+        # instead of blocking until the whole chunk has arrived.
+        chunk = response.raw.read1(_CHUNK, decode_content=True)
+        if not chunk:
+            return bytes(body)
+        body += chunk
