@@ -122,6 +122,9 @@ REFUSED_DETAIL = "the image model would not draw that one; try describing it dif
 EMPTY_DETAIL = "no picture came back that time; try again"
 # config.GENERATE_DEADLINE ran out, in the queue or at the provider.
 TIMEOUT_DETAIL = "that picture took too long; try again"
+# A command in config.EXPANSION_REQUIRED whose expansion failed for a reason
+# other than time or quota.
+EXPANSION_FAILED_DETAIL = "that picture could not be prepared; try again"
 
 # One extra attempt when the model answers with nothing and did not refuse.
 # Not a general retry policy: quota rejections are never retried (section 7 of
@@ -902,6 +905,37 @@ _COMMANDS = {
 }
 
 
+async def _expand(fresh_prompt, timings: dict, retry_on_timeout: bool) -> str:
+    """Run the expansion step, once more after a timeout when asked to.
+
+    Only a timeout is worth a second try: a 429 has already been backed off in
+    http_client. The retry needs room for itself and for the image call after
+    it, so it is skipped when the deadline cannot cover both.
+    """
+    try:
+        return await asyncio.to_thread(_timed, timings, "expand", fresh_prompt)
+    except http_client.Timeout:
+        left = http_client.remaining()
+        if not retry_on_timeout or left is None or left < 2 * config.EXPANDER_TIMEOUT:
+            raise
+        print("[generate] expansion timed out, trying once more")
+        return await asyncio.to_thread(_timed, timings, "expand_retry", fresh_prompt)
+
+
+def _expansion_failed(command: str, error: Exception) -> HTTPException:
+    """The status for a command in config.EXPANSION_REQUIRED whose expansion
+    failed. Chosen like an image failure, because the app keys its message off
+    the status alone: out of time is 504, a spent budget 503, anything else
+    502."""
+    print(f"[generate] expansion failed, not drawing the {command} from the "
+          f"user's words: {str(error)[:200]}")
+    if isinstance(error, http_client.Timeout):
+        return HTTPException(status_code=504, detail=TIMEOUT_DETAIL)
+    if _classify_provider_error(error) == "quota":
+        return HTTPException(status_code=503, detail=QUOTA_DETAIL)
+    return HTTPException(status_code=502, detail=EXPANSION_FAILED_DETAIL)
+
+
 async def _generate(req: GenerateRequest, timings: dict):
     spec = _COMMANDS.get(req.command)
     if spec is None:
@@ -923,6 +957,7 @@ async def _generate(req: GenerateRequest, timings: dict):
         )
     # Validated as a matte above, then honoured by not running one.
     remove_bg = mattable and matte != "none"
+    required = req.expand and req.command in config.EXPANSION_REQUIRED
 
     def _fresh_prompt() -> str:
         """Expand and dress the user's words. Called once normally, and once
@@ -937,18 +972,24 @@ async def _generate(req: GenerateRequest, timings: dict):
             if req.expand
             else req.prompt
         )
+        # prompt_expander hands the user's input back when the model sends no
+        # text -- the bare words by another route.
+        if required and core.strip() == req.prompt.strip():
+            raise ProviderError(f"{config.PROMPT_EXPANDER_MODEL} returned no text")
         return getattr(generate_presets, builder_name)(core)
 
     expanded = True
     try:
-        prompt = await asyncio.to_thread(_timed, timings, "expand", _fresh_prompt)
+        prompt = await _expand(_fresh_prompt, timings, retry_on_timeout=required)
     except Exception as error:                      # noqa: BLE001 - reported below
+        _record_generate_error("expand", config.PROMPT_EXPANDER_MODEL, error)
+        if required:
+            raise _expansion_failed(req.command, error) from error
         # Expansion only dresses the user's words up; losing it must not lose
         # the image. On 2026-10-15 qwen-turbo answered 429 to every call, and
         # because this line was unguarded all three commands turned into a bare
         # 500 after the HTTP client's ~20s of backoff.
         print(f"[generate] expansion failed, using the user's words: {str(error)[:200]}")
-        _record_generate_error("expand", config.PROMPT_EXPANDER_MODEL, error)
         prompt = getattr(generate_presets, builder_name)(req.prompt)
         expanded = False
     ratio = config.ASPECT_RATIOS.get(req.command, "1:1")

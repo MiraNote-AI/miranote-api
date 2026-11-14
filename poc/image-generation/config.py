@@ -229,6 +229,18 @@ GENERATE_DEADLINE = 50.0
 EXPANDER_TIMEOUT = 12.0
 EXPANDER_ATTEMPTS = 2
 
+# Commands that are never drawn from the user's bare words. For them a failed
+# expansion fails the request (retryable) instead of falling back, and a
+# timed-out one gets one more try while the deadline allows it.
+#   sticker:    the expansion picks the saturated backdrop the on-device lift
+#               cuts against, and drops "sticker"/"decal", which otherwise
+#               draw a white-bordered paper sticker.
+#   background: the expansion turns objects into texture; the bare words "a
+#               cat" draw one big cat instead of a pattern.
+# Art is left out on purpose: its fixed suffix already sets the cream ground
+# and the fading edges, so the bare words still make a usable picture.
+EXPANSION_REQUIRED = {"sticker", "background"}
+
 # Which model generates each /generate mode. One entry per mode rather than one
 # global constant, because the 90-image bench says these three will not stay
 # equal: z-image-turbo was the fastest and cheapest of six everywhere, but it
