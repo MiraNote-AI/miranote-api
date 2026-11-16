@@ -5,11 +5,13 @@ Users, sessions, subscriptions and the AI usage ledger (design
 docs/specs/2026-11-06-accounts-and-subscriptions-design.md). Steps 1-2
 of api #95: the schema, the service around it, and Sign in with Apple with
 our own tokens (auth.py). Step 3: entitlements and the AI usage ledger
-(usage.py, caps in quotas.py).
+(usage.py, caps in quotas.py). Step 5: subscription sync and App Store
+Server Notifications (subscriptions.py, Apple's side in appstore.py).
 
     GET /health -> {"status", "db"}; 503 when the database does not answer
     /auth/*, /.well-known/jwks.json, /me -> see auth.py
     /usage/reserve, /usage/settle (internal), /me/usage -> see usage.py
+    /subscriptions/sync, /appstore/notifications -> see subscriptions.py
 """
 
 from __future__ import annotations
@@ -27,9 +29,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 import apple
+import appstore
 import auth
 import config
 import db
+import subscriptions
 import tokens
 import usage
 
@@ -86,6 +90,7 @@ async def lifespan(app: FastAPI):
     app.state.signer = tokens.Signer(config.signing_key_pem(), config.previous_public_key_pem())
     app.state.engine = db.create_engine(config.database_url())
     app.state.apple_keys = apple.AppleKeys(httpx.AsyncClient(timeout=5, transport=APPLE_TRANSPORT))
+    app.state.appstore = appstore.from_config()
     ok = await db.ping(app.state.engine, config.HEALTH_DB_TIMEOUT_SECONDS)
     log.info("startup", extra={"db": "ok" if ok else "unreachable"})
     try:
@@ -93,6 +98,7 @@ async def lifespan(app: FastAPI):
     finally:
         await app.state.engine.dispose()
         await app.state.apple_keys.aclose()
+        await app.state.appstore.aclose()
 
 
 # No /docs, /redoc or /openapi.json: there is no beta gate in front of this
@@ -108,12 +114,14 @@ app = FastAPI(
 
 
 # No beta gate: every route proves its caller itself (an Apple identity
-# token, one of our refresh tokens, or current_user), and the shared beta
-# token would collide with our own Bearer tokens. The internal /usage
-# routes check a shared secret instead (usage.py). Starlette makes the
+# token, one of our refresh tokens, current_user, or Apple's signature on
+# a notification), and the shared beta token would collide with our own
+# Bearer tokens. The internal /usage routes check a shared secret instead
+# (usage.py). Starlette makes the
 # last-added middleware the outermost: CORS -> request log -> route.
 app.include_router(auth.router)
 app.include_router(usage.router)
+app.include_router(subscriptions.router)
 
 
 # Logs method, path, status and time only. Never the body, the headers or
