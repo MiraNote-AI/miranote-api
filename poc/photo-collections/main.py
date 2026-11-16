@@ -26,7 +26,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-import beta_auth
+import ai_auth
 import compose
 import config
 import jobs
@@ -58,11 +58,13 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="MiraNote Photo Collections", version="0.1.0", lifespan=lifespan)
 
 # Reachable from the public internet through the Cloudflare tunnel, so every
-# request needs a beta token. Installed before CORSMiddleware on purpose: the
-# most recently added middleware is the outermost, and CORS must stay outside
-# the gate to answer a browser preflight, which carries no Authorization
-# header.
-beta_auth.install(app)
+# request needs our access token or (while ACCEPT_BETA_TOKENS is on) the beta
+# token. Installed before CORSMiddleware on purpose: the most recently added
+# middleware is the outermost, and CORS must stay outside the gate to answer a
+# browser preflight, which carries no Authorization header.
+# Compose answers 202 and calls the model in a job, which settles its own
+# ticket (compose_route).
+ai_auth.install(app, metered={"/collections/compose": ai_auth.Metered("photo_push", model=config.LLM_MODEL)})
 
 _CORS_ORIGINS = [
     o.strip() for o in os.getenv("CORS_ALLOW_ORIGIN", "*").split(",") if o.strip()
@@ -208,8 +210,23 @@ async def compose_route(request: Request):
             return _bad_request()
     finally:
         await form.close()
+    # The model runs after this answer, so the job settles the reserved unit:
+    # charged only when it produced a push. Any answer but 202 is settled
+    # failed by the gate.
+    ticket = ai_auth.take_ticket(request)
+
+    def run(deadline: float) -> dict:
+        ok = False
+        try:
+            result = compose.run(meta, images, deadline)
+            ok = result.get("status") == "ok"
+            return result
+        finally:
+            if ticket is not None:
+                ticket.settle(ok)
+
     try:
-        job_id = STORE.submit(lambda deadline: compose.run(meta, images, deadline))
+        job_id = STORE.submit(run)
     except jobs.Busy:
         return _busy()
     return JSONResponse({"job_id": job_id}, status_code=202)

@@ -1,0 +1,216 @@
+"""The AI services' gate (ai_auth) against a fake accounts service.
+
+Each service's own tests prove it is wired to the gate with the right
+features; these pin the gate itself. The real accounts service's side of
+reserve/settle is tested in poc/accounts/tests/test_usage.py.
+"""
+
+from __future__ import annotations
+
+import uuid
+
+import httpx
+import jwt
+import pytest
+from cryptography.hazmat.primitives.asymmetric import ec
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.testclient import TestClient
+
+import ai_auth
+import beta_auth
+from fake_accounts import FakeAccounts
+
+
+def _app():
+    app = FastAPI()
+
+    @app.post("/expand")
+    async def expand(fail: bool = False, crash: bool = False):
+        if crash:
+            raise RuntimeError("provider exploded")
+        if fail:
+            raise HTTPException(502, detail="provider failed")
+        return {"ok": True}
+
+    @app.post("/later")
+    async def later(request: Request):
+        request.app.state.ticket = ai_auth.take_ticket(request)
+        return {"queued": True}
+
+    @app.post("/free")
+    async def free():
+        return {"ok": True}
+
+    @app.post("/mood")
+    async def mood():
+        return {"mood": "calm"}
+
+    @app.get("/health")
+    async def health():
+        return {"status": "ok"}
+
+    ai_auth.install(
+        app,
+        metered={
+            "/expand": ai_auth.Metered("expand"),
+            "/later": ai_auth.Metered("photo_push"),
+            "/mood": ai_auth.Metered("mood"),
+        },
+        beta_always={"/mood"},
+    )
+    return app
+
+
+@pytest.fixture
+def fake(monkeypatch):
+    fake = FakeAccounts(caps={"expand": 2})
+    fake.install(monkeypatch)
+    monkeypatch.setenv("BETA_TOKENS", "beta-token")
+    monkeypatch.delenv("ACCEPT_BETA_TOKENS", raising=False)
+    beta_auth._limiter._hits.clear()
+    return fake
+
+
+@pytest.fixture
+def client(fake):
+    return TestClient(_app(), raise_server_exceptions=False)
+
+
+BETA = {"Authorization": "Bearer beta-token"}
+
+
+def test_health_needs_nothing(client):
+    assert client.get("/health").status_code == 200
+
+
+def test_no_token_is_401_missing_token(client):
+    r = client.post("/expand")
+    assert r.status_code == 401 and r.json()["reason"] == "missing_token"
+
+
+def test_a_user_token_is_metered_and_settled_ok(client, fake):
+    assert client.post("/expand", headers=fake.headers()).status_code == 200
+    assert fake.statuses("expand") == ["ok"]
+    assert fake.settles[0]["cost_usd"] == ai_auth.COST_USD["expand"]
+
+
+def test_expired_token_is_401_token_expired(client, fake):
+    r = client.post("/expand", headers=fake.headers(expires_in=-10))
+    assert r.status_code == 401 and r.json()["reason"] == "token_expired"
+    assert fake.rows == {}
+
+
+def test_a_token_signed_by_another_key_is_401(client, fake):
+    other = ec.generate_private_key(ec.SECP256R1())
+    token = jwt.encode({"sub": str(fake.user_id), "iss": ai_auth.ISSUER, "aud": ai_auth.AUDIENCE, "exp": 2**31},
+                       other, algorithm="ES256", headers={"kid": fake.kid})
+    r = client.post("/expand", headers={"Authorization": "Bearer " + token})
+    assert r.status_code == 401 and r.json()["reason"] == "invalid_token"
+
+
+def test_garbage_token_is_401(client):
+    r = client.post("/expand", headers={"Authorization": "Bearer not-a-jwt"})
+    assert r.status_code == 401 and r.json()["reason"] == "invalid_token"
+
+
+def test_over_cap_is_429_with_the_reset_time(client, fake):
+    for _ in range(2):
+        assert client.post("/expand", headers=fake.headers()).status_code == 200
+    r = client.post("/expand", headers=fake.headers())
+    assert r.status_code == 429
+    assert r.json()["reason"] == "quota" and r.json()["feature"] == "expand" and r.json()["resets_at"]
+
+
+def test_a_failed_provider_call_is_not_charged(client, fake):
+    assert client.post("/expand", params={"fail": True}, headers=fake.headers()).status_code == 502
+    assert client.post("/expand", params={"crash": True}, headers=fake.headers()).status_code == 500
+    assert fake.statuses("expand") == ["failed", "failed"]
+    assert fake.charged("expand") == 0
+
+
+def test_a_retry_of_a_counted_request_is_409(client, fake):
+    headers = fake.headers()
+    assert client.post("/expand", headers=headers).status_code == 200
+    r = client.post("/expand", headers=headers)
+    assert r.status_code == 409 and r.json()["reason"] == "duplicate_request"
+
+
+def test_a_retry_of_a_failed_request_runs_again(client, fake):
+    headers = fake.headers()
+    client.post("/expand", params={"fail": True}, headers=headers)
+    assert client.post("/expand", headers=headers).status_code == 200
+    assert fake.statuses("expand") == ["ok"]
+
+
+def test_unmetered_route_takes_a_user_token_without_a_reserve(client, fake):
+    assert client.post("/free", headers=fake.headers()).status_code == 200
+    assert fake.rows == {}
+
+
+def test_a_handler_that_takes_its_ticket_settles_it_itself(client, fake):
+    assert client.post("/later", headers=fake.headers()).status_code == 200
+    assert fake.statuses("photo_push") == ["pending"]
+    client.app.state.ticket.settle(True)
+    assert fake.statuses("photo_push") == ["ok"]
+
+
+def test_unknown_user_is_401(client, fake):
+    r = client.post("/expand", headers=fake.headers(user_id=uuid.uuid4()))
+    assert r.status_code == 401 and r.json()["reason"] == "unknown_user"
+
+
+def test_accounts_down_fails_closed_with_503(client, fake):
+    fake.reachable = False
+    r = client.post("/expand", headers=fake.headers())
+    assert r.status_code == 503 and r.json()["reason"] == "accounts_unavailable"
+
+
+def test_accounts_down_after_the_keys_are_cached_still_fails_closed_on_reserve(client, fake):
+    assert client.post("/free", headers=fake.headers()).status_code == 200
+    fake.reachable = False
+    # Auth alone still works from the cached keys ...
+    assert client.post("/free", headers=fake.headers()).status_code == 200
+    # ... but nothing metered runs unmetered.
+    r = client.post("/expand", headers=fake.headers())
+    assert r.status_code == 503 and r.json()["reason"] == "accounts_unavailable"
+
+
+def test_jwks_is_fetched_once_not_per_request(client, fake, monkeypatch):
+    fetches = []
+    handle = fake.handle
+
+    def counting(request):
+        if request.url.path == "/.well-known/jwks.json":
+            fetches.append(1)
+        return handle(request)
+
+    monkeypatch.setattr(ai_auth, "TRANSPORT", httpx.MockTransport(counting))
+    for _ in range(3):
+        client.post("/free", headers=fake.headers())
+    assert len(fetches) == 1
+
+
+def test_missing_internal_secret_fails_closed(client, fake, monkeypatch):
+    monkeypatch.delenv("ACCOUNTS_INTERNAL_SECRET")
+    r = client.post("/expand", headers=fake.headers())
+    assert r.status_code == 503 and fake.rows == {}
+
+
+def test_beta_token_is_accepted_by_default_and_not_metered(client, fake):
+    assert client.post("/expand", headers=BETA).status_code == 200
+    assert fake.rows == {}
+
+
+def test_beta_flag_off_rejects_the_beta_token(client, fake, monkeypatch):
+    monkeypatch.setenv("ACCEPT_BETA_TOKENS", "0")
+    r = client.post("/expand", headers=BETA)
+    assert r.status_code == 401 and r.json()["reason"] == "invalid_token"
+    assert client.post("/expand", headers=fake.headers()).status_code == 200
+
+
+def test_beta_always_path_keeps_the_beta_token_with_the_flag_off(client, fake, monkeypatch):
+    monkeypatch.setenv("ACCEPT_BETA_TOKENS", "0")
+    assert client.post("/mood", headers=BETA).status_code == 200
+    assert fake.rows == {}
+    assert client.post("/mood", headers=fake.headers()).status_code == 200
+    assert fake.statuses("mood") == ["ok"]

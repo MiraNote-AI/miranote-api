@@ -29,7 +29,7 @@ from PIL import Image, ImageFilter
 from pydantic import BaseModel
 from rembg import remove, new_session
 
-import beta_auth
+import ai_auth
 
 import config
 from shared.vertex_client import _get_client, generate_config
@@ -800,11 +800,23 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="MiraNote Image Generation", version="0.1.0", lifespan=lifespan)
 
 # Reachable from the public internet through the Cloudflare tunnel, so every
-# request needs a beta token. Installed before CORSMiddleware on purpose: the
-# most recently added middleware is the outermost, and CORS must stay outside
-# the gate to answer a browser preflight, which carries no Authorization
-# header.
-beta_auth.install(app)
+# request needs our access token or (while ACCEPT_BETA_TOKENS is on) the beta
+# token. Installed before CORSMiddleware on purpose: the most recently added
+# middleware is the outermost, and CORS must stay outside the gate to answer a
+# browser preflight, which carries no Authorization header.
+ai_auth.install(
+    app,
+    metered={
+        "/generate": ai_auth.Metered("image_generate"),
+        "/stylize": ai_auth.Metered("image_edit", model=config.STYLE_MODEL),
+        # Only the model-backed mode; "outline" is local pixel work.
+        "/border": ai_auth.Metered(
+            "image_edit",
+            model=config.BORDER_MODEL,
+            applies=lambda request: request.query_params.get("mode") == "ai_outline",
+        ),
+    },
+)
 
 
 def _remove_sticker_bg(raw: bytes, matte: str) -> bytes:

@@ -4,7 +4,9 @@ Users, sessions, subscriptions and the AI usage ledger for the paid flow
 (api #95). Design: `docs/specs/2026-11-06-accounts-and-subscriptions-design.md`
 (#99). Step 1: the tier 1 schema (section 4.1) as Alembic migrations, and
 a FastAPI service with `/health`. Step 2: Sign in with Apple and our own
-tokens (section 3). Subscriptions and quotas come in later steps.
+tokens (section 3). Step 3: entitlement, the AI usage ledger and its caps
+(section 6), used by the AI services through `ai_auth.py` at the repo root.
+Syncing subscriptions from Apple comes in a later step.
 
 Stack: FastAPI, SQLAlchemy 2 (async) + asyncpg, Alembic, PostgreSQL 17.
 Only standard Postgres, written for a transaction-mode pooler (no statement
@@ -25,7 +27,7 @@ cache, no session-level `SET`), so Neon's pooled URL works as is.
 cd poc/accounts
 python3.9 -m venv .venv
 .venv/bin/pip install -r requirements.txt
-cp .env.example .env        # fill DATABASE_URL and ACCOUNTS_SIGNING_KEY
+cp .env.example .env        # fill DATABASE_URL, ACCOUNTS_SIGNING_KEY, ACCOUNTS_INTERNAL_SECRET
 ```
 
 `DATABASE_URL` is required; there is no default. Neon's pooled connection
@@ -69,6 +71,46 @@ A token pair is `{"access_token", "refresh_token", "token_type": "Bearer",
   that it revokes the whole sign-in (every token of that family).
 - Sign-out revokes the sign-in the refresh token belongs to. Access
   tokens already issued stay valid until they expire (at most 1 h).
+
+## Usage API (quotas)
+
+| route | caller | body | answer |
+|---|---|---|---|
+| `POST /usage/reserve` | AI services | `{"user_id", "feature", "request_id", "units"?, "model"?}` | 200; 401 `unknown_user`; 409 `duplicate_request` / `request_id_conflict`; 429 `quota` |
+| `POST /usage/settle` | AI services | `{"request_id", "status": "ok" \| "failed", "cost_usd"}` | `{"status"}`; 404 `unknown_request` |
+| `GET /me/usage` | app, `Authorization: Bearer <access>` | | `{"plan", "environment", "features": {feature: {"limit", "used", "remaining", "window", "resets_at"}}}` |
+
+- Entitlement: Plus while the user owns an unrevoked subscription whose
+  `expires_at` or `grace_period_expires_at` is in the future (the
+  timestamps, not `status`, decide). A Production chain wins over a
+  Sandbox one; a Sandbox entitlement has its own lower caps.
+- Caps are all in `quotas.py` (`CAPS`); change a number and restart.
+  Features: `chat`, `expand` (expand and polish), `image_generate`,
+  `image_edit` (stylize, AI border), `photo_push`, `mood` (signed-in
+  only). Windows: rolling 24 h, rolling 7 days, or the UTC month.
+- Reserve locks the user's row (`SELECT ... FOR UPDATE`), counts the window
+  and inserts a `pending` row in one transaction, so parallel requests
+  cannot overshoot a cap. `pending` and `ok` rows count, `failed` rows do
+  not. A retried `request_id` runs again only if its row failed.
+- A 429 body: `{"reason": "quota", "feature", "plan", "limit",
+  "resets_at"}`; `resets_at` is when the next unit frees up.
+
+### Internal routes stay off the tunnel
+
+`/usage/reserve` and `/usage/settle` take `X-Internal-Secret`
+(`ACCOUNTS_INTERNAL_SECRET`, the same value in the repo root `.env` for the
+AI services). The AI services call them on `127.0.0.1:8007`, never through
+the tunnel. The tunnel must not serve them: put this rule **above** the
+`beta-accounts` hostname rule (step 3 of the deploy below):
+
+```yaml
+  - hostname: beta-accounts.miranote.app
+    path: ^/usage/
+    service: http_status:404
+```
+
+As a second fence, a request carrying cloudflared's `Cf-Connecting-IP`
+header is answered 404 by the service itself, secret or not.
 
 ## Keys
 
@@ -126,8 +168,14 @@ to the repo checkout):
 
    ```yaml
      - hostname: beta-accounts.miranote.app
+       path: ^/usage/
+       service: http_status:404
+     - hostname: beta-accounts.miranote.app
        service: http://127.0.0.1:8007
    ```
+
+   The first rule keeps the internal usage routes off the internet (see
+   Usage API above).
 
    `127.0.0.1`, not `localhost`: `localhost` can resolve to `::1` and
    answer 502.
