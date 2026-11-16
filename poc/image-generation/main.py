@@ -8,6 +8,7 @@ os.environ.setdefault("PYTORCH_ENABLE_MPS_FALLBACK", "1")
 
 import asyncio
 import base64
+import contextvars
 import io
 import re
 import time
@@ -34,7 +35,7 @@ import beta_auth
 import config
 from shared.vertex_client import _get_client, generate_config
 from generate import (fallback, prompt_expander, generate_presets,
-                      image_providers, dashscope_text)
+                      image_providers, dashscope_text, http_client)
 from generate.http_client import ProviderError
 from cutout import bbox_detector, sam_segmenter, grounding_dino, vision_matte
 from stylize import stylizer, style_presets
@@ -119,6 +120,11 @@ QUOTA_DETAIL = "image generation is busy right now; wait a moment and try again"
 # where it is useful.
 REFUSED_DETAIL = "the image model would not draw that one; try describing it differently"
 EMPTY_DETAIL = "no picture came back that time; try again"
+# config.GENERATE_DEADLINE ran out, in the queue or at the provider.
+TIMEOUT_DETAIL = "that picture took too long; try again"
+# A command in config.EXPANSION_REQUIRED whose expansion failed for a reason
+# other than time or quota.
+EXPANSION_FAILED_DETAIL = "that picture could not be prepared; try again"
 
 # One extra attempt when the model answers with nothing and did not refuse.
 # Not a general retry policy: quota rejections are never retried (section 7 of
@@ -252,15 +258,24 @@ def _call_model(prompt: str, aspect_ratio: str, model: str,
         return None, False
 
     # The images are independent; generate them concurrently so the whole
-    # request stays comfortably inside client timeouts.
+    # request stays comfortably inside client timeouts. Each runs in a copy of
+    # this thread's context so it keeps the request's time budget, which a pool
+    # thread would otherwise start without.
     try:
         with ThreadPoolExecutor(max_workers=config.NUMBER_OF_IMAGES) as pool:
-            results = list(pool.map(lambda _: _one(), range(config.NUMBER_OF_IMAGES)))
+            calls = [pool.submit(contextvars.copy_context().run, _one)
+                     for _ in range(config.NUMBER_OF_IMAGES)]
+            results = [call.result() for call in calls]
     except HTTPException:
         # _one_image already chose the status (503 for a spent budget). Re-raising
         # it unchanged matters: the branches below would relabel it 502, and the
         # app keys its message off the status code alone.
         raise
+    except http_client.Timeout as error:
+        # Out of time, not broken: 504 rather than the 502 below, which the app
+        # reads as "the server is not running".
+        print(f"[generate] {model} ran out of time: {str(error)[:200]}")
+        raise HTTPException(status_code=504, detail=TIMEOUT_DETAIL)
     except ProviderError as error:
         # Anything _classify_provider_error could not place. The provider's own
         # words go in the detail because nobody has triaged this shape yet.
@@ -343,9 +358,9 @@ class _NotFound(Exception):
 
 @contextmanager
 def _stage(timings: dict, name: str):
-    """Record one /cutout stage's wall-clock ms into `timings`.
+    """Record one /cutout or /generate stage's wall-clock ms into `timings`.
 
-    Only the prompt-guided branch is instrumented; the timings ride back on
+    In /cutout only the prompt-guided branch is instrumented; the timings ride back on
     the response so a caller can see which stage dominates without reading
     server logs. It is the cheapest way to tell a slow detector from a slow
     matte on a host nobody can attach a profiler to.
@@ -840,8 +855,48 @@ class GenerateRequest(BaseModel):
 
 @app.post("/generate")
 async def generate_images(req: GenerateRequest):
-    async with _generate_gate():
-        return await _generate(req)
+    """One /generate request inside config.GENERATE_DEADLINE, logged as one line.
+
+    The deadline covers the wait for a slot too. A slot is only ever held by a
+    request that is still inside its own deadline, so a phone that gave up on a
+    stalled call no longer leaves it occupying the slot for minutes (ios #169).
+    """
+    timings: dict = {}
+    status = 500
+    started = time.perf_counter()
+    # The caller's own string never reaches the log line or /health: a newline
+    # in it could forge a log line, and /health holds no user text.
+    command = req.command if req.command in _COMMANDS else "unknown"
+    try:
+        if command == "unknown":
+            # Before the queue, so a typo neither waits for a slot nor holds one.
+            raise HTTPException(status_code=400, detail=f"Unknown command: {req.command}")
+        with http_client.budget(config.GENERATE_DEADLINE, timings):
+            gate = _generate_gate()
+            with _stage(timings, "queue"):
+                try:
+                    await asyncio.wait_for(gate.acquire(), timeout=http_client.remaining())
+                except asyncio.TimeoutError:
+                    error = HTTPException(status_code=504, detail=TIMEOUT_DETAIL)
+                    _record_generate_error("queue", config.IMAGE_MODELS_BY_MODE[command], error)
+                    raise error from None
+            try:
+                response = await _generate(req, timings)
+            finally:
+                gate.release()
+        status = 200
+        response["timings"] = timings
+        return response
+    except HTTPException as error:
+        status = error.status_code
+        raise
+    finally:
+        timings["total"] = round((time.perf_counter() - started) * 1000, 1)
+        # One line per request, failures included, so a slow one can be pinned
+        # to a step from the beta Mac's log alone. Steps that did not run are
+        # absent rather than zero.
+        steps = " ".join(f"{name}={round(ms)}" for name, ms in timings.items())
+        print(f"[generate] {_now()} {command} {status} {steps}", flush=True)
 
 
 # command -> (prompt_expander attribute, generate_presets attribute). Held as
@@ -855,10 +910,39 @@ _COMMANDS = {
 }
 
 
-async def _generate(req: GenerateRequest):
-    spec = _COMMANDS.get(req.command)
-    if spec is None:
-        raise HTTPException(status_code=400, detail=f"Unknown command: {req.command}")
+async def _expand(fresh_prompt, timings: dict, retry_on_timeout: bool) -> str:
+    """Run the expansion step, once more after a timeout when asked to.
+
+    Only a timeout is worth a second try: a 429 has already been backed off in
+    http_client. The retry needs room for itself and for the image call after
+    it, so it is skipped when the deadline cannot cover both.
+    """
+    try:
+        return await asyncio.to_thread(_timed, timings, "expand", fresh_prompt)
+    except http_client.Timeout:
+        left = http_client.remaining()
+        if not retry_on_timeout or left is None or left < 2 * config.EXPANDER_TIMEOUT:
+            raise
+        print("[generate] expansion timed out, trying once more")
+        return await asyncio.to_thread(_timed, timings, "expand_retry", fresh_prompt)
+
+
+def _expansion_failed(command: str, error: Exception) -> HTTPException:
+    """The status for a command in config.EXPANSION_REQUIRED whose expansion
+    failed. Chosen like an image failure, because the app keys its message off
+    the status alone: out of time is 504, a spent budget 503, anything else
+    502."""
+    print(f"[generate] expansion failed, not drawing the {command} from the "
+          f"user's words: {str(error)[:200]}")
+    if isinstance(error, http_client.Timeout):
+        return HTTPException(status_code=504, detail=TIMEOUT_DETAIL)
+    if _classify_provider_error(error) == "quota":
+        return HTTPException(status_code=503, detail=QUOTA_DETAIL)
+    return HTTPException(status_code=502, detail=EXPANSION_FAILED_DETAIL)
+
+
+async def _generate(req: GenerateRequest, timings: dict):
+    spec = _COMMANDS[req.command]  # checked by generate_images
     if not req.prompt:
         raise HTTPException(
             status_code=400, detail=f"prompt is required for {req.command}"
@@ -876,6 +960,7 @@ async def _generate(req: GenerateRequest):
         )
     # Validated as a matte above, then honoured by not running one.
     remove_bg = mattable and matte != "none"
+    required = req.expand and req.command in config.EXPANSION_REQUIRED
 
     def _fresh_prompt() -> str:
         """Expand and dress the user's words. Called once normally, and once
@@ -890,27 +975,39 @@ async def _generate(req: GenerateRequest):
             if req.expand
             else req.prompt
         )
+        # prompt_expander hands the user's input back when the model sends no
+        # text -- the bare words by another route.
+        if required and core.strip() == req.prompt.strip():
+            raise ProviderError(f"{config.PROMPT_EXPANDER_MODEL} returned no text")
         return getattr(generate_presets, builder_name)(core)
 
     expanded = True
     try:
-        prompt = await asyncio.to_thread(_fresh_prompt)
+        prompt = await _expand(_fresh_prompt, timings, retry_on_timeout=required)
     except Exception as error:                      # noqa: BLE001 - reported below
+        _record_generate_error("expand", config.PROMPT_EXPANDER_MODEL, error)
+        if required:
+            raise _expansion_failed(req.command, error) from error
         # Expansion only dresses the user's words up; losing it must not lose
         # the image. On 2026-10-15 qwen-turbo answered 429 to every call, and
         # because this line was unguarded all three commands turned into a bare
         # 500 after the HTTP client's ~20s of backoff.
         print(f"[generate] expansion failed, using the user's words: {str(error)[:200]}")
-        _record_generate_error("expand", config.PROMPT_EXPANDER_MODEL, error)
         prompt = getattr(generate_presets, builder_name)(req.prompt)
         expanded = False
     ratio = config.ASPECT_RATIOS.get(req.command, "1:1")
     model = config.IMAGE_MODELS_BY_MODE[req.command]
+    left = http_client.remaining()
+    if left is not None and left < config.MIN_IMAGE_TIME:
+        error = HTTPException(status_code=504, detail=TIMEOUT_DETAIL)
+        _record_generate_error("image", model, error)
+        raise error
     # Nothing to vary when the caller asked for no expansion -- or when the
     # expander just failed, since a second try would only add its backoff.
     reprompt = _fresh_prompt if req.expand and expanded else None
     try:
-        images = await asyncio.to_thread(_call_model, prompt, ratio, model, reprompt)
+        images = await asyncio.to_thread(
+            _timed, timings, "model", _call_model, prompt, ratio, model, reprompt)
     except Exception as error:
         _record_generate_error("image", model, error)
         raise
@@ -922,7 +1019,8 @@ async def _generate(req: GenerateRequest):
                 # to_thread, not a bare call: background removal is pixel work
                 # off the event loop either way, and rembg (still reachable by
                 # name) is seconds of CPU per image.
-                processed = await asyncio.to_thread(_remove_sticker_bg, raw, matte)
+                with _stage(timings, "matte"):
+                    processed = await asyncio.to_thread(_remove_sticker_bg, raw, matte)
             except vision_matte.VisionMatteUnavailable as e:
                 raise HTTPException(status_code=503, detail=str(e))
         else:

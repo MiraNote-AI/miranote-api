@@ -16,7 +16,7 @@ import httpx
 
 import config
 import main
-from generate import generate_presets
+from generate import generate_presets, http_client
 from generate.http_client import ProviderError
 
 os.environ.setdefault("BETA_TOKENS", "test-token")
@@ -115,6 +115,109 @@ class ExpanderFallbackTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIsNotNone(health["generate"]["last_ok_at"])
         self.assertIsNone(health["generate"]["last_error"])
+
+
+_TIMED_OUT = http_client.Timeout("POST completions timed out: ReadTimeout")
+
+
+class RequiredExpansionTests(unittest.IsolatedAsyncioTestCase):
+    """Sticker and background are never drawn from the user's bare words.
+
+    Their expansion is not decoration. For a sticker it picks the saturated
+    backdrop the on-device lift cuts against, and strips "sticker"/"decal",
+    which otherwise draw a white-bordered paper sticker. For a background it
+    turns objects into texture, so "cat" becomes a pattern rather than one big
+    cat. Without it the picture is likely wrong, so the request fails with a
+    retryable status instead of spending an image call on it. Art keeps the
+    fallback above.
+    """
+
+    def setUp(self):
+        main._generate_semaphore = None
+        patcher = mock.patch.dict(main._generate_status,
+                                  {"last_ok_at": None, "last_error": None})
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    async def _generate(self, command, expander):
+        name = {"sticker": "expand", "background": "expand_background"}[command]
+        with mock.patch.object(main.prompt_expander, name, side_effect=expander) as expand, \
+                mock.patch.object(main.image_providers, "generate",
+                                  return_value=[b"png"]) as generate:
+            async with httpx.AsyncClient(
+                transport=httpx.ASGITransport(app=main.app),
+                base_url="http://probe",
+                headers={"Authorization": "Bearer test-token"},
+            ) as client:
+                response = await client.post(
+                    "/generate", json={"command": command, "prompt": _USER_WORDS,
+                                       "matte": "none"})
+        return response, expand, generate
+
+    async def test_a_sticker_whose_expansion_keeps_timing_out_is_not_drawn(self):
+        response, expand, generate = await self._generate("sticker", _TIMED_OUT)
+
+        self.assertEqual(response.status_code, 504)
+        self.assertEqual(expand.call_count, 2, "a timed-out expansion gets one retry")
+        generate.assert_not_called()
+        self.assertEqual(main._generate_status["last_error"]["stage"], "expand")
+
+    async def test_a_sticker_expansion_that_times_out_once_is_retried(self):
+        response, expand, generate = await self._generate(
+            "sticker", [_TIMED_OUT, "A kawaii illustration of a small bear"])
+
+        self.assertEqual(response.status_code, 200)
+        sent = generate.call_args.args[1]
+        self.assertEqual(sent, generate_presets.build_sticker_prompt(
+            "A kawaii illustration of a small bear"))
+
+    async def test_a_throttled_sticker_expansion_answers_busy_and_is_not_drawn(self):
+        response, expand, generate = await self._generate("sticker", _THROTTLED)
+
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(expand.call_count, 1,
+                         "http_client already backed off; only a timeout is retried")
+        generate.assert_not_called()
+
+    async def test_a_sticker_expansion_that_hands_back_the_users_words_is_a_failure(self):
+        """prompt_expander returns the user's input when the model sends no
+        text (a safety block, an empty answer) -- the same bare words by
+        another route."""
+        response, _, generate = await self._generate("sticker", lambda *a: _USER_WORDS)
+
+        self.assertEqual(response.status_code, 502)
+        generate.assert_not_called()
+
+    async def test_a_background_whose_expansion_keeps_timing_out_is_not_drawn(self):
+        response, _, generate = await self._generate("background", _TIMED_OUT)
+
+        self.assertEqual(response.status_code, 504)
+        generate.assert_not_called()
+
+    async def test_no_retry_when_the_budget_cannot_cover_it(self):
+        with mock.patch.object(config, "GENERATE_DEADLINE", config.EXPANDER_TIMEOUT):
+            response, expand, generate = await self._generate("sticker", _TIMED_OUT)
+
+        self.assertEqual(response.status_code, 504)
+        self.assertEqual(expand.call_count, 1)
+        generate.assert_not_called()
+
+    async def test_art_still_draws_the_users_words_after_a_timeout(self):
+        with mock.patch.object(main.prompt_expander, "expand_art",
+                               side_effect=_TIMED_OUT), \
+                mock.patch.object(main.image_providers, "generate",
+                                  return_value=[b"png"]) as generate:
+            async with httpx.AsyncClient(
+                transport=httpx.ASGITransport(app=main.app),
+                base_url="http://probe",
+                headers={"Authorization": "Bearer test-token"},
+            ) as client:
+                response = await client.post(
+                    "/generate", json={"command": "art", "prompt": _USER_WORDS})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(generate.call_args.args[1],
+                         generate_presets.build_art_prompt(_USER_WORDS))
 
 
 if __name__ == "__main__":
