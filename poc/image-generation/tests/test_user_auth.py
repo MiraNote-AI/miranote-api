@@ -25,12 +25,12 @@ BETA = {"Authorization": "Bearer test-token"}
 class FakeGenerate:
     def __init__(self):
         self.calls = 0
-        self.fail = False
+        self.fail = 0  # a status to raise, or 0
 
-    async def __call__(self, req):
+    async def __call__(self, req, timings):
         self.calls += 1
         if self.fail:
-            raise HTTPException(status_code=502, detail="provider failed")
+            raise HTTPException(status_code=self.fail, detail="provider failed")
         return {"images": []}
 
 
@@ -82,11 +82,19 @@ def test_over_the_cap_is_429_without_a_model_call(svc):
 
 def test_a_failed_provider_call_is_not_charged(svc):
     http, gen, accounts = svc
-    gen.fail = True
+    gen.fail = 502
     assert generate(http, accounts.headers()).status_code == 502
     assert accounts.statuses("image_generate") == ["failed"]
-    gen.fail = False
+    gen.fail = 0
     assert generate(http, accounts.headers()).status_code == 200
+
+
+def test_a_generate_past_its_deadline_is_not_charged(svc):
+    """The 50 s bound answers 504 inside the route; the gate settles it failed."""
+    http, gen, accounts = svc
+    gen.fail = 504
+    assert generate(http, accounts.headers()).status_code == 504
+    assert accounts.statuses("image_generate") == ["failed"]
 
 
 def test_ai_border_is_an_edit_and_outline_is_free(svc):
