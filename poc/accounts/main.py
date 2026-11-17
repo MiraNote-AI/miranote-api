@@ -5,7 +5,8 @@ Users, sessions, subscriptions and the AI usage ledger (design
 docs/specs/2026-11-06-accounts-and-subscriptions-design.md). Steps 1-2
 of api #95: the schema, the service around it, and Sign in with Apple with
 our own tokens (auth.py). Step 3: entitlements and the AI usage ledger
-(usage.py, caps in quotas.py). Step 5: subscription sync and App Store
+(usage.py, caps in quotas.py) and the daily cost budgets (budget.py).
+Step 5: subscription sync and App Store
 Server Notifications (subscriptions.py, Apple's side in appstore.py).
 Step 6: account deletion (DELETE /me in auth.py) and the purge and
 retention jobs (purge.py), run here every hour.
@@ -34,6 +35,7 @@ from fastapi.responses import JSONResponse
 import apple
 import appstore
 import auth
+import budget
 import config
 import db
 import purge
@@ -92,6 +94,7 @@ async def lifespan(app: FastAPI):
     startup whether it is reachable. The service still starts when it is not
     (Neon may be waking up); /health answers 503 until it is."""
     app.state.internal_secret = config.internal_secret()
+    app.state.budgets = budget.from_env()
     app.state.signer = tokens.Signer(config.signing_key_pem(), config.previous_public_key_pem())
     app.state.engine = db.create_engine(config.database_url())
     app.state.apple_keys = apple.AppleKeys(httpx.AsyncClient(timeout=5, transport=APPLE_TRANSPORT))

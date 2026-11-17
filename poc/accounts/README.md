@@ -140,7 +140,7 @@ last two rows rely on host jobs that are not in this repo yet (design
 
 | route | caller | body | answer |
 |---|---|---|---|
-| `POST /usage/reserve` | AI services | `{"user_id", "feature", "request_id", "units"?, "model"?}` | 200; 401 `unknown_user`; 409 `duplicate_request` / `request_id_conflict`; 429 `quota` |
+| `POST /usage/reserve` | AI services | `{"user_id", "feature", "request_id", "units"?, "model"?}` | 200; 401 `unknown_user`; 409 `duplicate_request` / `request_id_conflict`; 429 `quota`; 503 `service_paused` |
 | `POST /usage/settle` | AI services | `{"request_id", "status": "ok" \| "failed", "cost_usd"}` | `{"status"}`; 404 `unknown_request` |
 | `GET /me/usage` | app, `Authorization: Bearer <access>` | | `{"plan", "environment", "features": {feature: {"limit", "used", "remaining", "window", "resets_at"}}}` |
 
@@ -158,6 +158,36 @@ last two rows rely on host jobs that are not in this repo yet (design
   not. A retried `request_id` runs again only if its row failed.
 - A 429 body: `{"reason": "quota", "feature", "plan", "limit",
   "resets_at"}`; `resets_at` is when the next unit frees up.
+
+### Daily cost budgets (kill switch)
+
+Design 6.3, in `budget.py`. Reserve sums today's (UTC) `cost_usd` of the
+`ok` and `pending` rows; once a budget is reached, that feature answers
+503 for everyone until the next UTC midnight or a raised budget (restart):
+
+```json
+{"reason": "service_paused", "feature": "chat", "resets_at": "2026-11-18T00:00:00+00:00", "detail": "..."}
+```
+
+The AI services pass it to the app as is. All budgets are off by default
+(unset or empty = no budget); set them in `.env`, in USD:
+
+| variable | budget |
+|---|---|
+| `ACCOUNTS_DAILY_BUDGET_USD` | all features together |
+| `ACCOUNTS_DAILY_BUDGET_USD_CHAT`, `_EXPAND`, `_IMAGE_GENERATE`, `_IMAGE_EDIT`, `_PHOTO_PUSH`, `_MOOD` | one feature |
+
+`0` pauses a feature at once. A malformed value or an unknown feature
+stops the service at startup. The first refused call of the day logs
+`daily budget reached` (scope, budget, spend) once per process.
+`.venv/bin/python budget.py` prints today's spend per feature next to the
+budgets.
+
+Gaps: a `pending` row costs 0 until it settles, so calls already in flight
+can overshoot a budget by their own cost. Beta-token calls never reserve,
+so they are neither counted nor paused (only beta_auth's rate limit bounds
+them) until `ACCEPT_BETA_TOKENS` is turned off; beta `/mood` stays
+unmetered until App Attest (design 6.5).
 
 ### Internal routes stay off the tunnel
 

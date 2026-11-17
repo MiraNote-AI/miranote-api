@@ -9,7 +9,8 @@ Reserve checks the cap and writes a `pending` row in one transaction that
 holds the user's row lock, so two parallel requests of one user cannot both
 take the last unit. A `failed` settle is not charged. A retried request_id
 runs again only when its row failed; a pending or ok one answers 409
-duplicate_request without a model call (design 6.1).
+duplicate_request without a model call (design 6.1). A feature over its
+daily cost budget answers 503 service_paused for everyone (budget.py).
 
 The internal routes take `X-Internal-Secret` (ACCOUNTS_INTERNAL_SECRET) and
 are never reachable through the Cloudflare tunnel: the tunnel's ingress
@@ -31,6 +32,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import select, update
 
+import budget
 import quotas
 from auth import current_user
 from models import AiUsage, User
@@ -101,6 +103,10 @@ async def reserve(body: ReserveRequest, request: Request):
                 # The result was never stored, so running it again would be
                 # a free, uncounted call; the user loses this unit (6.1).
                 return JSONResponse({"reason": "duplicate_request"}, status_code=409)
+
+        paused = await budget.paused(conn, body.feature, request.app.state.budgets, now)
+        if paused is not None:
+            return JSONResponse(paused, status_code=503)
 
         plan, environment = await quotas.entitlement(conn, body.user_id, now)
         cap = quotas.CAPS[(plan, environment)][body.feature]
