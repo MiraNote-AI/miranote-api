@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Template. Fill in __SCRIPTS__ (this directory) and __LOGS__ (logs/beta in
+  the checkout) and write the result into ~/Library/LaunchAgents; README.md
+  has the commands.
+
+  Every 2 minutes, watchdog.sh calls each backend's loopback /health with a
+  10 s limit and runs launchctl kickstart -k on one that failed 3 checks in a
+  row (about 6 minutes hung). It skips a service for 180 s after its process
+  started and restarts each one at most twice an hour, because every start of
+  image, voice and collections makes paid probe calls. Its counters live in
+  __LOGS__/watchdog-state; every action is a line in watchdog.log.
+
+  launchd never starts a second run while one is still going, and a run
+  takes at most five times the 10 s limit, well inside the interval. Not
+  RunAtLoad: at login the backends are all starting, and the grace period
+  would skip them anyway.
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>ai.miranote.beta-watchdog</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>__SCRIPTS__/watchdog.sh</string>
+        <string>__LOGS__/watchdog-state</string>
+        <string>--fails</string>
+        <string>3</string>
+        <string>--grace</string>
+        <string>180</string>
+        <string>--max-per-hour</string>
+        <string>2</string>
+        <string>--timeout</string>
+        <string>10</string>
+    </array>
+
+    <key>StartInterval</key>
+    <integer>120</integer>
+
+    <key>StandardOutPath</key>
+    <string>__LOGS__/watchdog.log</string>
+    <key>StandardErrorPath</key>
+    <string>__LOGS__/watchdog.log</string>
+
+    <key>ProcessType</key>
+    <string>Background</string>
+</dict>
+</plist>

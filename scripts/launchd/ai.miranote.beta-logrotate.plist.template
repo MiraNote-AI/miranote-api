@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Template. Fill in __SCRIPTS__ (this directory) and __LOGS__ (logs/beta in
+  the checkout) and write the result into ~/Library/LaunchAgents; README.md
+  has the commands.
+
+  Once a day at 04:00, rotate_logs.sh copies aside and truncates every log in
+  __LOGS__ over 10 MB, keeping three gzipped generations, and leaves the
+  /health access lines out of the copy. Nothing is restarted. A Mac that was
+  asleep at 04:00 runs it on wake; one that was off skips that day.
+
+  Runs from the checkout, unlike the health check: a checkout that is gone
+  leaves nothing to rotate anyway.
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>ai.miranote.beta-logrotate</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>__SCRIPTS__/rotate_logs.sh</string>
+        <string>__LOGS__</string>
+        <string>--max-mb</string>
+        <string>10</string>
+        <string>--keep</string>
+        <string>3</string>
+        <string>--drop-health</string>
+    </array>
+
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>4</integer>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>
+
+    <key>StandardOutPath</key>
+    <string>__LOGS__/logrotate.log</string>
+    <key>StandardErrorPath</key>
+    <string>__LOGS__/logrotate.log</string>
+
+    <key>ProcessType</key>
+    <string>Background</string>
+</dict>
+</plist>
