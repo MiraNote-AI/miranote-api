@@ -212,7 +212,41 @@ TEXT_PRICE_CNY_PER_MTOK = {
 PROMPT_EXTEND = False
 
 POLL_INTERVAL = 2.0    # seconds between task-status polls on the async shape
-IMAGE_TIMEOUT = 180.0  # per-image ceiling, including polling and download
+IMAGE_TIMEOUT = 180.0  # longest wait for one image call's reply, outside /generate
+
+# The whole of one /generate request: the wait for a slot, the expansion, the
+# image call and its download, and the matte. Every provider call inside it gets
+# at most what is left, so a stalled one ends as a 504 instead of outliving the
+# phone. Under the app's 60 s sticker limit so the slot is free by the time the
+# phone offers a retry (ios #169); a healthy request takes 8-10 s (the 20-image
+# bench of 2026-11-13: max 9.8 s, no retries).
+GENERATE_DEADLINE = 50.0
+
+# How long one expansion attempt may wait for its reply inside /generate. A
+# healthy expansion took 1.6-3.4 s in the same bench, with spikes to 8 s, so
+# this leaves room for a spike without letting a stalled call eat the image
+# call's share of the deadline. What a timeout leads to depends on the command:
+# art draws the user's words, the EXPANSION_REQUIRED commands get one more try
+# (main._expand). A 429 is backed off in http_client as usual, and the deadline
+# cuts that backoff short where it cannot be covered.
+EXPANDER_TIMEOUT = 12.0
+
+# Below this much time left, /generate answers 504 rather than start an image
+# call: none of the 60 benched calls drew and downloaded in under 4.7 s, so a
+# call started now would be paid for and then abandoned.
+MIN_IMAGE_TIME = 3.0
+
+# Commands that are never drawn from the user's bare words. For them a failed
+# expansion fails the request (retryable) instead of falling back, and a
+# timed-out one gets one more try while the deadline allows it.
+#   sticker:    the expansion picks the saturated backdrop the on-device lift
+#               cuts against, and drops "sticker"/"decal", which otherwise
+#               draw a white-bordered paper sticker.
+#   background: the expansion turns objects into texture; the bare words "a
+#               cat" draw one big cat instead of a pattern.
+# Art is left out on purpose: its fixed suffix already sets the cream ground
+# and the fading edges, so the bare words still make a usable picture.
+EXPANSION_REQUIRED = {"sticker", "background"}
 
 # Which model generates each /generate mode. One entry per mode rather than one
 # global constant, because the 90-image bench says these three will not stay

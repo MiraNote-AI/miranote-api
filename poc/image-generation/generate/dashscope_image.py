@@ -23,6 +23,7 @@ split so that building a request and reading a response can be unit tested with
 no network (tests/test_image_providers.py).
 """
 
+import contextvars
 import time
 from concurrent.futures import ThreadPoolExecutor
 
@@ -119,14 +120,19 @@ def generate_urls(model: str, prompt: str, aspect_ratio: str, n: int) -> list[st
         # No n parameter on this shape -- one image per call, so ask n times.
         def one() -> list[str]:
             body = build_body(shape, model, prompt, aspect_ratio, 1)
-            return urls_of(shape, http_client.post_json(
-                url, body, KEY_ENV, timeout=config.IMAGE_TIMEOUT))
+            with http_client.timed("model_request"):
+                data = http_client.post_json(url, body, KEY_ENV,
+                                             timeout=config.IMAGE_TIMEOUT)
+            return urls_of(shape, data)
 
         if n == 1:
             return one()
+        # Each call runs in a copy of this context, so it keeps the request's
+        # budget; a pool thread starts with an empty one.
         with ThreadPoolExecutor(max_workers=n) as pool:
-            return [u for batch in pool.map(lambda _: one(), range(n))
-                    for u in batch]
+            calls = [pool.submit(contextvars.copy_context().run, one)
+                     for _ in range(n)]
+            return [u for call in calls for u in call.result()]
 
     body = build_body(shape, model, prompt, aspect_ratio, n)
     created = http_client.post_json(url, body, KEY_ENV, headers=_ASYNC_HEADER,
@@ -141,4 +147,5 @@ def generate(model: str, prompt: str, aspect_ratio: str, n: int) -> list[bytes]:
     urls = generate_urls(model, prompt, aspect_ratio, n)
     if not urls:
         raise ProviderError(f"{model} returned no image")
-    return [http_client.fetch_image(u) for u in urls]
+    with http_client.timed("model_download"):
+        return [http_client.fetch_image(u) for u in urls]
