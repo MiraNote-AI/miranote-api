@@ -3,9 +3,10 @@ to run any number of times, in any order, on any number of hosts.
 
 - Purge: every account marked by DELETE /me is deleted. The foreign keys
   do the rest: its sessions go, and subscriptions and ai_usage keep their
-  rows with user_id set to null (pseudonymized). The running service does
-  a pass every PURGE_INTERVAL (main.py), well inside the 24 hours the app
-  promises; signing in again purges that one account at once (auth.py).
+  rows with user_id set to null (pseudonymized). Taste events are
+  already gone: DELETE /me deletes them, and they cascade. The running
+  service does a pass every PURGE_INTERVAL (main.py), well inside the 24
+  hours the app promises; signing in again purges that one account at once (auth.py).
 - Retention: rows past the periods in _retention are deleted, owned or
   not.
   app_store_notifications never held an owner: payloads are stored
@@ -28,7 +29,7 @@ from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 import config
 import db
-from models import AiUsage, AppAttestKey, AppStoreNotification, Session, Subscription, User
+from models import AiUsage, AppAttestKey, AppStoreNotification, Session, Subscription, TasteEvent, User
 
 log = logging.getLogger("accounts.purge")
 
@@ -49,6 +50,7 @@ def _retention(now: dt.datetime) -> Dict[str, Any]:
     notifications = AppStoreNotification.__table__
     ai_usage = AiUsage.__table__
     attest = AppAttestKey.__table__
+    taste_events = TasteEvent.__table__
     # Postgres's greatest() skips a null grace period.
     chain_end = func.greatest(subscriptions.c.expires_at, subscriptions.c.grace_period_expires_at)
     return {
@@ -62,6 +64,7 @@ def _retention(now: dt.datetime) -> Dict[str, Any]:
         # Cost reports; no quota window is longer than a month.
         "ai_usage": delete(ai_usage).where(_older_than(ai_usage.c.created_at, now, "13 months")),
         "app_attest_keys": delete(attest).where(_older_than(attest.c.last_used_at, now, "90 days")),
+        "taste_events": delete(taste_events).where(_older_than(taste_events.c.occurred_at, now, "18 months")),
     }
 
 

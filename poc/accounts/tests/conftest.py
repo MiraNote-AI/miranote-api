@@ -55,7 +55,7 @@ from sqlalchemy.pool import NullPool  # noqa: E402
 
 import db  # noqa: E402
 
-TABLES = ("users", "sessions", "subscriptions", "app_store_notifications", "ai_usage", "app_attest_keys")
+TABLES = ("users", "sessions", "subscriptions", "app_store_notifications", "ai_usage", "app_attest_keys", "taste_events")
 
 
 def alembic_config() -> Config:

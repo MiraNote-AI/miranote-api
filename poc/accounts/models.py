@@ -1,5 +1,6 @@
 """Tier 1 tables (design docs/specs/2026-11-06-accounts-and-subscriptions-
-design.md, section 4.1). All ids are UUIDs, all times timestamptz.
+design.md, section 4.1) and tier 2's taste_events (4.2). All ids are UUIDs,
+all times timestamptz.
 
 The migrations in migrations/versions/ are the source of truth for the
 schema; these models mirror them for the code, and
@@ -57,6 +58,8 @@ class User(Base):
     apple_team_id: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[dt.datetime] = _ts(now=True)
     deletion_requested_at: Mapped[Optional[dt.datetime]] = _ts(nullable=True)
+    # "Use my choices to improve and personalize MiraNote" (design 4.2).
+    taste_events_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
 
 
 class Session(Base):
@@ -176,3 +179,39 @@ class AppAttestKey(Base):
     environment: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[dt.datetime] = _ts(now=True)
     last_used_at: Mapped[dt.datetime] = _ts(now=True)
+
+
+class TasteEvent(Base):
+    """Tier 2 (design 4.2): one choice the user saw or made. Catalog ids
+    only, never text, images, prompts or mood."""
+
+    __tablename__ = "taste_events"
+    __table_args__ = (
+        CheckConstraint(
+            "action IN ('shown', 'selected', 'kept', 'undone', 'deleted', 'regenerated')",
+            name="ck_taste_events_action",
+        ),
+    )
+
+    # Client-generated: a batch sent again is not stored twice.
+    event_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    # The app's session, client-generated; not one of our refresh tokens.
+    session_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    occurred_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+    received_at: Mapped[dt.datetime] = _ts(now=True)
+    app_version: Mapped[str] = mapped_column(Text, nullable=False)
+    build: Mapped[str] = mapped_column(Text, nullable=False)
+    tz_offset_minutes: Mapped[int] = mapped_column(Integer, nullable=False)
+    event_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    surface: Mapped[str] = mapped_column(Text, nullable=False)
+    item_type: Mapped[str] = mapped_column(Text, nullable=False)
+    item_id: Mapped[str] = mapped_column(Text, nullable=False)
+    position: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    action: Mapped[str] = mapped_column(Text, nullable=False)
+    # The ai_usage row when the item came from AI; no foreign key, the two
+    # tables keep their rows for different periods.
+    request_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True)

@@ -8,7 +8,8 @@ tokens (section 3). Step 3: entitlement, the AI usage ledger and its caps
 (section 6), used by the AI services through `ai_auth.py` at the repo root.
 Step 5: subscription sync from the app and App Store Server Notifications
 V2 (section 5). Step 6: account deletion, the purge and retention jobs
-(section 7).
+(section 7). Step 8: tier 2 taste events and their switch (section 4.2),
+off unless `TASTE_EVENTS_ENABLED=1`.
 
 Stack: FastAPI, SQLAlchemy 2 (async) + asyncpg, Alembic, PostgreSQL 17.
 Only standard Postgres, written for a transaction-mode pooler (no statement
@@ -22,6 +23,7 @@ cache, no session-level `SET`), so Neon's pooled URL works as is.
 | `app_store_notifications` | App Store notifications, audit and idempotency |
 | `ai_usage` | one row per AI request; the only source of quotas |
 | `app_attest_keys` | App Attest device keys, not linked to a user |
+| `taste_events` | tier 2: the user's choices, never content (Taste events below) |
 
 ## Setup
 
@@ -81,8 +83,9 @@ A token pair is `{"access_token", "refresh_token", "token_type": "Bearer",
 Apple again and sends the fresh `authorization_code` (single-use, valid
 5 minutes). In one request the server:
 
-1. sets `users.deletion_requested_at` and revokes every session of the
-   user: from now on `/me`, `/auth/refresh` and the AI guard answer 401;
+1. sets `users.deletion_requested_at`, revokes every session of the
+   user and deletes their taste events: from now on `/me`,
+   `/auth/refresh`, `/events` and the AI guard answer 401;
 2. exchanges the code at Apple (`/auth/token`) and revokes the refresh
    token it gets at once (`/auth/revoke`), with a client secret signed by
    the Sign in with Apple key. Network errors and 5xx are tried 3 times;
@@ -127,6 +130,7 @@ retention jobs are the same hourly pass (`purge.py`).
 | `app_store_notifications` (Apple's payload without `appAccountToken`) | never linked to a user | nothing to strip | 1 year from receipt | audit, Apple retries |
 | `ai_usage` (feature, model, units, cost; never content) | kept | `user_id` set to null | 13 months from the request | quotas (at most a month back), cost reports |
 | `app_attest_keys` | never linked to a user | untouched | 90 days unused | fraud prevention |
+| `taste_events` (catalog ids of choices; never content) | kept while the switch is on; turning it off deletes them at once | deleted at once by `DELETE /me` | 18 months from `occurred_at` | product analytics, model comparison |
 | Apple tokens from the deletion code | never stored | revoked in the request | -- | Apple's revoke requirement |
 | Application logs (user id, request id; never content) | | not rewritten | 30 days | debugging |
 | Backups | | not rewritten | Neon restore window (6 h on Free, 7 days on Launch) + nightly `pg_dump` in R2, 30 days | recovery |
@@ -135,6 +139,72 @@ So deleted data is gone from every copy within 30 days of the purge. The
 last two rows rely on host jobs that are not in this repo yet (design
 9, steps 11-12: the log deletion job, the nightly `pg_dump` and the R2
 30-day lifecycle rule); the policy can state them only once those run.
+
+## Taste events
+
+Tier 2 (design 4.2): which catalog items the user was shown and what they
+did with them. Choices only, never content: no text, images, prompts or
+mood. `taste.py`.
+
+| route | body | answer |
+|---|---|---|
+| `POST /events` | `Authorization: Bearer <access>`, `{"event_version": 1, "events": [...]}` | `{"stored", "duplicates"}`; 401; 403 switch off; 404 collection off; 422 bad batch |
+| `GET /me/preferences` | `Authorization: Bearer <access>` | `{"taste_events_enabled"}` |
+| `PUT /me/preferences` | `Authorization: Bearer <access>`, `{"taste_events_enabled": bool}` | the same; `false` deletes the user's events |
+
+- **Off by default.** `/events` answers 404 unless
+  `TASTE_EVENTS_ENABLED=1` (`.env`), read at startup. Turn it on only once
+  the privacy policy and the App Privacy label (Usage Data > Product
+  Interaction, linked, Analytics) say so. The preferences routes answer
+  either way, so a user can always turn the switch off.
+- **The switch** is "Use my choices to improve and personalize
+  MiraNote" (`users.taste_events_enabled`, on by default). Off: the user's
+  events are deleted in the same request and `/events` answers 403 until
+  it is on again. A batch in flight is either stored before the switch
+  goes off (and deleted with the rest) or refused. Signed out: nothing is
+  collected (`/events` needs an access token); the app drops the events.
+- **A batch** is 1 to 100 events. One bad event refuses the whole batch
+  with 422 and nothing is stored; the app drops a batch answered 4xx and
+  resends one that failed otherwise. An `event_id` already stored is
+  skipped (`duplicates`), so resending is safe.
+- **No free text.** A field outside the list below is refused.
+  `surface` and `item_id` are catalog ids: `[a-z0-9][a-z0-9_.-]{0,63}`,
+  lowercase and without spaces. Writing tone is the tone option the user
+  picked (`tone_choice`), never inferred from their writing.
+- **`event_version`** is one global version of this format, raised with
+  the app release that changes it; the server accepts only `1`.
+- No server-side style profile in 1.0: the app ranks on device, and the
+  server only aggregates across users.
+
+Every event:
+
+| field | type | |
+|---|---|---|
+| `event_id` | uuid | client-generated, the idempotency key |
+| `session_id` | uuid | the app's session, client-generated |
+| `occurred_at` | ISO 8601 with offset | at most 1 day ahead of the server |
+| `app_version` | `1.0.2` | up to 4 numeric parts |
+| `build` | `42` | up to 4 numeric parts |
+| `tz_offset_minutes` | int, -720..840 | the device's offset from UTC |
+| `name` | registered name | below |
+| `surface` | catalog id | where it was shown, e.g. `font_picker`, `sticker_tray` |
+| `item_type` | the name's item type | below |
+| `item_id` | catalog id | e.g. `serif-02` |
+| `position` | int 0..999, optional | rank shown |
+| `action` | `shown`, `selected`, `kept`, `undone`, `deleted`, `regenerated` | log `shown` too: it is the denominator |
+| `request_id` | uuid, optional | the `ai_usage` request, when the item came from AI |
+
+Registered names (`taste.EVENTS`); adding one is a line there and a row
+here:
+
+| `name` | `item_type` | what |
+|---|---|---|
+| `layout_choice` | `layout` | a page layout |
+| `font_choice` | `font` | a font |
+| `color_choice` | `color` | a color or palette |
+| `sticker_style_choice` | `sticker_style` | a sticker style |
+| `tone_choice` | `tone` | a writing tone option |
+| `image_style_choice` | `image_style` | the style of an AI image |
 
 ## Usage API (quotas)
 
