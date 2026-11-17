@@ -1,16 +1,19 @@
-"""Verifying Sign in with Apple identity tokens (design 3.1).
+"""Sign in with Apple: verifying identity tokens (design 3.1) and revoking
+the app's access at account deletion (design 7.1).
 
 The app runs ASAuthorizationAppleIDProvider with SHA-256(nonce) as the
 request nonce and sends us the identity token plus the raw nonce. The token
 is an RS256 JWT signed with one of Apple's keys at APPLE_KEYS_URL.
 
-We never exchange the authorization code and never store an Apple refresh
-token: deletion re-runs Sign in with Apple (design 7).
+Sign-in never exchanges the authorization code. Deletion re-runs Sign in
+with Apple; AppleRevoker exchanges that fresh code for Apple's tokens and
+revokes them at once, so no Apple refresh token is ever stored.
 """
 
 from __future__ import annotations
 
 import asyncio
+import datetime as dt
 import hashlib
 import hmac
 import json
@@ -23,10 +26,14 @@ import httpx
 import jwt
 from jwt.algorithms import RSAAlgorithm
 
+import config
+
 log = logging.getLogger("accounts.apple")
 
 APPLE_ISSUER = "https://appleid.apple.com"
 APPLE_KEYS_URL = "https://appleid.apple.com/auth/keys"
+APPLE_TOKEN_URL = "https://appleid.apple.com/auth/token"
+APPLE_REVOKE_URL = "https://appleid.apple.com/auth/revoke"
 
 # Apple rotates its keys rarely; a token with an unknown kid triggers a
 # refetch, at most once per REFETCH_SECONDS so garbage tokens cannot make us
@@ -35,6 +42,10 @@ KEYS_TTL_SECONDS = 24 * 3600
 REFETCH_SECONDS = 60
 # Clock skew between Apple, the phone and us.
 LEEWAY_SECONDS = 60
+# Deletion calls Apple inside the request: a few tries, then give up (7.1).
+REVOKE_ATTEMPTS = 3
+REVOKE_RETRY_SECONDS = 0.5
+CLIENT_SECRET_TTL = dt.timedelta(minutes=5)
 
 
 class InvalidIdentityToken(Exception):
@@ -139,3 +150,98 @@ async def verify_identity_token(
     if not hmac.compare_digest(str(claims["nonce"]), nonce_hash(raw_nonce)):
         raise InvalidIdentityToken("nonce")
     return AppleIdentity(sub=str(claims["sub"]))
+
+
+class RevokeNotConfigured(Exception):
+    """No Sign in with Apple key (APPLE_SIWA_KEY_PATH, APPLE_SIWA_KEY_ID)."""
+
+
+class RevokeFailed(Exception):
+    """Apple refused the code or could not be reached after the retries.
+    The message is a short reason for the log; never a code or token."""
+
+
+class AppleRevoker:
+    """Exchanges a fresh authorization code and revokes the tokens it gives
+    (POST /auth/token, then /auth/revoke). The client secret is an ES256
+    JWT signed with the Sign in with Apple key."""
+
+    def __init__(
+        self,
+        http: httpx.AsyncClient,
+        key_pem: Optional[str],
+        key_id: str,
+        team_id: str,
+        client_id: str,
+    ):
+        self._http = http
+        self._key_pem = key_pem
+        self._key_id = key_id
+        self._team_id = team_id
+        self._client_id = client_id
+
+    async def aclose(self) -> None:
+        await self._http.aclose()
+
+    def _client_secret(self) -> str:
+        now = dt.datetime.now(dt.timezone.utc)
+        claims = {
+            "iss": self._team_id,
+            "iat": int(now.timestamp()),
+            "exp": int((now + CLIENT_SECRET_TTL).timestamp()),
+            "aud": APPLE_ISSUER,
+            "sub": self._client_id,
+        }
+        return jwt.encode(claims, self._key_pem, algorithm="ES256", headers={"kid": self._key_id})
+
+    async def revoke(self, authorization_code: str) -> None:
+        if not self._key_pem or not self._key_id:
+            raise RevokeNotConfigured()
+        secret = self._client_secret()
+        tokens = await self._post(
+            APPLE_TOKEN_URL,
+            {
+                "client_id": self._client_id,
+                "client_secret": secret,
+                "code": authorization_code,
+                "grant_type": "authorization_code",
+            },
+        )
+        # Revoking the refresh token ends the user's whole link to the app.
+        hint = "refresh_token" if tokens.get("refresh_token") else "access_token"
+        token = tokens.get(hint)
+        if not token:
+            raise RevokeFailed("no token in exchange")
+        await self._post(
+            APPLE_REVOKE_URL,
+            {"client_id": self._client_id, "client_secret": secret, "token": token, "token_type_hint": hint},
+        )
+
+    async def _post(self, url: str, data: Dict[str, str]) -> Dict[str, Any]:
+        """Retries a network error or a 5xx; a 4xx (bad or used code) is
+        final."""
+        for attempt in range(1, REVOKE_ATTEMPTS + 1):
+            try:
+                r = await self._http.post(url, data=data)
+            except httpx.HTTPError:
+                reason = "unreachable"
+            else:
+                if r.status_code == 200:
+                    return r.json() if r.content else {}
+                if r.status_code < 500:
+                    # Apple's body is {"error": "invalid_grant"} and the like.
+                    raise RevokeFailed("rejected {}".format(r.status_code))
+                reason = "status {}".format(r.status_code)
+            if attempt < REVOKE_ATTEMPTS:
+                await asyncio.sleep(REVOKE_RETRY_SECONDS)
+        raise RevokeFailed(reason)
+
+
+def revoker_from_config(http: httpx.AsyncClient) -> AppleRevoker:
+    key_pem = None
+    if config.APPLE_SIWA_KEY_PATH:
+        with open(config.APPLE_SIWA_KEY_PATH) as f:
+            key_pem = f.read()
+    else:
+        log.warning("apple revoke not configured: APPLE_SIWA_KEY_PATH unset")
+    return AppleRevoker(http, key_pem, config.APPLE_SIWA_KEY_ID, config.APPLE_TEAM_ID, config.APPLE_BUNDLE_ID)

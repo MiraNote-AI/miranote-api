@@ -43,6 +43,13 @@ def database_url() -> str:
 APPLE_BUNDLE_ID = os.getenv("APPLE_BUNDLE_ID") or "ai.miranote.app"
 APPLE_TEAM_ID = os.getenv("APPLE_TEAM_ID") or "W7U365VR4U"
 
+# The Sign in with Apple key (.p8, Certificates, Identifiers & Profiles >
+# Keys) that signs the client secret for the code exchange and revoke at
+# deletion (design 7.1). Optional: without it DELETE /me still deletes the
+# account and answers 503, saying Apple was not told.
+APPLE_SIWA_KEY_PATH = os.getenv("APPLE_SIWA_KEY_PATH", "").strip()
+APPLE_SIWA_KEY_ID = os.getenv("APPLE_SIWA_KEY_ID", "").strip()
+
 
 def signing_key_pem() -> str:
     """PEM of the EC P-256 private key that signs our access tokens.

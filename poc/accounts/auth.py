@@ -5,6 +5,7 @@
     POST /auth/signout  {refresh_token}          -> 204, revokes that sign-in
     GET  /.well-known/jwks.json                  -> our public signing keys
     GET  /me                                     -> {id}, behind current_user
+    DELETE /me          {authorization_code}     -> deletes the account (design 7.1)
 
 Tokens never reach a log line: only the reason a token was refused.
 """
@@ -17,13 +18,15 @@ import uuid
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
-from sqlalchemy import delete, select, update
+from sqlalchemy import select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncConnection
 
 import apple
 import config
+import purge
 import tokens
 from models import Session, User
 
@@ -47,6 +50,11 @@ class AppleSignIn(BaseModel):
 
 class RefreshRequest(BaseModel):
     refresh_token: str
+
+
+class DeleteAccount(BaseModel):
+    # From Sign in with Apple run again just before the request (7.1).
+    authorization_code: str
 
 
 def _unauthorized(detail: str) -> HTTPException:
@@ -110,22 +118,9 @@ async def sign_in_with_apple(body: AppleSignIn, request: Request):
     async with request.app.state.engine.begin() as conn:
         # Signing in again before the purge has run gives a new, empty
         # account: the old one is purged first (design 3.1, 7.1 step 5).
-        # Today the purge is deleting the users row; its foreign keys drop
-        # the sessions and set user_id to null on subscriptions and ai_usage
-        # (7.2). When the purge does more (step 8), call it here.
-        purged = (
-            await conn.execute(
-                delete(users)
-                .where(
-                    users.c.apple_team_id == config.APPLE_TEAM_ID,
-                    users.c.apple_sub == identity.sub,
-                    users.c.deletion_requested_at.is_not(None),
-                )
-                .returning(users.c.id)
-            )
-        ).scalar_one_or_none()
-        if purged is not None:
-            log.info("purged an account marked for deletion at sign-in", extra={"user_id": str(purged)})
+        await purge.purge_deleted_accounts(
+            conn, users.c.apple_team_id == config.APPLE_TEAM_ID, users.c.apple_sub == identity.sub
+        )
         stmt = insert(users).values(apple_sub=identity.sub, apple_team_id=config.APPLE_TEAM_ID)
         # DO UPDATE (a no-op) rather than DO NOTHING so RETURNING also gives
         # the id of an existing user, in one statement and race-free.
@@ -218,3 +213,37 @@ async def current_user(request: Request, authorization: Optional[str] = Header(N
 @router.get("/me")
 async def me(user_id: uuid.UUID = Depends(current_user)):
     return {"id": str(user_id)}
+
+
+@router.delete("/me")
+async def delete_me(body: DeleteAccount, request: Request, user_id: uuid.UUID = Depends(current_user)):
+    """Marks the account and ends every sign-in at once; purge.py deletes
+    the rest within 24 hours. Then Apple is asked to revoke the app's
+    access. Our data is deleted whatever Apple answers: 200 when Apple
+    revoked too, otherwise 502 (Apple refused or was unreachable) or 503
+    (no Sign in with Apple key), both with "deleted": true. There is no
+    later retry: the code is single-use and we keep no Apple token."""
+    now = _now()
+    async with request.app.state.engine.begin() as conn:
+        await conn.execute(update(users).where(users.c.id == user_id).values(deletion_requested_at=now))
+        await conn.execute(
+            update(sessions)
+            .where(sessions.c.user_id == user_id, sessions.c.revoked_at.is_(None))
+            .values(revoked_at=now)
+        )
+    log.info("account deletion requested", extra={"user_id": str(user_id)})
+    try:
+        await request.app.state.apple_revoker.revoke(body.authorization_code)
+    except apple.RevokeNotConfigured:
+        log.error("apple revoke skipped: not configured", extra={"user_id": str(user_id)})
+        return JSONResponse(
+            {"deleted": True, "apple_revoked": False, "detail": "Sign in with Apple revocation is not configured"},
+            status_code=503,
+        )
+    except apple.RevokeFailed as exc:
+        log.warning("apple revoke failed", extra={"user_id": str(user_id), "reason": str(exc)})
+        return JSONResponse(
+            {"deleted": True, "apple_revoked": False, "detail": "Apple did not revoke the sign-in"},
+            status_code=502,
+        )
+    return {"deleted": True, "apple_revoked": True}

@@ -7,15 +7,18 @@ of api #95: the schema, the service around it, and Sign in with Apple with
 our own tokens (auth.py). Step 3: entitlements and the AI usage ledger
 (usage.py, caps in quotas.py). Step 5: subscription sync and App Store
 Server Notifications (subscriptions.py, Apple's side in appstore.py).
+Step 6: account deletion (DELETE /me in auth.py) and the purge and
+retention jobs (purge.py), run here every hour.
 
     GET /health -> {"status", "db"}; 503 when the database does not answer
-    /auth/*, /.well-known/jwks.json, /me -> see auth.py
+    /auth/*, /.well-known/jwks.json, /me, DELETE /me -> see auth.py
     /usage/reserve, /usage/settle (internal), /me/usage -> see usage.py
     /subscriptions/sync, /appstore/notifications -> see subscriptions.py
 """
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
@@ -33,6 +36,7 @@ import appstore
 import auth
 import config
 import db
+import purge
 import subscriptions
 import tokens
 import usage
@@ -77,7 +81,8 @@ def _setup_logging() -> None:
 _setup_logging()
 
 
-# Tests swap in an httpx.MockTransport serving a fake Apple JWKS.
+# Tests swap in an httpx.MockTransport serving a fake Apple (keys, token
+# and revoke endpoints).
 APPLE_TRANSPORT = None
 
 
@@ -90,13 +95,17 @@ async def lifespan(app: FastAPI):
     app.state.signer = tokens.Signer(config.signing_key_pem(), config.previous_public_key_pem())
     app.state.engine = db.create_engine(config.database_url())
     app.state.apple_keys = apple.AppleKeys(httpx.AsyncClient(timeout=5, transport=APPLE_TRANSPORT))
+    app.state.apple_revoker = apple.revoker_from_config(httpx.AsyncClient(timeout=5, transport=APPLE_TRANSPORT))
     app.state.appstore = appstore.from_config()
     ok = await db.ping(app.state.engine, config.HEALTH_DB_TIMEOUT_SECONDS)
     log.info("startup", extra={"db": "ok" if ok else "unreachable"})
+    purge_task = asyncio.create_task(purge.run_forever(app.state.engine))
     try:
         yield
     finally:
+        purge_task.cancel()
         await app.state.engine.dispose()
+        await app.state.apple_revoker.aclose()
         await app.state.apple_keys.aclose()
         await app.state.appstore.aclose()
 
