@@ -164,13 +164,18 @@ mood. `taste.py`.
   goes off (and deleted with the rest) or refused. Signed out: nothing is
   collected (`/events` needs an access token); the app drops the events.
 - **A batch** is 1 to 100 events. One bad event refuses the whole batch
-  with 422 and nothing is stored; the app drops a batch answered 4xx and
-  resends one that failed otherwise. An `event_id` already stored is
+  with 422 and nothing is stored; the app drops a batch answered 403, 404
+  or 422, refreshes its token and resends on 401, and resends one that
+  failed otherwise. An `event_id` already stored is
   skipped (`duplicates`), so resending is safe.
 - **No free text.** A field outside the list below is refused.
   `surface` and `item_id` are catalog ids: `[a-z0-9][a-z0-9_.-]{0,63}`,
-  lowercase and without spaces. Writing tone is the tone option the user
-  picked (`tone_choice`), never inferred from their writing.
+  lowercase and without spaces. That is a format check, not the catalog:
+  it refuses typed text (spaces, capitals, punctuation, non-ASCII), but a
+  slug such as `my-dog-died` fits, so the app sends only ids from its own
+  catalog, never one built from what the user wrote. Writing tone is the
+  tone option the user picked (`tone_choice`), never inferred from their
+  writing.
 - **`event_version`** is one global version of this format, raised with
   the app release that changes it; the server accepts only `1`.
 - No server-side style profile in 1.0: the app ranks on device, and the

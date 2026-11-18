@@ -7,6 +7,9 @@
 - users.taste_events_enabled: "Use my choices to improve and personalize
   MiraNote", on by default.
 
+Downgrading drops every user's switch with the events, so upgrading again
+sets it back to on for everyone, also for users who had turned it off.
+
 Revision ID: 0003
 Revises: 0002
 Create Date: 2026-11-17

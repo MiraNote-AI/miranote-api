@@ -58,7 +58,10 @@ MAX_BATCH = 100
 # outlive the 18-month retention.
 MAX_CLOCK_AHEAD = dt.timedelta(days=1)
 
-# Catalog ids: lowercase, no spaces, so no sentence fits in one.
+# Catalog ids: lowercase, no spaces. A format check, not the catalog: it
+# refuses typed text (spaces, capitals, punctuation, non-ASCII), but a slug
+# such as "my-dog-died" still fits, so the app sends only ids from its own
+# catalog, never one built from what the user wrote.
 _CATALOG_ID = r"^[a-z0-9][a-z0-9_.-]{0,63}$"
 
 
