@@ -281,3 +281,19 @@ def test_a_failed_jwks_refresh_is_not_retried_on_every_request(fake, monkeypatch
     now[0] += ai_auth.JWKS_REFETCH_SECONDS + 1
     assert jwks.key(fake.kid) is not None
     assert len(fetches) == 2
+
+
+def test_a_user_token_has_the_beta_tokens_rate_limit(client, fake, monkeypatch):
+    """The unmetered routes (/describe, /clean, transcription, ...) have no
+    cap, and each is still a paid model call: the per-token limit that
+    bounds the beta token bounds each signed-in user the same way."""
+    monkeypatch.setattr(beta_auth, "_limiter", beta_auth.TokenRateLimiter(limit=3))
+    auth = {"Authorization": "Bearer " + fake.token()}
+    assert [client.post("/free", headers=auth).status_code for _ in range(4)] == [200, 200, 200, 429]
+    r = client.post("/expand", headers=dict(auth, **{"X-Request-ID": str(uuid.uuid4())}))
+    assert r.status_code == 429 and r.json()["reason"] == "rate_limited"
+    assert fake.rows == {}  # refused before anything was reserved
+    # Another user, and the beta token, have their own windows.
+    other = {"Authorization": "Bearer " + fake.token(user_id=uuid.uuid4())}
+    assert client.post("/free", headers=other).status_code == 200
+    assert client.post("/free", headers=BETA).status_code == 200

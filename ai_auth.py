@@ -21,6 +21,7 @@ Answers the app can act on, all JSON with a `reason`:
     401 missing_token | invalid_token | token_expired | unknown_user
     409 duplicate_request  (an X-Request-ID already counted; from accounts)
     429 quota  {"reason", "feature", "resets_at", ...}   (from accounts)
+    429 rate_limited  (beta_auth's per-token limit, per user)
     503 accounts_unavailable
 
 The client sends X-Request-ID (a UUID) per user action. A retry with the
@@ -302,6 +303,12 @@ def install(
         except AccountsUnavailable:
             log.warning("jwks unavailable")
             return _reject(503, "accounts_unavailable", "sign-in service unavailable, try again shortly")
+
+        # The beta token's per-token limit, per user. Routes with no cap
+        # (/describe, /clean, transcription, ...) are still paid model calls,
+        # and this is what bounds them until the kill switch (design 6.3).
+        if not beta_auth._limiter.allow("user:{}".format(user_id)):
+            return _reject(429, "rate_limited", "too many requests, try again in a minute")
 
         spec = metered.get(path)
         if spec is None or request.method != "POST" or (spec.applies is not None and not spec.applies(request)):
