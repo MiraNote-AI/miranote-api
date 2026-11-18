@@ -128,7 +128,8 @@ header is answered 404 by the service itself, secret or not.
   app's Apple ID on Production notifications). Production and Sandbox are
   both accepted and tagged on the row; Xcode / local StoreKit data is not.
 - The row is recomputed from the snapshot every time (design 5.1); one
-  signed earlier than the row's `last_signed_date` is not applied.
+  whose transaction or renewal info was signed earlier than the row's
+  `last_signed_date` is not applied.
 - Ownership (design 5.3): a chain whose `appAccountToken` is the caller is
   the caller's; one naming another live account is refused (403). With no
   token, or a deleted account's, an unowned chain is linked to the caller

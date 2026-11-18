@@ -232,6 +232,29 @@ def test_a_stale_snapshot_is_not_applied(client, fake):
     assert row("4000").status == "active"
 
 
+def test_a_transaction_from_before_a_refund_does_not_undo_it(client, fake):
+    # The transaction a client kept from before the refund, sent with renewal
+    # info signed after it: the snapshot is as old as its older part.
+    user = new_user()
+    otid = "4001"
+    bought_at = dt.datetime.now(dt.timezone.utc) - dt.timedelta(minutes=10)
+    bought = fake.transaction(otid, token=user, signed_at=bought_at)
+    r = sync(client, user, fake, otid, tx=bought, renewal=fake.renewal(otid, signed_at=bought_at))
+    assert r.json()["plan"] == "plus"
+    refunded_at = bought_at + dt.timedelta(minutes=5)
+    notify(
+        client,
+        fake.notification(
+            "REFUND", None,
+            fake.transaction(otid, token=user, revoked=True, signed_at=refunded_at),
+            fake.renewal(otid, signed_at=refunded_at),
+        ),
+    )
+    r = sync(client, user, fake, otid, tx=bought, renewal=fake.renewal(otid))
+    assert r.status_code == 200
+    assert (r.json()["status"], r.json()["plan"]) == ("revoked", "free")
+
+
 @pytest.mark.parametrize(
     "tx_kwargs, renewal_kwargs, status, plan",
     [

@@ -88,7 +88,9 @@ class Snapshot:
 
     @property
     def signed_date(self) -> dt.datetime:
-        return _time(max(self.transaction.signedDate, self.renewal.signedDate))
+        # The older part's: with the newer one, a transaction kept from
+        # before a refund, sent with fresh renewal info, would undo it.
+        return _time(min(self.transaction.signedDate, self.renewal.signedDate))
 
     def row(self, now: dt.datetime) -> Dict[str, Any]:
         """The subscriptions columns, all recomputed from this snapshot."""
