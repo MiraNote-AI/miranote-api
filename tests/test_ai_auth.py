@@ -253,3 +253,31 @@ def test_without_pyjwt_the_gate_loads_and_the_beta_token_still_works():
     run = subprocess.run([sys.executable, "-c", script], cwd=str(root), env=env, capture_output=True, text=True, timeout=120)
     assert run.returncode == 0, run.stderr[-2000:]
     assert run.stdout.split()[-3:] == ["200", "503", "accounts_unavailable"]
+
+
+def test_a_failed_jwks_refresh_is_not_retried_on_every_request(fake, monkeypatch):
+    """Design 3.2: no network hop per request. Once the cached keys are an
+    hour old and the accounts service is down (or hangs, while every
+    signed-in request waits on the lock), the keys in hand keep serving and
+    the refresh is tried again at most once a minute."""
+    now = [1000.0]
+    jwks = ai_auth._Jwks(clock=lambda: now[0])
+    assert jwks.key(fake.kid) is not None
+    fetches = []
+    handle = fake.handle
+
+    def counting(request):
+        if request.url.path == "/.well-known/jwks.json":
+            fetches.append(1)
+        return handle(request)
+
+    monkeypatch.setattr(ai_auth, "TRANSPORT", httpx.MockTransport(counting))
+    fake.reachable = False
+    now[0] += ai_auth.JWKS_TTL_SECONDS + 1
+    for _ in range(3):
+        assert jwks.key(fake.kid) is not None
+    assert len(fetches) == 1
+    fake.reachable = True
+    now[0] += ai_auth.JWKS_REFETCH_SECONDS + 1
+    assert jwks.key(fake.kid) is not None
+    assert len(fetches) == 2

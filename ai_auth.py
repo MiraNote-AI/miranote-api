@@ -108,6 +108,7 @@ class _Jwks:
         self._lock = threading.Lock()
         self._keys: Dict[str, Any] = {}
         self._fetched_at: Optional[float] = None
+        self._failed_at: Optional[float] = None
 
     def _fetch(self) -> None:
         try:
@@ -128,13 +129,21 @@ class _Jwks:
             unknown = kid not in self._keys and (
                 self._fetched_at is None or now - self._fetched_at > JWKS_REFETCH_SECONDS
             )
-            if stale or unknown:
+            # After a failed refresh the keys in hand serve until the next
+            # try, a minute on: retrying per request would put a network hop
+            # (up to the timeout, under this lock) in front of every call.
+            backing_off = (
+                bool(self._keys) and self._failed_at is not None and now - self._failed_at <= JWKS_REFETCH_SECONDS
+            )
+            if (stale or unknown) and not backing_off:
                 try:
                     self._fetch()
+                    self._failed_at = None
                 except AccountsUnavailable:
                     # Keys we already have stay good; none at all is a 503.
                     if not self._keys:
                         raise
+                    self._failed_at = now
                     log.warning("jwks refresh failed, using cached keys")
             return self._keys.get(kid)
 
