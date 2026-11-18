@@ -118,6 +118,14 @@ def _log_link(user_id: uuid.UUID, original_transaction_id: str, source: str) -> 
     )
 
 
+async def lock_user(conn: AsyncConnection, user_id: uuid.UUID) -> None:
+    """Serializes this user's syncs, so the per-day link cap holds. FOR NO
+    KEY UPDATE, not FOR UPDATE: the foreign key check of a notification
+    linking a chain to this user takes FOR KEY SHARE on the same row, and
+    against FOR UPDATE the two transactions deadlock."""
+    await conn.execute(select(users.c.id).where(users.c.id == user_id).with_for_update(key_share=True))
+
+
 async def _link(conn: AsyncConnection, otid: str, user_id: uuid.UUID, now: dt.datetime) -> None:
     await conn.execute(
         update(subscriptions)
@@ -137,8 +145,7 @@ async def sync(body: SyncRequest, request: Request, user_id: uuid.UUID = Depends
     now = _now()
     reclaimed = False
     async with request.app.state.engine.begin() as conn:
-        # Serializes this user's syncs, so the per-day link cap holds.
-        await conn.execute(select(users.c.id).where(users.c.id == user_id).with_for_update())
+        await lock_user(conn, user_id)
         await apply_snapshot(conn, snap, now)
         row = (
             await conn.execute(

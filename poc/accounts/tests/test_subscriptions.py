@@ -427,6 +427,37 @@ def test_notification_links_only_unowned_chains_to_live_users(client, fake):
     assert row("8600").user_id == live
 
 
+def test_a_sync_and_a_notification_linking_the_same_chain_do_not_deadlock(clean_db, configured, fake):
+    # Right after a purchase the app's sync and SUBSCRIBED can arrive
+    # together. The sync locks the user, then waits for the chain's row,
+    # which the notification has locked; the notification then links the
+    # chain to that user, and the foreign key check reads the user's row.
+    user = new_user()
+    otid = "8650"
+    add_chain(otid)
+
+    async def interleaved():
+        snap = await appstore.from_config().snapshot(fake.transaction(otid, token=user), fake.renewal(otid))
+        now = dt.datetime.now(dt.timezone.utc)
+        engine = db.create_engine(TEST_URL, poolclass=NullPool)
+        try:
+            async with engine.connect() as sync_conn, engine.connect() as notify_conn:
+                sync_tx, notify_tx = await sync_conn.begin(), await notify_conn.begin()
+                await subscriptions.apply_snapshot(notify_conn, snap, now)
+                await subscriptions.lock_user(sync_conn, user)
+                waiting = asyncio.ensure_future(subscriptions.apply_snapshot(sync_conn, snap, now))
+                await asyncio.sleep(0.3)
+                await asyncio.wait_for(subscriptions.adopt_by_token(notify_conn, snap, now), 10)
+                await notify_tx.commit()
+                await asyncio.wait_for(waiting, 10)
+                await sync_tx.commit()
+        finally:
+            await engine.dispose()
+
+    asyncio.run(interleaved())
+    assert row(otid).user_id == user
+
+
 def test_offer_code_redeemed_outside_the_app_is_linked_at_the_next_sync(client, fake, api):
     otid = "8700"
     notify(client, fake.notification("OFFER_REDEEMED", "INITIAL_BUY", fake.transaction(otid), fake.renewal(otid)))
