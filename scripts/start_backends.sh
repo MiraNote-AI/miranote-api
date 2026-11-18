@@ -94,13 +94,16 @@ for spec in "${SERVICES[@]}"; do
     echo "   $name: MISSING .venv -- see poc/$dir/README.md, skipping"
     continue
   fi
+  # A fresh log per start, written in append mode so that
+  # launchd/rotate_logs.sh can truncate it in place while the server runs.
+  : >"$LOGS/$name.log"
   if [ "$name" = "chat" ]; then
     # chatbot imports as a package from the repo root
     nohup .venv/bin/uvicorn --app-dir "$API_ROOT" "$app" \
-      --host 127.0.0.1 --port "$port" >"$LOGS/$name.log" 2>&1 &
+      --host 127.0.0.1 --port "$port" >>"$LOGS/$name.log" 2>&1 &
   else
     nohup .venv/bin/uvicorn "$app" \
-      --host 127.0.0.1 --port "$port" >"$LOGS/$name.log" 2>&1 &
+      --host 127.0.0.1 --port "$port" >>"$LOGS/$name.log" 2>&1 &
   fi
   echo "$!" >"$LOGS/$name.pid"
   echo "   $name: pid $! -> :$port"

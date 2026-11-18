@@ -56,8 +56,11 @@ fi
 # other tunnel on this machine, and a cloudflared command that loads it while
 # referring to this tunnel by name fails with "Tunnel not found".
 echo "== starting tunnel $TUNNEL_NAME"
+# A fresh log per start, written in append mode so that
+# launchd/rotate_logs.sh can truncate it in place while the tunnel runs.
+: >"$LOGS/tunnel.log"
 nohup cloudflared --config "$TUNNEL_CONFIG" tunnel run "$TUNNEL_NAME" \
-  >"$LOGS/tunnel.log" 2>&1 &
+  >>"$LOGS/tunnel.log" 2>&1 &
 TUNNEL_PID=$!
 echo "$TUNNEL_PID" >"$PIDFILE"
 
