@@ -20,7 +20,7 @@ from typing import Any, Dict, Optional
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
-from sqlalchemy import select, update
+from sqlalchemy import delete, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncConnection
 
@@ -28,7 +28,7 @@ import apple
 import config
 import purge
 import tokens
-from models import Session, User
+from models import Session, TasteEvent, User
 
 log = logging.getLogger("accounts.auth")
 
@@ -41,6 +41,7 @@ REFRESH_GRACE = dt.timedelta(seconds=10)
 
 users = User.__table__
 sessions = Session.__table__
+taste_events = TasteEvent.__table__
 
 
 class AppleSignIn(BaseModel):
@@ -224,11 +225,11 @@ async def me(user_id: uuid.UUID = Depends(current_user)):
 
 @router.delete("/me")
 async def delete_me(body: DeleteAccount, request: Request, user_id: uuid.UUID = Depends(current_user)):
-    """Marks the account and ends every sign-in at once; purge.py deletes
-    the rest within 24 hours. Then Apple is asked to revoke the app's
-    access. Our data is deleted whatever Apple answers: 200 when Apple
-    revoked too, otherwise 502 (Apple refused or was unreachable, or the
-    revoke failed on our side, e.g. an unusable key) or 503
+    """Marks the account, ends every sign-in and deletes its taste events
+    at once; purge.py deletes the rest within 24 hours. Then Apple is
+    asked to revoke the app's access. Our data is deleted whatever Apple
+    answers: 200 when Apple revoked too, otherwise 502 (Apple refused or was
+    unreachable, or the revoke failed on our side, e.g. an unusable key) or 503
     (no Sign in with Apple key), both with "deleted": true. There is no
     later retry: the code is single-use and we keep no Apple token."""
     now = _now()
@@ -239,6 +240,8 @@ async def delete_me(body: DeleteAccount, request: Request, user_id: uuid.UUID = 
             .where(sessions.c.user_id == user_id, sessions.c.revoked_at.is_(None))
             .values(revoked_at=now)
         )
+        # Not left for the purge: the user's choices go with the request.
+        await conn.execute(delete(taste_events).where(taste_events.c.user_id == user_id))
     log.info("account deletion requested", extra={"user_id": str(user_id)})
     try:
         await request.app.state.apple_revoker.revoke(body.authorization_code)

@@ -82,6 +82,13 @@ def internal_secret() -> str:
     return secret
 
 
+# Tier 2 taste events (design 4.2). POST /events answers 404 unless this is
+# 1, so nothing is collected before the privacy policy and App Privacy
+# label say so.
+def taste_events_enabled() -> bool:
+    return os.getenv("TASTE_EVENTS_ENABLED", "").strip() == "1"
+
+
 # App Store (design 5). All optional: without them the service still starts
 # and /subscriptions/sync and /appstore/notifications answer 503.
 #

@@ -23,9 +23,9 @@ def _tables():
     return {r[0] for r in rows}
 
 
-def test_upgrade_creates_exactly_the_tier1_tables(migrated):
+def test_upgrade_creates_exactly_the_tier1_and_tier2_tables(migrated):
     assert _tables() == set(TABLES) | {"alembic_version"}
-    assert run_sql("SELECT version_num FROM alembic_version") == [("0002",)]
+    assert run_sql("SELECT version_num FROM alembic_version") == [("0003",)]
 
 
 def test_downgrade_to_base_drops_everything_and_upgrade_restores_it(migrated):
@@ -57,7 +57,8 @@ def _plan(sql):
 
 
 # Queries that run across every user, and the index each one needs: the
-# cost kill switch (design 6.3) and revoking one sign-in (3.2).
+# cost kill switch (design 6.3), revoking one sign-in (3.2), and the two
+# deletes of taste events: retention and the switch turned off (4.2).
 _INDEXED_QUERIES = [
     (
         "cost kill switch",
@@ -70,6 +71,16 @@ _INDEXED_QUERIES = [
         "UPDATE sessions SET revoked_at = now() "
         "WHERE family_id = '00000000-0000-0000-0000-000000000002' AND revoked_at IS NULL",
         "ix_sessions_family_id",
+    ),
+    (
+        "taste events retention",
+        "DELETE FROM taste_events WHERE occurred_at < now() - interval '18 months'",
+        "ix_taste_events_occurred_at",
+    ),
+    (
+        "taste switch turned off",
+        "DELETE FROM taste_events WHERE user_id = '00000000-0000-0000-0000-000000000003'",
+        "ix_taste_events_user_id",
     ),
 ]
 

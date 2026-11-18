@@ -286,6 +286,14 @@ def test_retention_deletes_only_rows_past_their_period(clean_db):
         "('old', '\\x00', '\\x00', 0, 'production', now() - interval '91 days'), "
         "('recent', '\\x00', '\\x00', 0, 'production', now() - interval '89 days')"
     )
+    for ago in ("18 months 1 day", "17 months"):
+        run_sql(
+            "INSERT INTO taste_events (event_id, user_id, session_id, occurred_at, app_version, build, "
+            "tz_offset_minutes, event_version, name, surface, item_type, item_id, action) "
+            "VALUES (gen_random_uuid(), :u, gen_random_uuid(), now() - CAST(CAST(:ago AS text) AS interval), '1.0', '1', "
+            "0, 1, 'font_choice', 'font_picker', 'font', 'serif-02', 'shown')",
+            u=live, ago=ago,
+        )
 
     assert run_purge() == {
         "users": 0,
@@ -294,10 +302,12 @@ def test_retention_deletes_only_rows_past_their_period(clean_db):
         "app_store_notifications": 1,
         "ai_usage": 2,
         "app_attest_keys": 1,
+        "taste_events": 1,
     }
     assert run_sql("SELECT token_hash FROM sessions") == [("valid",)]
     assert sorted(r[0] for r in run_sql("SELECT original_transaction_id FROM subscriptions")) == ["in-grace", "recent"]
     assert run_sql("SELECT notification_uuid FROM app_store_notifications") == [("recent",)]
     assert run_sql("SELECT count(*) FROM ai_usage") == [(1,)]
     assert run_sql("SELECT key_id FROM app_attest_keys") == [("recent",)]
+    assert run_sql("SELECT count(*) FROM taste_events") == [(1,)]
     assert run_sql("SELECT count(*) FROM users") == [(1,)]

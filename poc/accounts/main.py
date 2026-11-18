@@ -9,12 +9,14 @@ our own tokens (auth.py). Step 3: entitlements and the AI usage ledger
 Step 5: subscription sync and App Store
 Server Notifications (subscriptions.py, Apple's side in appstore.py).
 Step 6: account deletion (DELETE /me in auth.py) and the purge and
-retention jobs (purge.py), run here every hour.
+retention jobs (purge.py), run here every hour. Step 8: taste events and
+their switch (taste.py), off unless TASTE_EVENTS_ENABLED=1.
 
     GET /health -> {"status", "db"}; 503 when the database does not answer
     /auth/*, /.well-known/jwks.json, /me, DELETE /me -> see auth.py
     /usage/reserve, /usage/settle (internal), /me/usage -> see usage.py
     /subscriptions/sync, /appstore/notifications -> see subscriptions.py
+    /events, /me/preferences -> see taste.py
 """
 
 from __future__ import annotations
@@ -40,6 +42,7 @@ import config
 import db
 import purge
 import subscriptions
+import taste
 import tokens
 import usage
 
@@ -95,6 +98,7 @@ async def lifespan(app: FastAPI):
     (Neon may be waking up); /health answers 503 until it is."""
     app.state.internal_secret = config.internal_secret()
     app.state.budgets = budget.from_env()
+    app.state.taste_events_enabled = config.taste_events_enabled()
     # {} = no budget; so the log shows whether the kill switch is armed.
     log.info("daily budgets", extra={"budgets": {k: str(v) for k, v in sorted(app.state.budgets.items())}})
     app.state.signer = tokens.Signer(config.signing_key_pem(), config.previous_public_key_pem())
@@ -136,6 +140,7 @@ app = FastAPI(
 app.include_router(auth.router)
 app.include_router(usage.router)
 app.include_router(subscriptions.router)
+app.include_router(taste.router)
 
 
 # Logs method, path, status and time only. Never the body, the headers or
