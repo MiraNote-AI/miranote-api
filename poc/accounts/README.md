@@ -6,7 +6,8 @@ Users, sessions, subscriptions and the AI usage ledger for the paid flow
 a FastAPI service with `/health`. Step 2: Sign in with Apple and our own
 tokens (section 3). Step 3: entitlement, the AI usage ledger and its caps
 (section 6), used by the AI services through `ai_auth.py` at the repo root.
-Syncing subscriptions from Apple comes in a later step.
+Step 5: subscription sync from the app and App Store Server Notifications
+V2 (section 5).
 
 Stack: FastAPI, SQLAlchemy 2 (async) + asyncpg, Alembic, PostgreSQL 17.
 Only standard Postgres, written for a transaction-mode pooler (no statement
@@ -112,6 +113,63 @@ the tunnel. The tunnel must not serve them: put this rule **above** the
 As a second fence, a request carrying cloudflared's `Cf-Connecting-IP`
 header is answered 404 by the service itself, secret or not.
 
+## Subscriptions API
+
+| route | caller | body | answer |
+|---|---|---|---|
+| `POST /subscriptions/sync` | app, `Authorization: Bearer <access>` | `{"signed_transaction", "signed_renewal_info"}` | `{"plan", "environment", "status", "expires_at"}`; 400 invalid signed data; 403 / 409 another account's purchase; 429 relinked too recently or too many links today; 503 not configured |
+| `POST /appstore/notifications` | Apple | `{"signedPayload"}` | 200; 400 invalid signed data; 503 not configured (Apple retries) |
+
+- The app sends one chain per call: the `jwsRepresentation` of the
+  transaction and of the renewal info from `Product.SubscriptionInfo.Status`,
+  after a purchase, on launch when signed in, and on Restore.
+- Everything Apple signs is verified with Apple's `app-store-server-library`
+  (chain to `APPSTORE_ROOT_CERTS`, Apple's OIDs, our bundle id, and the
+  app's Apple ID on Production notifications). Production and Sandbox are
+  both accepted and tagged on the row; Xcode / local StoreKit data is not.
+- The row is recomputed from the snapshot every time (design 5.1); one
+  whose transaction or renewal info was signed earlier than the row's
+  `last_signed_date` is not applied.
+- Ownership (design 5.3): a chain whose `appAccountToken` is the caller is
+  the caller's; one naming another live account is refused (403). With no
+  token, or a deleted account's, an unowned chain is linked to the caller
+  (at most once per chain per 30 days, at most 3 links per user per day)
+  and Apple's Set App Account Token is called; a chain owned by someone
+  else is refused (409). Every link is logged with its source.
+- Notifications (design 5.4) are stored once by `notificationUUID` and
+  applied in the same transaction, without `appAccountToken`. A
+  notification links only an unowned chain, only to a live account.
+  `CONSUMPTION_REQUEST` and `TEST` are stored, not applied. A refund
+  removes Plus; used quota stays used.
+
+Settings (`.env`, all optional; without the first two both routes answer
+503 and the rest of the service runs):
+
+| setting | what |
+|---|---|
+| `APPSTORE_ROOT_CERTS` | path(s), comma-separated, to Apple's root certificates in DER: `AppleRootCA-G3.cer` from <https://www.apple.com/certificateauthority/> |
+| `APPSTORE_APP_APPLE_ID` | the app's numeric Apple ID (App Store Connect, App Information) |
+| `APPSTORE_KEY_PATH`, `APPSTORE_KEY_ID`, `APPSTORE_ISSUER_ID` | the In-App Purchase key (.p8) and its ids (App Store Connect, Users and Access, Integrations). For Set App Account Token and `backfill.py`; without it a sync still links, Apple keeps the old token |
+
+In App Store Connect, set both the Production and the Sandbox Server
+Notifications URL (version 2) to
+`https://beta-accounts.miranote.app/appstore/notifications`.
+
+### Backfill
+
+No scheduled job in 1.0. After downtime, or when a row looks wrong,
+recompute rows from Apple's Get All Subscription Statuses:
+
+```bash
+.venv/bin/python backfill.py
+.venv/bin/python backfill.py 2000000123456789
+```
+
+With no ids it walks every chain in `subscriptions`; an id not in the table
+is looked up in Production, or Sandbox with `--sandbox`. A chain that
+fails is skipped and listed at the end, and the command exits 1; rerun it
+with those ids.
+
 ## Keys
 
 The kid is the RFC 7638 thumbprint of the public key, so there is nothing
@@ -205,3 +263,7 @@ accounts_test`, and use that URL.) CI runs the same suite with a
 `postgres:17` service container: `.github/workflows/accounts.yml`. Apple
 is faked with a locally generated key served as a JWKS through
 `httpx.MockTransport`: the tests never reach the network beyond Postgres.
+The App Store is faked the same way (`tests/fake_appstore.py`): a locally
+made root CA, intermediate and leaf with Apple's OIDs sign the JWS, and the
+tests configure that root as `APPSTORE_ROOT_CERTS` with
+`APPSTORE_ONLINE_CHECKS=0` (no OCSP), so Apple's real verifier runs offline.

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from typing import List, Optional
 
 from dotenv import load_dotenv
 
@@ -72,3 +73,34 @@ def internal_secret() -> str:
             "ACCOUNTS_INTERNAL_SECRET is not set -- put it in poc/accounts/.env (see README.md)"
         )
     return secret
+
+
+# App Store (design 5). All optional: without them the service still starts
+# and /subscriptions/sync and /appstore/notifications answer 503.
+#
+# Apple's root certificates (DER, e.g. AppleRootCA-G3.cer from
+# https://www.apple.com/certificateauthority/), comma-separated paths. Every
+# signed transaction, renewal info and notification must chain to one.
+# APPSTORE_APP_APPLE_ID is the app's numeric Apple ID in App Store Connect;
+# Production notifications must carry it.
+def appstore_root_cert_paths() -> List[str]:
+    return [p.strip() for p in os.getenv("APPSTORE_ROOT_CERTS", "").split(",") if p.strip()]
+
+
+def appstore_app_apple_id() -> Optional[int]:
+    value = os.getenv("APPSTORE_APP_APPLE_ID", "").strip()
+    return int(value) if value else None
+
+
+# OCSP revocation checks of the signing chain, against Apple. Off only in
+# the tests, whose locally made certificates have no OCSP responder.
+def appstore_online_checks() -> bool:
+    return os.getenv("APPSTORE_ONLINE_CHECKS", "1").strip() != "0"
+
+
+# The In-App Purchase key (.p8) for the App Store Server API: Set App Account
+# Token at sync (5.3) and the backfill command (5.5). Without it a sync still
+# links the chain, but Apple keeps the old token until a support fix.
+APPSTORE_KEY_PATH = os.getenv("APPSTORE_KEY_PATH", "").strip()
+APPSTORE_KEY_ID = os.getenv("APPSTORE_KEY_ID", "").strip()
+APPSTORE_ISSUER_ID = os.getenv("APPSTORE_ISSUER_ID", "").strip()
