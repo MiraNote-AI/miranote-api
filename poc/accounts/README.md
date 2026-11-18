@@ -7,7 +7,8 @@ a FastAPI service with `/health`. Step 2: Sign in with Apple and our own
 tokens (section 3). Step 3: entitlement, the AI usage ledger and its caps
 (section 6), used by the AI services through `ai_auth.py` at the repo root.
 Step 5: subscription sync from the app and App Store Server Notifications
-V2 (section 5).
+V2 (section 5). Step 6: account deletion, the purge and retention jobs
+(section 7).
 
 Stack: FastAPI, SQLAlchemy 2 (async) + asyncpg, Alembic, PostgreSQL 17.
 Only standard Postgres, written for a transaction-mode pooler (no statement
@@ -49,6 +50,7 @@ gate on this service: every route checks its own credential.
 | `POST /auth/signout` | `{"refresh_token"}` | 204, always |
 | `GET /.well-known/jwks.json` | | our public signing keys |
 | `GET /me` | `Authorization: Bearer <access>` | `{"id"}`, or 401 |
+| `DELETE /me` | `Authorization: Bearer <access>`, `{"authorization_code"}` | see Account deletion |
 
 A token pair is `{"access_token", "refresh_token", "token_type": "Bearer",
 "expires_in": 3600, "user_id"}`.
@@ -59,8 +61,8 @@ A token pair is `{"access_token", "refresh_token", "token_type": "Bearer",
   `APPLE_BUNDLE_ID` (default `ai.miranote.app`), `exp`, and
   `nonce` = SHA-256 hex of the raw `nonce` the app sends. Users are keyed
   by (`APPLE_TEAM_ID`, `sub`); the default team is `W7U365VR4U`. The
-  authorization code is not exchanged, no Apple refresh token is stored,
-  no email or name either. Signing in again while the account is marked
+  authorization code is not exchanged at sign-in, no Apple refresh token
+  is ever stored, no email or name either. Signing in again while the account is marked
   for deletion purges it first and creates a new, empty account (design
   7.1): its sessions go, its subscriptions and usage stay with no owner.
 - Access tokens: ES256 JWT, 1 h, `kid` header, `iss` `miranote-accounts`,
@@ -72,6 +74,70 @@ A token pair is `{"access_token", "refresh_token", "token_type": "Bearer",
   that it revokes the whole sign-in (every token of that family).
 - Sign-out revokes the sign-in the refresh token belongs to. Access
   tokens already issued stay valid until they expire (at most 1 h).
+
+## Account deletion
+
+`DELETE /me` (design 7.1). Before calling it the app runs Sign in with
+Apple again and sends the fresh `authorization_code` (single-use, valid
+5 minutes). In one request the server:
+
+1. sets `users.deletion_requested_at` and revokes every session of the
+   user: from now on `/me`, `/auth/refresh` and the metered AI routes
+   answer 401. As after sign-out, an access token already issued still
+   opens the unmetered AI routes (voice-to-text, for one) until it
+   expires, at most 1 h;
+2. exchanges the code at Apple (`/auth/token`) and revokes the refresh
+   token it gets at once (`/auth/revoke`), with a client secret signed by
+   the Sign in with Apple key. Network errors and 5xx are tried 3 times;
+   nothing is stored and there is no later retry.
+
+| answer | meaning |
+|---|---|
+| `200 {"deleted": true, "apple_revoked": true}` | done |
+| `502 {"deleted": true, "apple_revoked": false, "detail"}` | our data is deleted; Apple refused the code or did not answer, or the revoke failed on our side (e.g. an unusable key; the log names the error) |
+| `503 {"deleted": true, "apple_revoked": false, "detail"}` | our data is deleted; no Sign in with Apple key configured |
+| `401` / `422` | bad access token / no `authorization_code`; nothing deleted |
+
+On any answer with `"deleted": true` the app signs out and shows that the
+account is deleted. If Apple was not told, the user can still remove
+MiraNote under Sign in with Apple in their Apple ID settings.
+
+The purge (`purge.py`) then deletes the marked account: the service runs
+it every hour, `.venv/bin/python purge.py` runs it once by hand. Signing
+in again with the same Apple ID purges the old account first and creates
+a new, empty one; its subscription has no owner and the first Restore
+reclaims it (Subscriptions API below, including the 30-day re-link
+limit).
+
+Settings (`.env`, optional; without them deletion answers 503 as above):
+
+| setting | what |
+|---|---|
+| `APPLE_SIWA_KEY_PATH` | the Sign in with Apple key (.p8; developer account, Certificates, Identifiers & Profiles > Keys, with Sign in with Apple enabled for the app's App ID). Keep it outside the repo |
+| `APPLE_SIWA_KEY_ID` | that key's id |
+
+## Data retention
+
+For the privacy policy (design 7.2). Journal pages, photos, stickers,
+audio, mood and the life profile are never on this server. The purge and
+retention jobs are the same hourly pass (`purge.py`).
+
+| data | while the account exists | after deletion | kept for | why |
+|---|---|---|---|---|
+| `users` (our id, Apple `sub`, team id) | kept | deleted by the purge, within 24 h | -- | sign-in |
+| `sessions` (hashed refresh tokens) | deleted once expired (60 days after issue) | revoked at once, deleted by the purge | -- | staying signed in |
+| `subscriptions` (Apple chain, status, dates) | kept | `user_id` set to null; Restore can reclaim the chain | 13 months after the chain's last expiry (or grace end) | refunds, disputes, tax |
+| `app_store_notifications` (Apple's payload without `appAccountToken`) | never linked to a user | nothing to strip | 1 year from receipt | audit, Apple retries |
+| `ai_usage` (feature, model, units, cost; never content) | kept | `user_id` set to null | 13 months from the request | quotas (at most a month back), cost reports |
+| `app_attest_keys` | never linked to a user | untouched | 90 days unused | fraud prevention |
+| Apple tokens from the deletion code | never stored | revoked in the request | -- | Apple's revoke requirement |
+| Application logs (user id, request id; never content) | | not rewritten | 30 days | debugging |
+| Backups | | not rewritten | Neon restore window (6 h on Free, 7 days on Launch) + nightly `pg_dump` in R2, 30 days | recovery |
+
+So deleted data is gone from every copy within 30 days of the purge. The
+last two rows rely on host jobs that are not in this repo yet (design
+9, steps 11-12: the log deletion job, the nightly `pg_dump` and the R2
+30-day lifecycle rule); the policy can state them only once those run.
 
 ## Usage API (quotas)
 
@@ -262,7 +328,8 @@ PYTHONPATH=. .venv/bin/python -m pytest tests/ -v
 accounts_test`, and use that URL.) CI runs the same suite with a
 `postgres:17` service container: `.github/workflows/accounts.yml`. Apple
 is faked with a locally generated key served as a JWKS through
-`httpx.MockTransport`: the tests never reach the network beyond Postgres.
+`httpx.MockTransport`, along with fake `/auth/token` and `/auth/revoke`
+endpoints for deletion: the tests never reach the network beyond Postgres.
 The App Store is faked the same way (`tests/fake_appstore.py`): a locally
 made root CA, intermediate and leaf with Apple's OIDs sign the JWS, and the
 tests configure that root as `APPSTORE_ROOT_CERTS` with
