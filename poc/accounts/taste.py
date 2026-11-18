@@ -121,7 +121,13 @@ async def post_events(body: EventBatch, request: Request, user_id: uuid.UUID = D
     user's row orders this against PUT /me/preferences and DELETE /me: a
     batch either lands before the switch goes off or the account is marked
     (and is deleted with the rest), or it sees that and stores nothing."""
-    rows = [dict(e.model_dump(), user_id=user_id, event_version=body.event_version) for e in body.events]
+    # Inserted in event_id order: two sends of the same events in flight at
+    # once then wait for each other's ids in the same order, never in a
+    # circle (a deadlock, which Postgres ends by failing one of them).
+    rows = sorted(
+        (dict(e.model_dump(), user_id=user_id, event_version=body.event_version) for e in body.events),
+        key=lambda row: row["event_id"],
+    )
     async with request.app.state.engine.begin() as conn:
         user = (
             await conn.execute(

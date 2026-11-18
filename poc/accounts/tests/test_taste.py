@@ -3,9 +3,11 @@ real Postgres."""
 
 from __future__ import annotations
 
+import asyncio
 import datetime as dt
 import uuid
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 
@@ -99,6 +101,42 @@ def test_a_resent_event_id_is_stored_once(client):
     again = event()
     assert post(client, user, again, again).json() == {"stored": 1, "duplicates": 1}
     assert stored(user) == 3
+
+
+def test_two_resends_in_flight_in_opposite_order_both_succeed(clean_db, monkeypatch):
+    """The same events resent while the first send is still in flight, in
+    the other order. A trigger that sleeps on each insert only widens the
+    window so the two inserts interleave every run; without a fixed insert
+    order each waits for the other's event_id and Postgres kills one (500)."""
+    monkeypatch.setenv("TASTE_EVENTS_ENABLED", "1")
+    run_sql(
+        "CREATE OR REPLACE FUNCTION test_slow_insert() RETURNS trigger LANGUAGE plpgsql AS "
+        "$$ BEGIN PERFORM pg_sleep(0.3); RETURN NEW; END $$"
+    )
+    run_sql("DROP TRIGGER IF EXISTS test_slow_insert ON taste_events")
+    run_sql("CREATE TRIGGER test_slow_insert BEFORE INSERT ON taste_events "
+            "FOR EACH ROW EXECUTE FUNCTION test_slow_insert()")
+    try:
+        user = new_user()
+        a, b = event(), event()
+
+        async def both():
+            async with main.app.router.lifespan_context(main.app):
+                headers = {"Authorization": "Bearer " + main.app.state.signer.issue(user, NOW)}
+                transport = httpx.ASGITransport(app=main.app, raise_app_exceptions=False)
+                async with httpx.AsyncClient(transport=transport, base_url="http://test") as c:
+                    return await asyncio.gather(*(
+                        c.post("/events", headers=headers, json={"event_version": 1, "events": events})
+                        for events in ([a, b], [b, a])
+                    ))
+
+        answers = asyncio.run(both())
+        assert [r.status_code for r in answers] == [200, 200], [r.text for r in answers]
+        assert sorted(r.json()["stored"] for r in answers) == [0, 2]
+        assert stored(user) == 2
+    finally:
+        run_sql("DROP TRIGGER IF EXISTS test_slow_insert ON taste_events")
+        run_sql("DROP FUNCTION IF EXISTS test_slow_insert()")
 
 
 def test_every_registered_name_is_accepted(client):
