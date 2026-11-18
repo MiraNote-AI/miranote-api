@@ -1,6 +1,6 @@
 """The AI usage ledger (design 6.1, 6.2).
 
-    POST /usage/reserve  internal  {user_id, feature, request_id, units, model}
+    POST /usage/reserve  internal  {user_id, feature, request_id, units, model, cost_usd}
     POST /usage/settle   internal  {request_id, status: ok|failed, cost_usd}
     GET  /me/usage       app       remaining per feature and reset times
 
@@ -31,6 +31,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import select, update
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 import budget
 import quotas
@@ -69,6 +70,9 @@ class ReserveRequest(BaseModel):
     request_id: uuid.UUID
     units: int = Field(1, ge=1, le=10)
     model: str = Field("", max_length=200)
+    # The call's estimated cost, kept on the pending row until settle sets
+    # the real one, so the daily budgets (budget.py) see calls in flight.
+    cost_usd: Decimal = Field(Decimal(0), ge=0)
 
 
 class SettleRequest(BaseModel):
@@ -129,18 +133,25 @@ async def reserve(body: ReserveRequest, request: Request):
             model=body.model,
             environment=environment,
             status="pending",
-            cost_usd=0,
+            cost_usd=body.cost_usd,
             created_at=now,
         )
         if existing is not None:
             # A failed request retried with the same id: charge it afresh.
             await conn.execute(update(ai_usage).where(ai_usage.c.request_id == body.request_id).values(**row))
         else:
-            await conn.execute(
-                ai_usage.insert().values(
-                    request_id=body.request_id, user_id=body.user_id, feature=body.feature, **row
+            inserted = (
+                await conn.execute(
+                    pg_insert(ai_usage)
+                    .values(request_id=body.request_id, user_id=body.user_id, feature=body.feature, **row)
+                    .on_conflict_do_nothing(index_elements=[ai_usage.c.request_id])
+                    .returning(ai_usage.c.request_id)
                 )
-            )
+            ).scalar_one_or_none()
+            if inserted is None:
+                # Another user's reserve with this id committed while this
+                # one waited on the key: the lock above is per user.
+                return JSONResponse({"reason": "request_id_conflict"}, status_code=409)
     return {
         "request_id": str(body.request_id),
         "plan": plan,

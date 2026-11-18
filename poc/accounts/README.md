@@ -85,7 +85,10 @@ Apple again and sends the fresh `authorization_code` (single-use, valid
 
 1. sets `users.deletion_requested_at`, revokes every session of the
    user and deletes their taste events: from now on `/me`,
-   `/auth/refresh`, `/events` and the AI guard answer 401;
+   `/auth/refresh`, `/events` and the metered AI routes answer 401. As
+   after sign-out, an access token already issued still opens the
+   unmetered AI routes (voice-to-text, for one) until it expires, at
+   most 1 h;
 2. exchanges the code at Apple (`/auth/token`) and revokes the refresh
    token it gets at once (`/auth/revoke`), with a client secret signed by
    the Sign in with Apple key. Network errors and 5xx are tried 3 times;
@@ -94,7 +97,7 @@ Apple again and sends the fresh `authorization_code` (single-use, valid
 | answer | meaning |
 |---|---|
 | `200 {"deleted": true, "apple_revoked": true}` | done |
-| `502 {"deleted": true, "apple_revoked": false, "detail"}` | our data is deleted; Apple refused the code or did not answer |
+| `502 {"deleted": true, "apple_revoked": false, "detail"}` | our data is deleted; Apple refused the code or did not answer, or the revoke failed on our side (e.g. an unusable key; the log names the error) |
 | `503 {"deleted": true, "apple_revoked": false, "detail"}` | our data is deleted; no Sign in with Apple key configured |
 | `401` / `422` | bad access token / no `authorization_code`; nothing deleted |
 
@@ -215,7 +218,7 @@ here:
 
 | route | caller | body | answer |
 |---|---|---|---|
-| `POST /usage/reserve` | AI services | `{"user_id", "feature", "request_id", "units"?, "model"?}` | 200; 401 `unknown_user`; 409 `duplicate_request` / `request_id_conflict`; 429 `quota`; 503 `service_paused` |
+| `POST /usage/reserve` | AI services | `{"user_id", "feature", "request_id", "units"?, "model"?, "cost_usd"?}` | 200; 401 `unknown_user`; 409 `duplicate_request` / `request_id_conflict`; 429 `quota`; 503 `service_paused` |
 | `POST /usage/settle` | AI services | `{"request_id", "status": "ok" \| "failed", "cost_usd"}` | `{"status"}`; 404 `unknown_request` |
 | `GET /me/usage` | app, `Authorization: Bearer <access>` | | `{"plan", "environment", "features": {feature: {"limit", "used", "remaining", "window", "resets_at"}}}` |
 
@@ -237,7 +240,9 @@ here:
 ### Daily cost budgets (kill switch)
 
 Design 6.3, in `budget.py`. Reserve sums today's (UTC) `cost_usd` of the
-`ok` and `pending` rows; once a budget is reached, that feature answers
+`ok` and `pending` rows (a pending row at the estimate the AI service
+sent with reserve, `ai_auth.COST_USD`, until settle sets the real cost);
+once a budget is reached, that feature answers
 503 for everyone until the next UTC midnight or a raised budget (restart):
 
 ```json
@@ -245,21 +250,25 @@ Design 6.3, in `budget.py`. Reserve sums today's (UTC) `cost_usd` of the
 ```
 
 The AI services pass it to the app as is. All budgets are off by default
-(unset or empty = no budget); set them in `.env`, in USD:
+(unset or empty = no budget); set them in `poc/accounts/.env` (not the
+repo root `.env`, which this service does not read), in USD:
 
 | variable | budget |
 |---|---|
 | `ACCOUNTS_DAILY_BUDGET_USD` | all features together |
 | `ACCOUNTS_DAILY_BUDGET_USD_CHAT`, `_EXPAND`, `_IMAGE_GENERATE`, `_IMAGE_EDIT`, `_PHOTO_PUSH`, `_MOOD` | one feature |
 
-`0` pauses a feature at once. A malformed value or an unknown feature
-stops the service at startup. The first refused call of the day logs
+`0` pauses a feature at once. A malformed value or an unknown name
+stops the service at startup, and the `daily budgets` line logged at
+startup lists the budgets in force. The first refused call of the day logs
 `daily budget reached` (scope, budget, spend) once per process.
 `.venv/bin/python budget.py` prints today's spend per feature next to the
 budgets.
 
-Gaps: a `pending` row costs 0 until it settles, so calls already in flight
-can overshoot a budget by their own cost. Beta-token calls never reserve,
+Gaps: reserves of different users at the same moment can each see the
+spend before the others' rows commit (the lock is per user), so a budget
+can be overshot by those calls: at most one per database connection (15
+with SQLAlchemy's default pool). Beta-token calls never reserve,
 so they are neither counted nor paused (only beta_auth's rate limit bounds
 them) until `ACCEPT_BETA_TOKENS` is turned off; beta `/mood` stays
 unmetered until App Attest (design 6.5).
@@ -296,7 +305,8 @@ header is answered 404 by the service itself, secret or not.
   app's Apple ID on Production notifications). Production and Sandbox are
   both accepted and tagged on the row; Xcode / local StoreKit data is not.
 - The row is recomputed from the snapshot every time (design 5.1); one
-  signed earlier than the row's `last_signed_date` is not applied.
+  whose transaction or renewal info was signed earlier than the row's
+  `last_signed_date` is not applied.
 - Ownership (design 5.3): a chain whose `appAccountToken` is the caller is
   the caller's; one naming another live account is refused (403). With no
   token, or a deleted account's, an unowned chain is linked to the caller
@@ -333,7 +343,9 @@ recompute rows from Apple's Get All Subscription Statuses:
 ```
 
 With no ids it walks every chain in `subscriptions`; an id not in the table
-is looked up in Production, or Sandbox with `--sandbox`.
+is looked up in Production, or Sandbox with `--sandbox`. A chain that
+fails is skipped and listed at the end, and the command exits 1; rerun it
+with those ids.
 
 ## Keys
 

@@ -15,7 +15,7 @@ from fastapi.testclient import TestClient
 import budget
 import main
 from tests.conftest import INTERNAL_SECRET, run_sql
-from tests.test_usage import _ai_service, new_user, reserve
+from tests.test_usage import SECRET, _ai_service, new_user, reserve, settle
 
 import ai_auth  # noqa: E402 -- on sys.path through tests.test_usage
 
@@ -101,6 +101,38 @@ def test_only_todays_ok_and_pending_rows_count(start):
     assert reserve(client, new_user(), "chat").status_code == 503
 
 
+def reserve_at(client, user, feature, cost):
+    """A reserve as ai_auth sends it, with the call's estimated cost."""
+    return client.post(
+        "/usage/reserve",
+        headers=SECRET,
+        json={"user_id": str(user), "feature": feature, "request_id": str(uuid.uuid4()), "cost_usd": cost},
+    )
+
+
+def test_calls_in_flight_count_at_their_estimate(start):
+    """Five expands of 0.001 fill a 0.005 budget before any of them has
+    settled, and a failed one gives its share back."""
+    client = start(expand="0.005")
+    ids = [reserve_at(client, new_user(), "expand", "0.001").json()["request_id"] for _ in range(5)]
+    assert reserve_at(client, new_user(), "expand", "0.001").status_code == 503
+    settle(client, ids[0], "failed")
+    assert reserve_at(client, new_user(), "expand", "0.001").status_code == 200
+
+
+def test_ai_gate_reserves_at_its_cost_estimate(start, monkeypatch):
+    """ai_auth sends COST_USD with reserve, so a call still running (or one
+    whose settle never arrives) already counts against the budget."""
+    client = start()
+    monkeypatch.setattr(ai_auth, "TRANSPORT", client._transport)
+    monkeypatch.setenv("ACCOUNTS_INTERNAL_SECRET", INTERNAL_SECRET)
+    request_id = uuid.uuid4()
+    assert ai_auth.reserve(new_user(), "image_generate", request_id, "").status_code == 200
+    row = run_sql("SELECT status, cost_usd FROM ai_usage WHERE request_id = :r", r=request_id)[0]
+    assert row.status == "pending"
+    assert row.cost_usd == budget.Decimal(str(ai_auth.COST_USD["image_generate"]))
+
+
 def test_a_tripped_budget_logs_once(start, monkeypatch):
     logged = []
     monkeypatch.setattr(budget.log, "warning", lambda msg, extra: logged.append((msg, extra)))
@@ -113,6 +145,7 @@ def test_a_tripped_budget_logs_once(start, monkeypatch):
 
 @pytest.mark.parametrize("name, value", [
     ("ACCOUNTS_DAILY_BUDGET_USD_CAHT", "5"),
+    ("ACCOUNTS_DAILY_BUDGET_USDCHAT", "5"),
     ("ACCOUNTS_DAILY_BUDGET_USD_CHAT", "five"),
     ("ACCOUNTS_DAILY_BUDGET_USD_CHAT", "-1"),
     ("ACCOUNTS_DAILY_BUDGET_USD", "NaN"),
@@ -121,6 +154,15 @@ def test_a_malformed_budget_stops_startup(monkeypatch, name, value):
     monkeypatch.setenv(name, value)
     with pytest.raises(RuntimeError, match=name):
         budget.from_env()
+
+
+def test_startup_logs_the_budgets_in_force(start, monkeypatch):
+    """So the log shows whether the switch is armed, e.g. when a budget was
+    put in the repo root .env, which this service does not read."""
+    logged = []
+    monkeypatch.setattr(main.log, "info", lambda msg, extra=None: logged.append((msg, extra)))
+    start(chat="1.5", total="20")
+    assert [extra["budgets"] for msg, extra in logged if msg == "daily budgets"] == [{"chat": "1.5", "total": "20"}]
 
 
 def test_an_empty_budget_is_unset(monkeypatch):

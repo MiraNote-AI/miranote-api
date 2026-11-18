@@ -99,6 +99,8 @@ async def lifespan(app: FastAPI):
     app.state.internal_secret = config.internal_secret()
     app.state.budgets = budget.from_env()
     app.state.taste_events_enabled = config.taste_events_enabled()
+    # {} = no budget; so the log shows whether the kill switch is armed.
+    log.info("daily budgets", extra={"budgets": {k: str(v) for k, v in sorted(app.state.budgets.items())}})
     app.state.signer = tokens.Signer(config.signing_key_pem(), config.previous_public_key_pem())
     app.state.engine = db.create_engine(config.database_url())
     app.state.apple_keys = apple.AppleKeys(httpx.AsyncClient(timeout=5, transport=APPLE_TRANSPORT))
