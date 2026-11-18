@@ -4,8 +4,11 @@ service, so the two sides of the reserve/settle contract cannot drift."""
 
 from __future__ import annotations
 
+import asyncio
 import datetime as dt
 import sys
+import threading
+import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -13,10 +16,13 @@ from pathlib import Path
 import pytest
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
+from sqlalchemy import text
+from sqlalchemy.pool import NullPool
 
+import db
 import main
 import quotas
-from tests.conftest import INTERNAL_SECRET, run_sql
+from tests.conftest import INTERNAL_SECRET, TEST_URL, run_sql
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 if str(REPO_ROOT) not in sys.path:
@@ -217,6 +223,51 @@ def test_request_id_of_another_user_or_feature_is_a_conflict(client):
     reserve(client, first, "chat", request_id)
     assert reserve(client, new_user(), "chat", request_id).status_code == 409
     assert reserve(client, first, "expand", request_id).status_code == 409
+
+
+def test_another_users_request_id_still_in_flight_is_a_conflict_not_a_500(client):
+    """The user lock serializes one user's reserves, not two users'. User A's
+    reserve has inserted its row but not committed when user B's reserve
+    with the same request_id looks for it: B finds nothing, and its insert
+    waits on the primary key until A commits."""
+    first, second = new_user(), new_user()
+    request_id = uuid.uuid4()
+    inserted, commit = threading.Event(), threading.Event()
+
+    def first_reserve_in_flight():
+        async def run():
+            engine = db.create_engine(TEST_URL, poolclass=NullPool)
+            try:
+                async with engine.begin() as conn:
+                    await conn.execute(
+                        text(
+                            "INSERT INTO ai_usage (request_id, user_id, feature, model, units, environment, "
+                            "status, created_at) VALUES (:r, :u, 'chat', '', 1, 'Production', 'pending', now())"
+                        ),
+                        {"r": request_id, "u": first},
+                    )
+                    inserted.set()
+                    while not commit.is_set():
+                        await asyncio.sleep(0.02)
+            finally:
+                await engine.dispose()
+
+        asyncio.run(run())
+
+    side = threading.Thread(target=first_reserve_in_flight)
+    side.start()
+    try:
+        assert inserted.wait(10)
+        with ThreadPoolExecutor(1) as pool:
+            answer = pool.submit(reserve, client, second, "chat", request_id)
+            time.sleep(0.3)  # the second reserve is now waiting on the key
+            commit.set()
+            r = answer.result(10)
+    finally:
+        commit.set()
+        side.join(10)
+    assert r.status_code == 409 and r.json()["reason"] == "request_id_conflict"
+    assert ledger(second) == []
 
 
 def test_unknown_or_deleting_user_is_401(client):
