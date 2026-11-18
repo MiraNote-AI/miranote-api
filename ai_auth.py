@@ -23,6 +23,8 @@ Answers the app can act on, all JSON with a `reason`:
     429 quota  {"reason", "feature", "resets_at", ...}   (from accounts)
     429 rate_limited  (beta_auth's per-token limit, per user)
     503 accounts_unavailable
+    503 service_paused  {"reason", "feature", "resets_at", "detail"}
+        (a daily cost budget is reached; from accounts, budget.py)
 
 The client sends X-Request-ID (a UUID) per user action. A retry with the
 id of a failed call runs again; with the id of one still pending or done it
@@ -194,20 +196,38 @@ def _internal_headers() -> Dict[str, str]:
 
 def reserve(user_id: uuid.UUID, feature: str, request_id: uuid.UUID, model: str) -> httpx.Response:
     """The accounts service's answer: 200 reserved, 401 unknown user, 409
-    duplicate or conflicting request_id, 429 quota. Raises
-    AccountsUnavailable for anything else."""
+    duplicate or conflicting request_id, 429 quota, 503 service_paused (a
+    daily cost budget is reached). Raises AccountsUnavailable for anything
+    else."""
     try:
         with _client() as client:
             response = client.post(
                 "/usage/reserve",
                 headers=_internal_headers(),
-                json={"user_id": str(user_id), "feature": feature, "request_id": str(request_id), "model": model},
+                json={
+                    "user_id": str(user_id),
+                    "feature": feature,
+                    "request_id": str(request_id),
+                    "model": model,
+                    # The estimate, so a call in flight counts against the
+                    # daily budgets before it settles.
+                    "cost_usd": COST_USD[feature],
+                },
             )
     except httpx.HTTPError as exc:
         raise AccountsUnavailable(type(exc).__name__)
+    if response.status_code == 503 and _reason(response) == "service_paused":
+        return response
     if response.status_code not in (200, 401, 409, 429):
         raise AccountsUnavailable("reserve answered {}".format(response.status_code))
     return response
+
+
+def _reason(response: httpx.Response) -> Optional[str]:
+    try:
+        return response.json().get("reason")
+    except (ValueError, AttributeError):
+        return None
 
 
 def settle(request_id: uuid.UUID, feature: str, ok: bool) -> None:
@@ -322,7 +342,7 @@ def install(
             return _reject(503, "accounts_unavailable", "sign-in service unavailable, try again shortly")
         if answer.status_code == 401:
             return _reject(401, "unknown_user", "this account no longer exists; sign in again")
-        if answer.status_code in (409, 429):
+        if answer.status_code in (409, 429, 503):
             return JSONResponse(answer.json(), status_code=answer.status_code)
 
         ticket = Ticket(request_id, spec.feature)

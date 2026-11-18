@@ -90,3 +90,12 @@ def migrated():
 def clean_db(migrated):
     """Empty tables for each test that writes rows."""
     run_sql("TRUNCATE {} CASCADE".format(", ".join(TABLES)))
+
+
+@pytest.fixture(autouse=True)
+def no_daily_budgets(monkeypatch):
+    """No daily budget from the shell or from poc/accounts/.env (loaded by
+    config at import): one set there would pause features under every test.
+    test_budget.py sets its own."""
+    for name in [n for n in os.environ if n.startswith("ACCOUNTS_DAILY_BUDGET_USD")]:
+        monkeypatch.delenv(name)

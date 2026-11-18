@@ -1,6 +1,6 @@
 """The AI usage ledger (design 6.1, 6.2).
 
-    POST /usage/reserve  internal  {user_id, feature, request_id, units, model}
+    POST /usage/reserve  internal  {user_id, feature, request_id, units, model, cost_usd}
     POST /usage/settle   internal  {request_id, status: ok|failed, cost_usd}
     GET  /me/usage       app       remaining per feature and reset times
 
@@ -9,7 +9,8 @@ Reserve checks the cap and writes a `pending` row in one transaction that
 holds the user's row lock, so two parallel requests of one user cannot both
 take the last unit. A `failed` settle is not charged. A retried request_id
 runs again only when its row failed; a pending or ok one answers 409
-duplicate_request without a model call (design 6.1).
+duplicate_request without a model call (design 6.1). A feature over its
+daily cost budget answers 503 service_paused for everyone (budget.py).
 
 The internal routes take `X-Internal-Secret` (ACCOUNTS_INTERNAL_SECRET) and
 are never reachable through the Cloudflare tunnel: the tunnel's ingress
@@ -32,6 +33,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
+import budget
 import quotas
 from auth import current_user
 from models import AiUsage, User
@@ -68,6 +70,9 @@ class ReserveRequest(BaseModel):
     request_id: uuid.UUID
     units: int = Field(1, ge=1, le=10)
     model: str = Field("", max_length=200)
+    # The call's estimated cost, kept on the pending row until settle sets
+    # the real one, so the daily budgets (budget.py) see calls in flight.
+    cost_usd: Decimal = Field(Decimal(0), ge=0)
 
 
 class SettleRequest(BaseModel):
@@ -103,6 +108,10 @@ async def reserve(body: ReserveRequest, request: Request):
                 # a free, uncounted call; the user loses this unit (6.1).
                 return JSONResponse({"reason": "duplicate_request"}, status_code=409)
 
+        paused = await budget.paused(conn, body.feature, request.app.state.budgets, now)
+        if paused is not None:
+            return JSONResponse(paused, status_code=503)
+
         plan, environment = await quotas.entitlement(conn, body.user_id, now)
         cap = quotas.CAPS[(plan, environment)][body.feature]
         used = await quotas.usage(conn, body.user_id, cap, now)
@@ -124,7 +133,7 @@ async def reserve(body: ReserveRequest, request: Request):
             model=body.model,
             environment=environment,
             status="pending",
-            cost_usd=0,
+            cost_usd=body.cost_usd,
             created_at=now,
         )
         if existing is not None:
