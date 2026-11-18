@@ -7,7 +7,12 @@ reserve/settle is tested in poc/accounts/tests/test_usage.py.
 
 from __future__ import annotations
 
+import os
+import subprocess
+import sys
+import textwrap
 import uuid
+from pathlib import Path
 
 import httpx
 import jwt
@@ -214,3 +219,37 @@ def test_beta_always_path_keeps_the_beta_token_with_the_flag_off(client, fake, m
     assert fake.rows == {}
     assert client.post("/mood", headers=fake.headers()).status_code == 200
     assert fake.statuses("mood") == ["ok"]
+
+
+def test_without_pyjwt_the_gate_loads_and_the_beta_token_still_works():
+    """The beta Mac's service venvs have no PyJWT until someone runs
+    `pip install -r requirements.txt` after pulling. Every service imports
+    ai_auth at load, so a missing PyJWT must not take the beta token down
+    with it; a signed-in call then fails closed."""
+    script = textwrap.dedent(
+        """
+        import sys
+        sys.modules["jwt"] = None  # as if PyJWT were not installed
+        sys.modules["jwt.algorithms"] = None
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+        import ai_auth
+
+        app = FastAPI()
+
+        @app.post("/expand")
+        async def expand():
+            return {"ok": True}
+
+        ai_auth.install(app, metered={"/expand": ai_auth.Metered("expand")})
+        client = TestClient(app)
+        beta = client.post("/expand", headers={"Authorization": "Bearer beta-token"})
+        user = client.post("/expand", headers={"Authorization": "Bearer eyJhbGciOiJFUzI1NiIsImtpZCI6ImsifQ.e30.c2ln"})
+        print(beta.status_code, user.status_code, user.json()["reason"])
+        """
+    )
+    root = Path(__file__).resolve().parents[1]
+    env = dict(os.environ, PYTHONPATH=str(root), BETA_TOKENS="beta-token")
+    run = subprocess.run([sys.executable, "-c", script], cwd=str(root), env=env, capture_output=True, text=True, timeout=120)
+    assert run.returncode == 0, run.stderr[-2000:]
+    assert run.stdout.split()[-3:] == ["200", "503", "accounts_unavailable"]

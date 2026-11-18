@@ -46,11 +46,18 @@ from dataclasses import dataclass
 from typing import Any, Callable, Dict, Iterable, Mapping, Optional
 
 import httpx
-import jwt
 from fastapi.responses import JSONResponse
-from jwt.algorithms import ECAlgorithm
 
 import beta_auth
+
+try:
+    import jwt
+    from jwt.algorithms import ECAlgorithm
+except ImportError:
+    # PyJWT[crypto] is new in every service's requirements.txt. A venv that
+    # has not been reinstalled since must still serve the beta token, so
+    # only signed-in calls need it; they answer 503 until it is installed.
+    jwt = None  # type: ignore[assignment]
 
 log = logging.getLogger("ai_auth")
 
@@ -143,6 +150,8 @@ class InvalidToken(Exception):
 
 def verify_access_token(token: str) -> uuid.UUID:
     """The user id in one of our valid access tokens."""
+    if jwt is None:
+        raise AccountsUnavailable("PyJWT[crypto] is not installed")
     try:
         kid = jwt.get_unverified_header(token).get("kid")
     except jwt.PyJWTError:
@@ -312,6 +321,9 @@ def install(
             await asyncio.to_thread(ticket.settle, ok)
         return response
 
+    if jwt is None:
+        print("[ai_auth] WARNING: PyJWT[crypto] is not installed -- signed-in calls will "
+              "answer 503; run pip install -r requirements.txt")
     if not os.environ.get("ACCOUNTS_INTERNAL_SECRET", "").strip() and metered:
         print("[ai_auth] WARNING: ACCOUNTS_INTERNAL_SECRET is empty -- signed-in calls to "
               "{} will answer 503".format(sorted(metered)))
