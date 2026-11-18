@@ -23,6 +23,9 @@ import unittest
 
 SCRIPTS = pathlib.Path(__file__).resolve().parent.parent / "scripts"
 LAUNCHD = SCRIPTS / "launchd"
+# The interpreter both plists run the scripts with: bash 3.2 on macOS, even
+# where a newer bash comes first on PATH.
+BASH = "/bin/bash"
 MB = 1024 * 1024
 HEALTH = 'INFO:     127.0.0.1:50000 - "GET /health HTTP/1.1" 200 OK\n'
 OTHER = 'INFO:     127.0.0.1:50001 - "POST /generate HTTP/1.1" 200 OK\n'
@@ -35,7 +38,7 @@ class RotateLogsTest(unittest.TestCase):
 
     def rotate(self, *args):
         subprocess.run(
-            ["bash", str(LAUNCHD / "rotate_logs.sh"), str(self.dir),
+            [BASH, str(LAUNCHD / "rotate_logs.sh"), str(self.dir),
              "--max-mb", "1", *args],
             check=True, capture_output=True, text=True)
 
@@ -212,11 +215,11 @@ class WatchdogTest(unittest.TestCase):
     def set_pid(self, name, pid):
         (self.fake / f"ai.miranote.beta-{name}.pid").write_text(pid)
 
-    def run_watchdog(self, *args):
+    def run_watchdog(self, *args, **extra_env):
         env = dict(os.environ, FAKE=str(self.fake),
-                   PATH=f"{self.fake}:{os.environ['PATH']}")
+                   PATH=f"{self.fake}:{os.environ['PATH']}", **extra_env)
         out = subprocess.run(
-            ["bash", str(self.script), str(self.dir / "state"),
+            [BASH, str(self.script), str(self.dir / "state"),
              "--timeout", "1", "--grace", "0", *args],
             check=True, capture_output=True, text=True, env=env)
         return out.stdout
@@ -249,6 +252,20 @@ class WatchdogTest(unittest.TestCase):
         self.assertEqual(out, "")
         self.assertEqual(self.hung_lines, [])
         self.assertEqual(self.kickstarts(), [])
+
+    def test_reads_the_process_age_in_every_ps_format(self):
+        # ps etime is [[dd-]hh:]mm:ss with leading zeros, and "08" or "09"
+        # read as octal is an error, which would skip the service silently.
+        ps = self.fake / "ps"
+        ps.write_text('#!/bin/bash\necho "$FAKE_ETIME"\n')
+        ps.chmod(0o755)
+        for etime, grace, checked in (("08-09:08:09", 3600, True),
+                                      ("09:08", 600, False),
+                                      ("09:08", 500, True)):
+            with self.subTest(etime=etime, grace=grace):
+                out = self.run_watchdog("--fails", "9", "--grace", str(grace),
+                                        FAKE_ETIME=etime)
+                self.assertEqual("image: /health failed" in out, checked, out)
 
     def test_skips_a_service_that_is_not_loaded_or_has_no_pid(self):
         (self.fake / "ai.miranote.beta-image.pid").unlink()
