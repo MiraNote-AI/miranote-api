@@ -122,8 +122,9 @@ def _next_month_start(now: dt.datetime) -> dt.datetime:
 
 async def usage(conn: AsyncConnection, user_id: uuid.UUID, cap: Cap, now: dt.datetime) -> Usage:
     """Units used against `cap` and when the next unit frees up: the start
-    of next month, or when the oldest counted row leaves the rolling window
-    (None when nothing is counted)."""
+    of next month, or when the rolling window next lets one more unit in --
+    the oldest counted row leaving, unless usage is over the cap (None when
+    nothing is counted)."""
     # A month includes its first instant; a rolling window has dropped a row
     # exactly one window old (that is its resets_at).
     in_window = (
