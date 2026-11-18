@@ -21,6 +21,7 @@ import config
 import db
 import main
 import purge
+import tokens
 from tests.conftest import INTERNAL_SECRET, TEST_URL, new_ec_key_pem, run_sql
 from tests.test_auth import BUNDLE_ID, FakeApple, me, refresh, sign_in
 from tests.test_subscriptions import add_chain, api, configured, fake, row, sync  # noqa: F401 -- fixtures
@@ -31,13 +32,15 @@ DAY = dt.timedelta(days=1)
 
 class FakeAppleAuth(FakeApple):
     """Adds Apple's /auth/token and /auth/revoke; `token_status` and
-    `revoke_status` set what they answer."""
+    `revoke_status` set what they answer, `token_body` replaces the token
+    answer's JSON with raw text."""
 
     def __init__(self):
         super().__init__()
         self.calls = []
         self.token_status = 200
         self.revoke_status = 200
+        self.token_body = None
 
     def handler(self, request: httpx.Request) -> httpx.Response:
         url = str(request.url)
@@ -46,6 +49,8 @@ class FakeAppleAuth(FakeApple):
         form = dict(urllib.parse.parse_qsl(request.content.decode()))
         self.calls.append((url, form))
         if url == apple.APPLE_TOKEN_URL:
+            if self.token_body is not None:
+                return httpx.Response(self.token_status, text=self.token_body)
             if self.token_status != 200:
                 return httpx.Response(self.token_status, json={"error": "invalid_grant"})
             return httpx.Response(200, json={"access_token": "apple-at", "refresh_token": "apple-rt", "id_token": "x"})
@@ -182,6 +187,39 @@ def test_apple_errors_are_retried_then_given_up(client, fake_apple):
     assert r.status_code == 502 and r.json()["apple_revoked"] is False
     assert [url for url, _ in fake_apple.calls] == [apple.APPLE_TOKEN_URL] + [apple.APPLE_REVOKE_URL] * 3
     assert run_sql("SELECT deletion_requested_at IS NOT NULL FROM users") == [(True,)]
+
+
+@pytest.mark.parametrize("breakage", ["unreadable_apple_answer", "unusable_siwa_key"])
+def test_any_other_revoke_error_still_answers_deleted(client, fake_apple, monkeypatch, breakage):
+    # The account is marked before Apple is asked, so no answer may say it
+    # was not deleted: the app (ios #214) shows "could not be deleted" on a
+    # 500, and its Try again then gets a 401.
+    pair = sign_in(client, fake_apple.token()).json()
+    if breakage == "unreadable_apple_answer":
+        fake_apple.token_body = "<html>upstream error</html>"
+    else:
+        # APPLE_SIWA_KEY_PATH names a file that is not an EC private key.
+        monkeypatch.setattr(client.app.state.apple_revoker, "_key_pem", "not a key")
+    r = delete_me(client, pair["access_token"])
+    assert r.status_code == 502, r.text
+    assert r.json() == {"deleted": True, "apple_revoked": False, "detail": "Apple did not revoke the sign-in"}
+    assert run_sql("SELECT deletion_requested_at IS NOT NULL FROM users") == [(True,)]
+    assert me(client, pair["access_token"]).status_code == 401
+
+
+def test_a_refresh_token_that_outlived_the_delete_is_refused(client, fake_apple):
+    # A refresh racing DELETE /me holds its token's row lock, so the delete's
+    # revoke waits and then misses the successor the refresh stores: that
+    # session stays unrevoked until the purge. It must not refresh.
+    pair = sign_in(client, fake_apple.token()).json()
+    assert delete_me(client, pair["access_token"]).status_code == 200
+    raced = tokens.new_refresh_token()
+    run_sql(
+        "INSERT INTO sessions (user_id, family_id, token_hash, expires_at) "
+        "VALUES (:u, gen_random_uuid(), :h, now() + interval '60 days')",
+        u=uuid.UUID(pair["user_id"]), h=tokens.hash_refresh_token(raced),
+    )
+    assert refresh(client, raced).status_code == 401
 
 
 def test_delete_needs_the_code_and_a_valid_token(client, fake_apple):

@@ -31,6 +31,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import select, update
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 import budget
 import quotas
@@ -139,11 +140,18 @@ async def reserve(body: ReserveRequest, request: Request):
             # A failed request retried with the same id: charge it afresh.
             await conn.execute(update(ai_usage).where(ai_usage.c.request_id == body.request_id).values(**row))
         else:
-            await conn.execute(
-                ai_usage.insert().values(
-                    request_id=body.request_id, user_id=body.user_id, feature=body.feature, **row
+            inserted = (
+                await conn.execute(
+                    pg_insert(ai_usage)
+                    .values(request_id=body.request_id, user_id=body.user_id, feature=body.feature, **row)
+                    .on_conflict_do_nothing(index_elements=[ai_usage.c.request_id])
+                    .returning(ai_usage.c.request_id)
                 )
-            )
+            ).scalar_one_or_none()
+            if inserted is None:
+                # Another user's reserve with this id committed while this
+                # one waited on the key: the lock above is per user.
+                return JSONResponse({"reason": "request_id_conflict"}, status_code=409)
     return {
         "request_id": str(body.request_id),
         "plan": plan,

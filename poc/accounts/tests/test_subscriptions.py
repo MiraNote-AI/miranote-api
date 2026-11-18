@@ -8,10 +8,12 @@ from __future__ import annotations
 
 import asyncio
 import datetime as dt
+import logging
 import uuid
 
 import jwt
 import pytest
+from appstoreserverlibrary.api_client import APIException
 from appstoreserverlibrary.models.LastTransactionsItem import LastTransactionsItem
 from appstoreserverlibrary.models.StatusResponse import StatusResponse
 from appstoreserverlibrary.models.SubscriptionGroupIdentifierItem import SubscriptionGroupIdentifierItem
@@ -25,7 +27,7 @@ import db
 import main
 import subscriptions
 from tests.conftest import INTERNAL_SECRET, TEST_URL, run_sql
-from tests.fake_appstore import APP_APPLE_ID, FakeAppStore
+from tests.fake_appstore import APP_APPLE_ID, BUNDLE_ID, FakeAppStore
 
 DAY = dt.timedelta(days=1)
 
@@ -41,7 +43,10 @@ class FakeServerApi:
         self.tokens.append((otid, request.appAccountToken))
 
     async def get_all_subscription_statuses(self, otid):
-        return self.statuses[otid]
+        status = self.statuses[otid]
+        if isinstance(status, Exception):
+            raise status
+        return status
 
     async def async_close(self):
         pass
@@ -232,6 +237,29 @@ def test_a_stale_snapshot_is_not_applied(client, fake):
     assert row("4000").status == "active"
 
 
+def test_a_transaction_from_before_a_refund_does_not_undo_it(client, fake):
+    # The transaction a client kept from before the refund, sent with renewal
+    # info signed after it: the snapshot is as old as its older part.
+    user = new_user()
+    otid = "4001"
+    bought_at = dt.datetime.now(dt.timezone.utc) - dt.timedelta(minutes=10)
+    bought = fake.transaction(otid, token=user, signed_at=bought_at)
+    r = sync(client, user, fake, otid, tx=bought, renewal=fake.renewal(otid, signed_at=bought_at))
+    assert r.json()["plan"] == "plus"
+    refunded_at = bought_at + dt.timedelta(minutes=5)
+    notify(
+        client,
+        fake.notification(
+            "REFUND", None,
+            fake.transaction(otid, token=user, revoked=True, signed_at=refunded_at),
+            fake.renewal(otid, signed_at=refunded_at),
+        ),
+    )
+    r = sync(client, user, fake, otid, tx=bought, renewal=fake.renewal(otid))
+    assert r.status_code == 200
+    assert (r.json()["status"], r.json()["plan"]) == ("revoked", "free")
+
+
 @pytest.mark.parametrize(
     "tx_kwargs, renewal_kwargs, status, plan",
     [
@@ -359,6 +387,20 @@ def test_stored_but_not_applied(client, fake, type_):
     assert run_sql("SELECT type FROM app_store_notifications")[0][0] == type_
 
 
+def test_a_notification_with_app_data_is_stored(client, fake):
+    # RESCIND_CONSENT carries appData instead of data; like every other
+    # type, it is stored and answered 200 (5.4), or Apple keeps retrying it.
+    claims = {
+        "notificationType": "RESCIND_CONSENT",
+        "notificationUUID": str(uuid.uuid4()),
+        "appData": {"appAppleId": APP_APPLE_ID, "bundleId": BUNDLE_ID, "environment": "Sandbox"},
+        "version": "2.0",
+        "signedDate": int(dt.datetime.now(dt.timezone.utc).timestamp() * 1000),
+    }
+    assert notify(client, fake.sign(claims)).status_code == 200
+    assert run_sql("SELECT type, original_transaction_id FROM app_store_notifications") == [("RESCIND_CONSENT", None)]
+
+
 def test_a_retried_notification_is_skipped(client, fake):
     otid = "8300"
     signed = fake.notification("DID_RENEW", None, fake.transaction(otid), fake.renewal(otid))
@@ -402,6 +444,37 @@ def test_notification_links_only_unowned_chains_to_live_users(client, fake):
     # An owned chain is never moved by a notification.
     notify(client, fake.notification("DID_RENEW", None, fake.transaction("8600", token=other), fake.renewal("8600")))
     assert row("8600").user_id == live
+
+
+def test_a_sync_and_a_notification_linking_the_same_chain_do_not_deadlock(clean_db, configured, fake):
+    # Right after a purchase the app's sync and SUBSCRIBED can arrive
+    # together. The sync locks the user, then waits for the chain's row,
+    # which the notification has locked; the notification then links the
+    # chain to that user, and the foreign key check reads the user's row.
+    user = new_user()
+    otid = "8650"
+    add_chain(otid)
+
+    async def interleaved():
+        snap = await appstore.from_config().snapshot(fake.transaction(otid, token=user), fake.renewal(otid))
+        now = dt.datetime.now(dt.timezone.utc)
+        engine = db.create_engine(TEST_URL, poolclass=NullPool)
+        try:
+            async with engine.connect() as sync_conn, engine.connect() as notify_conn:
+                sync_tx, notify_tx = await sync_conn.begin(), await notify_conn.begin()
+                await subscriptions.apply_snapshot(notify_conn, snap, now)
+                await subscriptions.lock_user(sync_conn, user)
+                waiting = asyncio.ensure_future(subscriptions.apply_snapshot(sync_conn, snap, now))
+                await asyncio.sleep(0.3)
+                await asyncio.wait_for(subscriptions.adopt_by_token(notify_conn, snap, now, "notification"), 10)
+                await notify_tx.commit()
+                await asyncio.wait_for(waiting, 10)
+                await sync_tx.commit()
+        finally:
+            await engine.dispose()
+
+    asyncio.run(interleaved())
+    assert row(otid).user_id == user
 
 
 def test_offer_code_redeemed_outside_the_app_is_linked_at_the_next_sync(client, fake, api):
@@ -458,8 +531,61 @@ def test_backfill_recomputes_known_chains(clean_db, configured, fake, api):
     )
     store = appstore.from_config()
     store.clients = {"Sandbox": api, "Production": api}
-    assert _run_backfill(store, []) == 1
+    assert _run_backfill(store, []) == (1, [])
     assert row("9000").status == "revoked" and row("9000").user_id == user
+
+
+def test_backfill_carries_on_past_a_chain_that_fails(clean_db, configured, fake, api):
+    add_chain("9100")
+    add_chain("9101")
+    api.statuses["9100"] = APIException(404, 4040010, "Transaction id not found.")
+    api.statuses["9101"] = StatusResponse(
+        data=[
+            SubscriptionGroupIdentifierItem(
+                lastTransactions=[
+                    LastTransactionsItem(
+                        originalTransactionId="9101",
+                        signedTransactionInfo=fake.transaction("9101", revoked=True),
+                        signedRenewalInfo=fake.renewal("9101"),
+                    )
+                ]
+            )
+        ]
+    )
+    store = appstore.from_config()
+    store.clients = {"Sandbox": api, "Production": api}
+    assert _run_backfill(store, ["9100", "9101"]) == (1, ["9100"])
+    assert row("9101").status == "revoked"
+
+
+def test_backfill_links_an_unowned_chain_and_logs_it_as_its_own_source(clean_db, configured, fake, api):
+    user = new_user()
+    add_chain("9200")
+    api.statuses["9200"] = StatusResponse(
+        data=[
+            SubscriptionGroupIdentifierItem(
+                lastTransactions=[
+                    LastTransactionsItem(
+                        originalTransactionId="9200",
+                        signedTransactionInfo=fake.transaction("9200", token=user),
+                        signedRenewalInfo=fake.renewal("9200"),
+                    )
+                ]
+            )
+        ]
+    )
+    store = appstore.from_config()
+    store.clients = {"Sandbox": api, "Production": api}
+    records = []
+    handler = logging.Handler()
+    handler.emit = records.append
+    logging.getLogger("accounts").addHandler(handler)
+    try:
+        assert _run_backfill(store, []) == (1, [])
+    finally:
+        logging.getLogger("accounts").removeHandler(handler)
+    assert row("9200").user_id == user
+    assert [r.source for r in records if r.getMessage() == "subscription linked"] == ["backfill"]
 
 
 def test_backfill_needs_the_server_api_key(clean_db, configured):

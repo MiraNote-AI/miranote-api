@@ -82,7 +82,10 @@ Apple again and sends the fresh `authorization_code` (single-use, valid
 5 minutes). In one request the server:
 
 1. sets `users.deletion_requested_at` and revokes every session of the
-   user: from now on `/me`, `/auth/refresh` and the AI guard answer 401;
+   user: from now on `/me`, `/auth/refresh` and the metered AI routes
+   answer 401. As after sign-out, an access token already issued still
+   opens the unmetered AI routes (voice-to-text, for one) until it
+   expires, at most 1 h;
 2. exchanges the code at Apple (`/auth/token`) and revokes the refresh
    token it gets at once (`/auth/revoke`), with a client secret signed by
    the Sign in with Apple key. Network errors and 5xx are tried 3 times;
@@ -91,7 +94,7 @@ Apple again and sends the fresh `authorization_code` (single-use, valid
 | answer | meaning |
 |---|---|
 | `200 {"deleted": true, "apple_revoked": true}` | done |
-| `502 {"deleted": true, "apple_revoked": false, "detail"}` | our data is deleted; Apple refused the code or did not answer |
+| `502 {"deleted": true, "apple_revoked": false, "detail"}` | our data is deleted; Apple refused the code or did not answer, or the revoke failed on our side (e.g. an unusable key; the log names the error) |
 | `503 {"deleted": true, "apple_revoked": false, "detail"}` | our data is deleted; no Sign in with Apple key configured |
 | `401` / `422` | bad access token / no `authorization_code`; nothing deleted |
 
@@ -227,7 +230,8 @@ header is answered 404 by the service itself, secret or not.
   app's Apple ID on Production notifications). Production and Sandbox are
   both accepted and tagged on the row; Xcode / local StoreKit data is not.
 - The row is recomputed from the snapshot every time (design 5.1); one
-  signed earlier than the row's `last_signed_date` is not applied.
+  whose transaction or renewal info was signed earlier than the row's
+  `last_signed_date` is not applied.
 - Ownership (design 5.3): a chain whose `appAccountToken` is the caller is
   the caller's; one naming another live account is refused (403). With no
   token, or a deleted account's, an unowned chain is linked to the caller
@@ -264,7 +268,9 @@ recompute rows from Apple's Get All Subscription Statuses:
 ```
 
 With no ids it walks every chain in `subscriptions`; an id not in the table
-is looked up in Production, or Sandbox with `--sandbox`.
+is looked up in Production, or Sandbox with `--sandbox`. A chain that
+fails is skipped and listed at the end, and the command exits 1; rerun it
+with those ids.
 
 ## Keys
 
