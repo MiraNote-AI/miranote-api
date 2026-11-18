@@ -59,7 +59,7 @@ async def backfill(
             async with engine.begin() as conn:
                 for snap in snapshots:
                     await apply_snapshot(conn, snap, now)
-                    await adopt_by_token(conn, snap, now)
+                    await adopt_by_token(conn, snap, now, "backfill")
         except Exception as exc:  # noqa: BLE001 -- reported below; the chain is unchanged
             failed.append(otid)
             print("{}: failed ({})".format(otid, type(exc).__name__), file=sys.stderr)

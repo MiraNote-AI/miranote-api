@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import datetime as dt
+import logging
 import uuid
 
 import jwt
@@ -465,7 +466,7 @@ def test_a_sync_and_a_notification_linking_the_same_chain_do_not_deadlock(clean_
                 await subscriptions.lock_user(sync_conn, user)
                 waiting = asyncio.ensure_future(subscriptions.apply_snapshot(sync_conn, snap, now))
                 await asyncio.sleep(0.3)
-                await asyncio.wait_for(subscriptions.adopt_by_token(notify_conn, snap, now), 10)
+                await asyncio.wait_for(subscriptions.adopt_by_token(notify_conn, snap, now, "notification"), 10)
                 await notify_tx.commit()
                 await asyncio.wait_for(waiting, 10)
                 await sync_tx.commit()
@@ -555,6 +556,36 @@ def test_backfill_carries_on_past_a_chain_that_fails(clean_db, configured, fake,
     store.clients = {"Sandbox": api, "Production": api}
     assert _run_backfill(store, ["9100", "9101"]) == (1, ["9100"])
     assert row("9101").status == "revoked"
+
+
+def test_backfill_links_an_unowned_chain_and_logs_it_as_its_own_source(clean_db, configured, fake, api):
+    user = new_user()
+    add_chain("9200")
+    api.statuses["9200"] = StatusResponse(
+        data=[
+            SubscriptionGroupIdentifierItem(
+                lastTransactions=[
+                    LastTransactionsItem(
+                        originalTransactionId="9200",
+                        signedTransactionInfo=fake.transaction("9200", token=user),
+                        signedRenewalInfo=fake.renewal("9200"),
+                    )
+                ]
+            )
+        ]
+    )
+    store = appstore.from_config()
+    store.clients = {"Sandbox": api, "Production": api}
+    records = []
+    handler = logging.Handler()
+    handler.emit = records.append
+    logging.getLogger("accounts").addHandler(handler)
+    try:
+        assert _run_backfill(store, []) == (1, [])
+    finally:
+        logging.getLogger("accounts").removeHandler(handler)
+    assert row("9200").user_id == user
+    assert [r.source for r in records if r.getMessage() == "subscription linked"] == ["backfill"]
 
 
 def test_backfill_needs_the_server_api_key(clean_db, configured):

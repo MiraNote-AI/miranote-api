@@ -88,7 +88,7 @@ async def _is_live(conn: AsyncConnection, user_id: uuid.UUID) -> bool:
     return found is not None
 
 
-async def adopt_by_token(conn: AsyncConnection, snap: appstore.Snapshot, now: dt.datetime) -> None:
+async def adopt_by_token(conn: AsyncConnection, snap: appstore.Snapshot, now: dt.datetime, source: str) -> None:
     """Outside the app (notifications, backfill) a chain gets an owner only
     when it has none and its appAccountToken names a live user (5.4). A
     deleted account's id would fail the foreign key; an owned chain is
@@ -108,7 +108,7 @@ async def adopt_by_token(conn: AsyncConnection, snap: appstore.Snapshot, now: dt
         )
     ).scalar_one_or_none()
     if linked is not None:
-        _log_link(token, linked, "notification")
+        _log_link(token, linked, source)
 
 
 def _log_link(user_id: uuid.UUID, original_transaction_id: str, source: str) -> None:
@@ -233,6 +233,6 @@ async def app_store_notification(body: NotificationRequest, request: Request):
             log.info("notification already processed", extra={"type": n.type})
         elif n.snapshot is not None and n.type != appstore.CONSUMPTION_REQUEST:
             await apply_snapshot(conn, n.snapshot, now)
-            await adopt_by_token(conn, n.snapshot, now)
+            await adopt_by_token(conn, n.snapshot, now, "notification")
     log.info("notification", extra={"type": n.type, "subtype": n.subtype})
     return Response(status_code=200)
