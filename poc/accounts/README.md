@@ -166,7 +166,9 @@ recompute rows from Apple's Get All Subscription Statuses:
 ```
 
 With no ids it walks every chain in `subscriptions`; an id not in the table
-is looked up in Production, or Sandbox with `--sandbox`.
+is looked up in Production, or Sandbox with `--sandbox`. A chain that
+fails is skipped and listed at the end, and the command exits 1; rerun it
+with those ids.
 
 ## Keys
 

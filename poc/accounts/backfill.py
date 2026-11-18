@@ -21,7 +21,7 @@ import argparse
 import asyncio
 import datetime as dt
 import sys
-from typing import List
+from typing import List, Tuple
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncEngine
@@ -32,8 +32,12 @@ import db
 from subscriptions import adopt_by_token, apply_snapshot, subscriptions
 
 
-async def backfill(engine: AsyncEngine, store: appstore.AppStore, ids: List[str], default_env: str) -> int:
-    """Returns the number of snapshots applied."""
+async def backfill(
+    engine: AsyncEngine, store: appstore.AppStore, ids: List[str], default_env: str
+) -> Tuple[int, List[str]]:
+    """Returns the number of snapshots applied and the chains that failed.
+    A failing chain (unknown to Apple, refused data, Apple unreachable)
+    does not stop the others; rerun with its id."""
     if not store.verifiers or not store.clients:
         raise appstore.NotConfigured()
     async with engine.connect() as conn:
@@ -42,21 +46,27 @@ async def backfill(engine: AsyncEngine, store: appstore.AppStore, ids: List[str]
         )
     chains = {otid: known.get(otid, default_env) for otid in ids} if ids else known
     applied = 0
+    failed: List[str] = []
     for otid, environment in chains.items():
-        response = await store.clients[environment].get_all_subscription_statuses(otid)
-        snapshots = [
-            await store.snapshot(last.signedTransactionInfo, last.signedRenewalInfo)
-            for group in response.data or []
-            for last in group.lastTransactions or []
-        ]
-        now = dt.datetime.now(dt.timezone.utc)
-        async with engine.begin() as conn:
-            for snap in snapshots:
-                await apply_snapshot(conn, snap, now)
-                await adopt_by_token(conn, snap, now)
+        try:
+            response = await store.clients[environment].get_all_subscription_statuses(otid)
+            snapshots = [
+                await store.snapshot(last.signedTransactionInfo, last.signedRenewalInfo)
+                for group in response.data or []
+                for last in group.lastTransactions or []
+            ]
+            now = dt.datetime.now(dt.timezone.utc)
+            async with engine.begin() as conn:
+                for snap in snapshots:
+                    await apply_snapshot(conn, snap, now)
+                    await adopt_by_token(conn, snap, now)
+        except Exception as exc:  # noqa: BLE001 -- reported below; the chain is unchanged
+            failed.append(otid)
+            print("{}: failed ({})".format(otid, type(exc).__name__), file=sys.stderr)
+            continue
         applied += len(snapshots)
         print("{}: {} snapshot(s)".format(otid, len(snapshots)))
-    return applied
+    return applied, failed
 
 
 async def _main(argv: List[str]) -> int:
@@ -67,7 +77,7 @@ async def _main(argv: List[str]) -> int:
     store = appstore.from_config()
     engine = db.create_engine(config.database_url())
     try:
-        applied = await backfill(engine, store, args.ids, "Sandbox" if args.sandbox else "Production")
+        applied, failed = await backfill(engine, store, args.ids, "Sandbox" if args.sandbox else "Production")
     except appstore.NotConfigured:
         print("needs APPSTORE_ROOT_CERTS, APPSTORE_APP_APPLE_ID and the APPSTORE_KEY_* settings", file=sys.stderr)
         return 2
@@ -75,6 +85,9 @@ async def _main(argv: List[str]) -> int:
         await engine.dispose()
         await store.aclose()
     print("applied {} snapshot(s)".format(applied))
+    if failed:
+        print("not recomputed: {}".format(" ".join(failed)), file=sys.stderr)
+        return 1
     return 0
 
 

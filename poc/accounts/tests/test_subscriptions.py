@@ -12,6 +12,7 @@ import uuid
 
 import jwt
 import pytest
+from appstoreserverlibrary.api_client import APIException
 from appstoreserverlibrary.models.LastTransactionsItem import LastTransactionsItem
 from appstoreserverlibrary.models.StatusResponse import StatusResponse
 from appstoreserverlibrary.models.SubscriptionGroupIdentifierItem import SubscriptionGroupIdentifierItem
@@ -41,7 +42,10 @@ class FakeServerApi:
         self.tokens.append((otid, request.appAccountToken))
 
     async def get_all_subscription_statuses(self, otid):
-        return self.statuses[otid]
+        status = self.statuses[otid]
+        if isinstance(status, Exception):
+            raise status
+        return status
 
     async def async_close(self):
         pass
@@ -526,8 +530,31 @@ def test_backfill_recomputes_known_chains(clean_db, configured, fake, api):
     )
     store = appstore.from_config()
     store.clients = {"Sandbox": api, "Production": api}
-    assert _run_backfill(store, []) == 1
+    assert _run_backfill(store, []) == (1, [])
     assert row("9000").status == "revoked" and row("9000").user_id == user
+
+
+def test_backfill_carries_on_past_a_chain_that_fails(clean_db, configured, fake, api):
+    add_chain("9100")
+    add_chain("9101")
+    api.statuses["9100"] = APIException(404, 4040010, "Transaction id not found.")
+    api.statuses["9101"] = StatusResponse(
+        data=[
+            SubscriptionGroupIdentifierItem(
+                lastTransactions=[
+                    LastTransactionsItem(
+                        originalTransactionId="9101",
+                        signedTransactionInfo=fake.transaction("9101", revoked=True),
+                        signedRenewalInfo=fake.renewal("9101"),
+                    )
+                ]
+            )
+        ]
+    )
+    store = appstore.from_config()
+    store.clients = {"Sandbox": api, "Production": api}
+    assert _run_backfill(store, ["9100", "9101"]) == (1, ["9100"])
+    assert row("9101").status == "revoked"
 
 
 def test_backfill_needs_the_server_api_key(clean_db, configured):
