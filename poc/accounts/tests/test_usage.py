@@ -120,6 +120,21 @@ def test_free_chat_allows_five_turns_then_429_with_the_reset_time(client):
     assert [row.status for row in ledger(user)] == ["pending"] * 5
 
 
+def test_over_the_cap_resets_at_is_when_the_count_drops_below_it(client):
+    """Plus ran out with 10 chats in the window (back to free caps, the
+    #95 test script step 5): the next turn frees up when the fifth newest
+    row leaves the window, not the oldest."""
+    user = new_user()
+    add_usage(user, "chat", n=3, ago=dt.timedelta(hours=10))
+    add_usage(user, "chat", n=7, ago=dt.timedelta(hours=5))
+    r = reserve(client, user, "chat")
+    assert r.status_code == 429
+    fifth_newest = run_sql(
+        "SELECT created_at FROM ai_usage WHERE user_id = :u ORDER BY created_at DESC OFFSET 4 LIMIT 1", u=user
+    )[0][0]
+    assert dt.datetime.fromisoformat(r.json()["resets_at"]) == fifth_newest + dt.timedelta(hours=24)
+
+
 def test_rolling_window_forgets_rows_older_than_24_hours(client):
     user = new_user()
     add_usage(user, "expand", n=10, ago=dt.timedelta(hours=25))
