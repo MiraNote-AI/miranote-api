@@ -7,7 +7,12 @@ reserve/settle is tested in poc/accounts/tests/test_usage.py.
 
 from __future__ import annotations
 
+import os
+import subprocess
+import sys
+import textwrap
 import uuid
+from pathlib import Path
 
 import httpx
 import jwt
@@ -214,3 +219,81 @@ def test_beta_always_path_keeps_the_beta_token_with_the_flag_off(client, fake, m
     assert fake.rows == {}
     assert client.post("/mood", headers=fake.headers()).status_code == 200
     assert fake.statuses("mood") == ["ok"]
+
+
+def test_without_pyjwt_the_gate_loads_and_the_beta_token_still_works():
+    """The beta Mac's service venvs have no PyJWT until someone runs
+    `pip install -r requirements.txt` after pulling. Every service imports
+    ai_auth at load, so a missing PyJWT must not take the beta token down
+    with it; a signed-in call then fails closed."""
+    script = textwrap.dedent(
+        """
+        import sys
+        sys.modules["jwt"] = None  # as if PyJWT were not installed
+        sys.modules["jwt.algorithms"] = None
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+        import ai_auth
+
+        app = FastAPI()
+
+        @app.post("/expand")
+        async def expand():
+            return {"ok": True}
+
+        ai_auth.install(app, metered={"/expand": ai_auth.Metered("expand")})
+        client = TestClient(app)
+        beta = client.post("/expand", headers={"Authorization": "Bearer beta-token"})
+        user = client.post("/expand", headers={"Authorization": "Bearer eyJhbGciOiJFUzI1NiIsImtpZCI6ImsifQ.e30.c2ln"})
+        print(beta.status_code, user.status_code, user.json()["reason"])
+        """
+    )
+    root = Path(__file__).resolve().parents[1]
+    env = dict(os.environ, PYTHONPATH=str(root), BETA_TOKENS="beta-token")
+    run = subprocess.run([sys.executable, "-c", script], cwd=str(root), env=env, capture_output=True, text=True, timeout=120)
+    assert run.returncode == 0, run.stderr[-2000:]
+    assert run.stdout.split()[-3:] == ["200", "503", "accounts_unavailable"]
+
+
+def test_a_failed_jwks_refresh_is_not_retried_on_every_request(fake, monkeypatch):
+    """Design 3.2: no network hop per request. Once the cached keys are an
+    hour old and the accounts service is down (or hangs, while every
+    signed-in request waits on the lock), the keys in hand keep serving and
+    the refresh is tried again at most once a minute."""
+    now = [1000.0]
+    jwks = ai_auth._Jwks(clock=lambda: now[0])
+    assert jwks.key(fake.kid) is not None
+    fetches = []
+    handle = fake.handle
+
+    def counting(request):
+        if request.url.path == "/.well-known/jwks.json":
+            fetches.append(1)
+        return handle(request)
+
+    monkeypatch.setattr(ai_auth, "TRANSPORT", httpx.MockTransport(counting))
+    fake.reachable = False
+    now[0] += ai_auth.JWKS_TTL_SECONDS + 1
+    for _ in range(3):
+        assert jwks.key(fake.kid) is not None
+    assert len(fetches) == 1
+    fake.reachable = True
+    now[0] += ai_auth.JWKS_REFETCH_SECONDS + 1
+    assert jwks.key(fake.kid) is not None
+    assert len(fetches) == 2
+
+
+def test_a_user_token_has_the_beta_tokens_rate_limit(client, fake, monkeypatch):
+    """The unmetered routes (/describe, /clean, transcription, ...) have no
+    cap, and each is still a paid model call: the per-token limit that
+    bounds the beta token bounds each signed-in user the same way."""
+    monkeypatch.setattr(beta_auth, "_limiter", beta_auth.TokenRateLimiter(limit=3))
+    auth = {"Authorization": "Bearer " + fake.token()}
+    assert [client.post("/free", headers=auth).status_code for _ in range(4)] == [200, 200, 200, 429]
+    r = client.post("/expand", headers=dict(auth, **{"X-Request-ID": str(uuid.uuid4())}))
+    assert r.status_code == 429 and r.json()["reason"] == "rate_limited"
+    assert fake.rows == {}  # refused before anything was reserved
+    # Another user, and the beta token, have their own windows.
+    other = {"Authorization": "Bearer " + fake.token(user_id=uuid.uuid4())}
+    assert client.post("/free", headers=other).status_code == 200
+    assert client.post("/free", headers=BETA).status_code == 200

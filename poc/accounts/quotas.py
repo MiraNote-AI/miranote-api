@@ -122,23 +122,46 @@ def _next_month_start(now: dt.datetime) -> dt.datetime:
 
 async def usage(conn: AsyncConnection, user_id: uuid.UUID, cap: Cap, now: dt.datetime) -> Usage:
     """Units used against `cap` and when the next unit frees up: the start
-    of next month, or when the oldest counted row leaves the rolling window
-    (None when nothing is counted)."""
-    since = _month_start(now) if cap.window == MONTH else now - _ROLLING[cap.window]
+    of next month, or when the rolling window next lets one more unit in --
+    the oldest counted row leaving, unless usage is over the cap (None when
+    nothing is counted)."""
+    # A month includes its first instant; a rolling window has dropped a row
+    # exactly one window old (that is its resets_at).
+    in_window = (
+        ai_usage.c.created_at >= _month_start(now)
+        if cap.window == MONTH
+        else ai_usage.c.created_at > now - _ROLLING[cap.window]
+    )
+    counted = and_(
+        ai_usage.c.user_id == user_id,
+        ai_usage.c.feature.in_(cap.counts),
+        ai_usage.c.status != "failed",
+        in_window,
+    )
     used, oldest = (
         await conn.execute(
-            select(func.coalesce(func.sum(ai_usage.c.units), 0), func.min(ai_usage.c.created_at)).where(
-                and_(
-                    ai_usage.c.user_id == user_id,
-                    ai_usage.c.feature.in_(cap.counts),
-                    ai_usage.c.status != "failed",
-                    ai_usage.c.created_at > since,
-                )
-            )
+            select(func.coalesce(func.sum(ai_usage.c.units), 0), func.min(ai_usage.c.created_at)).where(counted)
         )
     ).one()
     if cap.window == MONTH:
         resets_at: Optional[dt.datetime] = _next_month_start(now)
+    elif oldest is None:
+        resets_at = None
     else:
-        resets_at = oldest + _ROLLING[cap.window] if oldest is not None else None
+        leaves_last = oldest
+        if used > cap.limit:
+            # Over the cap (Plus ran out, or a cap was lowered): a unit frees
+            # up only when the newest rows left in the window hold fewer
+            # than `limit` units, i.e. when the newest row that brings them
+            # to `limit` leaves -- a later row than the oldest.
+            newer = func.sum(ai_usage.c.units).over(
+                order_by=(ai_usage.c.created_at.desc(), ai_usage.c.request_id.desc())
+            )
+            ranked = select(ai_usage.c.created_at, newer.label("newer")).where(counted).subquery()
+            leaves_last = (
+                await conn.execute(
+                    select(func.max(ranked.c.created_at)).where(ranked.c.newer >= cap.limit)
+                )
+            ).scalar_one()
+        resets_at = leaves_last + _ROLLING[cap.window]
     return Usage(limit=cap.limit, used=int(used), window=cap.window, resets_at=resets_at)
