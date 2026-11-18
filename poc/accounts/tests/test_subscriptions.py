@@ -25,7 +25,7 @@ import db
 import main
 import subscriptions
 from tests.conftest import INTERNAL_SECRET, TEST_URL, run_sql
-from tests.fake_appstore import APP_APPLE_ID, FakeAppStore
+from tests.fake_appstore import APP_APPLE_ID, BUNDLE_ID, FakeAppStore
 
 DAY = dt.timedelta(days=1)
 
@@ -380,6 +380,20 @@ def test_stored_but_not_applied(client, fake, type_):
     assert notify(client, payload).status_code == 200
     assert row(otid) is None
     assert run_sql("SELECT type FROM app_store_notifications")[0][0] == type_
+
+
+def test_a_notification_with_app_data_is_stored(client, fake):
+    # RESCIND_CONSENT carries appData instead of data; like every other
+    # type, it is stored and answered 200 (5.4), or Apple keeps retrying it.
+    claims = {
+        "notificationType": "RESCIND_CONSENT",
+        "notificationUUID": str(uuid.uuid4()),
+        "appData": {"appAppleId": APP_APPLE_ID, "bundleId": BUNDLE_ID, "environment": "Sandbox"},
+        "version": "2.0",
+        "signedDate": int(dt.datetime.now(dt.timezone.utc).timestamp() * 1000),
+    }
+    assert notify(client, fake.sign(claims)).status_code == 200
+    assert run_sql("SELECT type, original_transaction_id FROM app_store_notifications") == [("RESCIND_CONSENT", None)]
 
 
 def test_a_retried_notification_is_skipped(client, fake):

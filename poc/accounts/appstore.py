@@ -147,7 +147,8 @@ def _claimed_environment(signed: str, notification: bool = False) -> str:
     except jwt.PyJWTError:
         raise InvalidSignedData("malformed")
     if notification:
-        claims = claims.get("data") or claims.get("summary") or {}
+        # Where the library reads it too; appData is RESCIND_CONSENT's.
+        claims = claims.get("data") or claims.get("summary") or claims.get("appData") or {}
     environment = claims.get("environment")
     if environment not in ENVIRONMENTS:
         raise InvalidSignedData("environment")
