@@ -13,6 +13,7 @@ import gzip
 import http.server
 import os
 import pathlib
+import re
 import shutil
 import socket
 import subprocess
@@ -20,7 +21,8 @@ import tempfile
 import threading
 import unittest
 
-LAUNCHD = pathlib.Path(__file__).resolve().parent.parent / "scripts" / "launchd"
+SCRIPTS = pathlib.Path(__file__).resolve().parent.parent / "scripts"
+LAUNCHD = SCRIPTS / "launchd"
 MB = 1024 * 1024
 HEALTH = 'INFO:     127.0.0.1:50000 - "GET /health HTTP/1.1" 200 OK\n'
 OTHER = 'INFO:     127.0.0.1:50001 - "POST /generate HTTP/1.1" 200 OK\n'
@@ -82,6 +84,30 @@ class RotateLogsTest(unittest.TestCase):
         self.rotate("--drop-health")
         self.assertEqual(self.gz("voice-service.log.1.gz"), "")
         self.assertEqual(log.read_text(), "")
+
+    def test_drop_health_keeps_the_lines_of_a_log_with_a_nul_byte(self):
+        # A NUL near the start (a truncated log's hole begins there) makes
+        # grep call the whole file binary and print "Binary file ...
+        # matches" in place of its lines.
+        log = self.dir / "image-service.log"
+        log.write_text("\0" + OTHER + HEALTH * (MB // len(HEALTH) + 1))
+        self.rotate("--drop-health")
+        self.assertEqual(self.gz("image-service.log.1.gz"), "\0" + OTHER)
+
+
+class LogWritersTest(unittest.TestCase):
+    def test_hand_started_servers_append_to_their_logs(self):
+        """rotate_logs.sh truncates every logs/beta/*.log in place. A server
+        that opened its log without O_APPEND (sh's `>`) keeps writing at its
+        old offset after the truncate, so the log turns into a hole of NULs
+        as large as before, and every later rotation copies the hole."""
+        plain = []
+        for script in sorted(SCRIPTS.glob("*.sh")):
+            for n, line in enumerate(script.read_text().splitlines(), 1):
+                redirect = re.search(r'(>+)\s*"\$LOGS/[^"]+\.log"', line)
+                if redirect and line.rstrip().endswith("&") and redirect.group(1) != ">>":
+                    plain.append(f"{script.name}:{n}")
+        self.assertEqual(plain, [])
 
 
 class _Healthy(http.server.BaseHTTPRequestHandler):

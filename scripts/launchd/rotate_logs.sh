@@ -3,10 +3,12 @@
 # daily by ai.miranote.beta-logrotate; safe to run by hand at any time.
 #
 # Every *.log in LOG_DIR over MAX_MB is copied aside and truncated
-# (copy-truncate). launchd opens StandardOutPath in append mode, so the
-# running job keeps writing to the same file, now from offset 0, and needs no
-# signal. A line written between the copy and the truncate is lost; that is
-# the price of not restarting anything.
+# (copy-truncate). launchd opens StandardOutPath in append mode, and so do
+# start_backends.sh and start_tunnel.sh, so the running server keeps writing
+# to the same file, now from offset 0, and needs no signal. A writer without
+# append mode would go on at its old offset and leave a hole of NULs. A line
+# written between the copy and the truncate is lost; that is the price of not
+# restarting anything.
 #
 # Generations are <log>.1.gz (newest) to <log>.KEEP.gz; the oldest is dropped.
 # With --drop-health the uvicorn access lines for GET /health are left out of
@@ -46,8 +48,10 @@ for log in "$LOG_DIR"/*.log; do
 
   # Copy first: a failed copy leaves the log and every generation as it was.
   # grep exits 1 when every line was a health line; that is not an error.
+  # -a: a NUL byte would otherwise make grep print "Binary file ... matches"
+  # in place of every line.
   if [ "$DROP_HEALTH" -eq 1 ]; then
-    { grep -v -e "$HEALTH_LINE" "$log" || [ $? -eq 1 ]; } | gzip >"$log.new.gz"
+    { grep -a -v -e "$HEALTH_LINE" "$log" || [ $? -eq 1 ]; } | gzip >"$log.new.gz"
   else
     gzip -c "$log" >"$log.new.gz"
   fi

@@ -65,8 +65,8 @@ delete that directory to reset them.
 
 `rotate_logs.sh` (api #101) copies every `logs/beta/*.log` over 10 MB to
 `<log>.1.gz`, without the `GET /health` access lines, and truncates the
-original in place. launchd writes the logs in append mode, so nothing is
-restarted. Three generations are kept.
+original in place. launchd and the hand-started scripts both write the
+logs in append mode, so nothing is restarted. Three generations are kept.
 
 Both run from this checkout and are installed by hand. The flags in the
 plist templates set the limits; edit the template and install again to
