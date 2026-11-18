@@ -163,7 +163,8 @@ Every loop ends in exactly one of two states:
 
 Never, in any state:
 - edit protected paths in a code repo (`CLAUDE.md`, `CONTRIBUTING.md`,
-  `docs/ai/**`, `.claude/skills/**`, `.github/workflows/checks.yml`);
+  `docs/ai/**`, `.claude/skills/**`, `.github/workflows/checks.yml`,
+  `.github/workflows/pr-discord-announce.yml`);
 - use the reserved bot branch prefix `chore/sync-ai-docs-*`;
 - weaken, skip, or delete a failing check or test to reach green
   (`verify-repo`, trust rule 3).
