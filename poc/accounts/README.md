@@ -140,7 +140,7 @@ last two rows rely on host jobs that are not in this repo yet (design
 
 | route | caller | body | answer |
 |---|---|---|---|
-| `POST /usage/reserve` | AI services | `{"user_id", "feature", "request_id", "units"?, "model"?}` | 200; 401 `unknown_user`; 409 `duplicate_request` / `request_id_conflict`; 429 `quota`; 503 `service_paused` |
+| `POST /usage/reserve` | AI services | `{"user_id", "feature", "request_id", "units"?, "model"?, "cost_usd"?}` | 200; 401 `unknown_user`; 409 `duplicate_request` / `request_id_conflict`; 429 `quota`; 503 `service_paused` |
 | `POST /usage/settle` | AI services | `{"request_id", "status": "ok" \| "failed", "cost_usd"}` | `{"status"}`; 404 `unknown_request` |
 | `GET /me/usage` | app, `Authorization: Bearer <access>` | | `{"plan", "environment", "features": {feature: {"limit", "used", "remaining", "window", "resets_at"}}}` |
 
@@ -162,7 +162,9 @@ last two rows rely on host jobs that are not in this repo yet (design
 ### Daily cost budgets (kill switch)
 
 Design 6.3, in `budget.py`. Reserve sums today's (UTC) `cost_usd` of the
-`ok` and `pending` rows; once a budget is reached, that feature answers
+`ok` and `pending` rows (a pending row at the estimate the AI service
+sent with reserve, `ai_auth.COST_USD`, until settle sets the real cost);
+once a budget is reached, that feature answers
 503 for everyone until the next UTC midnight or a raised budget (restart):
 
 ```json
@@ -183,8 +185,10 @@ stops the service at startup. The first refused call of the day logs
 `.venv/bin/python budget.py` prints today's spend per feature next to the
 budgets.
 
-Gaps: a `pending` row costs 0 until it settles, so calls already in flight
-can overshoot a budget by their own cost. Beta-token calls never reserve,
+Gaps: reserves of different users at the same moment can each see the
+spend before the others' rows commit (the lock is per user), so a budget
+can be overshot by those calls: at most one per database connection (15
+with SQLAlchemy's default pool). Beta-token calls never reserve,
 so they are neither counted nor paused (only beta_auth's rate limit bounds
 them) until `ACCEPT_BETA_TOKENS` is turned off; beta `/mood` stays
 unmetered until App Attest (design 6.5).

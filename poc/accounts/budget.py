@@ -18,8 +18,12 @@ pauses the feature at once.
 
 - The day is the UTC calendar day, not the rolling 24 h of design 6.3: it
   resets at a known time and matches what `python budget.py` prints.
-- A pending row counts, but its cost_usd is 0 until it settles, so calls
-  already in flight when a budget trips can overshoot it by their own cost.
+- A pending row counts at the estimate the AI service sent with reserve
+  (ai_auth.COST_USD) until settle sets the real cost, so calls in flight
+  and calls whose settle never arrives count too. Reserves of different
+  users at the same moment can still each see the spend before the others'
+  rows commit (the lock is per user), and overshoot by those calls: at
+  most one per database connection (15 with SQLAlchemy's default pool).
 - Only reserved calls count. Beta-token calls never reserve (ai_auth.py),
   so they are neither counted nor stopped by a budget.
 

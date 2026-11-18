@@ -1,6 +1,6 @@
 """The AI usage ledger (design 6.1, 6.2).
 
-    POST /usage/reserve  internal  {user_id, feature, request_id, units, model}
+    POST /usage/reserve  internal  {user_id, feature, request_id, units, model, cost_usd}
     POST /usage/settle   internal  {request_id, status: ok|failed, cost_usd}
     GET  /me/usage       app       remaining per feature and reset times
 
@@ -69,6 +69,9 @@ class ReserveRequest(BaseModel):
     request_id: uuid.UUID
     units: int = Field(1, ge=1, le=10)
     model: str = Field("", max_length=200)
+    # The call's estimated cost, kept on the pending row until settle sets
+    # the real one, so the daily budgets (budget.py) see calls in flight.
+    cost_usd: Decimal = Field(Decimal(0), ge=0)
 
 
 class SettleRequest(BaseModel):
@@ -129,7 +132,7 @@ async def reserve(body: ReserveRequest, request: Request):
             model=body.model,
             environment=environment,
             status="pending",
-            cost_usd=0,
+            cost_usd=body.cost_usd,
             created_at=now,
         )
         if existing is not None:

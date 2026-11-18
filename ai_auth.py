@@ -185,7 +185,15 @@ def reserve(user_id: uuid.UUID, feature: str, request_id: uuid.UUID, model: str)
             response = client.post(
                 "/usage/reserve",
                 headers=_internal_headers(),
-                json={"user_id": str(user_id), "feature": feature, "request_id": str(request_id), "model": model},
+                json={
+                    "user_id": str(user_id),
+                    "feature": feature,
+                    "request_id": str(request_id),
+                    "model": model,
+                    # The estimate, so a call in flight counts against the
+                    # daily budgets before it settles.
+                    "cost_usd": COST_USD[feature],
+                },
             )
     except httpx.HTTPError as exc:
         raise AccountsUnavailable(type(exc).__name__)
