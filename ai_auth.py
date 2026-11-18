@@ -21,6 +21,7 @@ Answers the app can act on, all JSON with a `reason`:
     401 missing_token | invalid_token | token_expired | unknown_user
     409 duplicate_request  (an X-Request-ID already counted; from accounts)
     429 quota  {"reason", "feature", "resets_at", ...}   (from accounts)
+    429 rate_limited  (beta_auth's per-token limit, per user)
     503 accounts_unavailable
 
 The client sends X-Request-ID (a UUID) per user action. A retry with the
@@ -46,11 +47,18 @@ from dataclasses import dataclass
 from typing import Any, Callable, Dict, Iterable, Mapping, Optional
 
 import httpx
-import jwt
 from fastapi.responses import JSONResponse
-from jwt.algorithms import ECAlgorithm
 
 import beta_auth
+
+try:
+    import jwt
+    from jwt.algorithms import ECAlgorithm
+except ImportError:
+    # PyJWT[crypto] is new in every service's requirements.txt. A venv that
+    # has not been reinstalled since must still serve the beta token, so
+    # only signed-in calls need it; they answer 503 until it is installed.
+    jwt = None  # type: ignore[assignment]
 
 log = logging.getLogger("ai_auth")
 
@@ -101,6 +109,7 @@ class _Jwks:
         self._lock = threading.Lock()
         self._keys: Dict[str, Any] = {}
         self._fetched_at: Optional[float] = None
+        self._failed_at: Optional[float] = None
 
     def _fetch(self) -> None:
         try:
@@ -121,13 +130,21 @@ class _Jwks:
             unknown = kid not in self._keys and (
                 self._fetched_at is None or now - self._fetched_at > JWKS_REFETCH_SECONDS
             )
-            if stale or unknown:
+            # After a failed refresh the keys in hand serve until the next
+            # try, a minute on: retrying per request would put a network hop
+            # (up to the timeout, under this lock) in front of every call.
+            backing_off = (
+                bool(self._keys) and self._failed_at is not None and now - self._failed_at <= JWKS_REFETCH_SECONDS
+            )
+            if (stale or unknown) and not backing_off:
                 try:
                     self._fetch()
+                    self._failed_at = None
                 except AccountsUnavailable:
                     # Keys we already have stay good; none at all is a 503.
                     if not self._keys:
                         raise
+                    self._failed_at = now
                     log.warning("jwks refresh failed, using cached keys")
             return self._keys.get(kid)
 
@@ -143,6 +160,8 @@ class InvalidToken(Exception):
 
 def verify_access_token(token: str) -> uuid.UUID:
     """The user id in one of our valid access tokens."""
+    if jwt is None:
+        raise AccountsUnavailable("PyJWT[crypto] is not installed")
     try:
         kid = jwt.get_unverified_header(token).get("kid")
     except jwt.PyJWTError:
@@ -285,6 +304,12 @@ def install(
             log.warning("jwks unavailable")
             return _reject(503, "accounts_unavailable", "sign-in service unavailable, try again shortly")
 
+        # The beta token's per-token limit, per user. Routes with no cap
+        # (/describe, /clean, transcription, ...) are still paid model calls,
+        # and this is what bounds them until the kill switch (design 6.3).
+        if not beta_auth._limiter.allow("user:{}".format(user_id)):
+            return _reject(429, "rate_limited", "too many requests, try again in a minute")
+
         spec = metered.get(path)
         if spec is None or request.method != "POST" or (spec.applies is not None and not spec.applies(request)):
             return await call_next(request)
@@ -312,6 +337,9 @@ def install(
             await asyncio.to_thread(ticket.settle, ok)
         return response
 
+    if jwt is None:
+        print("[ai_auth] WARNING: PyJWT[crypto] is not installed -- signed-in calls will "
+              "answer 503; run pip install -r requirements.txt")
     if not os.environ.get("ACCOUNTS_INTERNAL_SECRET", "").strip() and metered:
         print("[ai_auth] WARNING: ACCOUNTS_INTERNAL_SECRET is empty -- signed-in calls to "
               "{} will answer 503".format(sorted(metered)))

@@ -88,7 +88,7 @@ async def _is_live(conn: AsyncConnection, user_id: uuid.UUID) -> bool:
     return found is not None
 
 
-async def adopt_by_token(conn: AsyncConnection, snap: appstore.Snapshot, now: dt.datetime) -> None:
+async def adopt_by_token(conn: AsyncConnection, snap: appstore.Snapshot, now: dt.datetime, source: str) -> None:
     """Outside the app (notifications, backfill) a chain gets an owner only
     when it has none and its appAccountToken names a live user (5.4). A
     deleted account's id would fail the foreign key; an owned chain is
@@ -108,7 +108,7 @@ async def adopt_by_token(conn: AsyncConnection, snap: appstore.Snapshot, now: dt
         )
     ).scalar_one_or_none()
     if linked is not None:
-        _log_link(token, linked, "notification")
+        _log_link(token, linked, source)
 
 
 def _log_link(user_id: uuid.UUID, original_transaction_id: str, source: str) -> None:
@@ -116,6 +116,14 @@ def _log_link(user_id: uuid.UUID, original_transaction_id: str, source: str) -> 
         "subscription linked",
         extra={"user_id": str(user_id), "original_transaction_id": original_transaction_id, "source": source},
     )
+
+
+async def lock_user(conn: AsyncConnection, user_id: uuid.UUID) -> None:
+    """Serializes this user's syncs, so the per-day link cap holds. FOR NO
+    KEY UPDATE, not FOR UPDATE: the foreign key check of a notification
+    linking a chain to this user takes FOR KEY SHARE on the same row, and
+    against FOR UPDATE the two transactions deadlock."""
+    await conn.execute(select(users.c.id).where(users.c.id == user_id).with_for_update(key_share=True))
 
 
 async def _link(conn: AsyncConnection, otid: str, user_id: uuid.UUID, now: dt.datetime) -> None:
@@ -137,8 +145,7 @@ async def sync(body: SyncRequest, request: Request, user_id: uuid.UUID = Depends
     now = _now()
     reclaimed = False
     async with request.app.state.engine.begin() as conn:
-        # Serializes this user's syncs, so the per-day link cap holds.
-        await conn.execute(select(users.c.id).where(users.c.id == user_id).with_for_update())
+        await lock_user(conn, user_id)
         await apply_snapshot(conn, snap, now)
         row = (
             await conn.execute(
@@ -226,6 +233,6 @@ async def app_store_notification(body: NotificationRequest, request: Request):
             log.info("notification already processed", extra={"type": n.type})
         elif n.snapshot is not None and n.type != appstore.CONSUMPTION_REQUEST:
             await apply_snapshot(conn, n.snapshot, now)
-            await adopt_by_token(conn, n.snapshot, now)
+            await adopt_by_token(conn, n.snapshot, now, "notification")
     log.info("notification", extra={"type": n.type, "subtype": n.subtype})
     return Response(status_code=200)

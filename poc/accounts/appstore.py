@@ -88,7 +88,9 @@ class Snapshot:
 
     @property
     def signed_date(self) -> dt.datetime:
-        return _time(max(self.transaction.signedDate, self.renewal.signedDate))
+        # The older part's: with the newer one, a transaction kept from
+        # before a refund, sent with fresh renewal info, would undo it.
+        return _time(min(self.transaction.signedDate, self.renewal.signedDate))
 
     def row(self, now: dt.datetime) -> Dict[str, Any]:
         """The subscriptions columns, all recomputed from this snapshot."""
@@ -145,7 +147,8 @@ def _claimed_environment(signed: str, notification: bool = False) -> str:
     except jwt.PyJWTError:
         raise InvalidSignedData("malformed")
     if notification:
-        claims = claims.get("data") or claims.get("summary") or {}
+        # Where the library reads it too; appData is RESCIND_CONSENT's.
+        claims = claims.get("data") or claims.get("summary") or claims.get("appData") or {}
     environment = claims.get("environment")
     if environment not in ENVIRONMENTS:
         raise InvalidSignedData("environment")
