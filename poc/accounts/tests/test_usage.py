@@ -173,6 +173,17 @@ def test_last_months_images_do_not_count(client):
     assert reserve(client, user, "image_generate").status_code == 200
 
 
+def test_a_row_made_at_the_first_instant_of_the_month_counts_in_that_month(client):
+    user = new_user()
+    run_sql(
+        "INSERT INTO ai_usage (request_id, user_id, feature, model, units, environment, status, created_at) "
+        "SELECT gen_random_uuid(), :u, 'image_generate', '', 1, 'Production', 'ok', "
+        "date_trunc('month', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC' FROM generate_series(1, 5)",
+        u=user,
+    )
+    assert reserve(client, user, "image_generate").status_code == 429
+
+
 def test_failed_rows_are_not_charged(client):
     user = new_user()
     add_usage(user, "chat", n=5, status="failed")

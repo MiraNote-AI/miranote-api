@@ -124,12 +124,18 @@ async def usage(conn: AsyncConnection, user_id: uuid.UUID, cap: Cap, now: dt.dat
     """Units used against `cap` and when the next unit frees up: the start
     of next month, or when the oldest counted row leaves the rolling window
     (None when nothing is counted)."""
-    since = _month_start(now) if cap.window == MONTH else now - _ROLLING[cap.window]
+    # A month includes its first instant; a rolling window has dropped a row
+    # exactly one window old (that is its resets_at).
+    in_window = (
+        ai_usage.c.created_at >= _month_start(now)
+        if cap.window == MONTH
+        else ai_usage.c.created_at > now - _ROLLING[cap.window]
+    )
     counted = and_(
         ai_usage.c.user_id == user_id,
         ai_usage.c.feature.in_(cap.counts),
         ai_usage.c.status != "failed",
-        ai_usage.c.created_at > since,
+        in_window,
     )
     used, oldest = (
         await conn.execute(
