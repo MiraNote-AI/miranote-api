@@ -111,9 +111,11 @@ class LogWritersTest(unittest.TestCase):
 
 
 class _Healthy(http.server.BaseHTTPRequestHandler):
+    status = 200
+
     def do_GET(self):
         self.server.paths.append(self.path)
-        self.send_response(200)
+        self.send_response(self.status)
         self.end_headers()
         self.wfile.write(b'{"status":"ok"}')
 
@@ -121,8 +123,12 @@ class _Healthy(http.server.BaseHTTPRequestHandler):
         pass
 
 
-def _healthy_server():
-    srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), _Healthy)
+class _Failing(_Healthy):
+    status = 500
+
+
+def _healthy_server(handler=_Healthy):
+    srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
     srv.paths = []
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     return srv, srv.server_address[1]
@@ -172,6 +178,7 @@ class WatchdogTest(unittest.TestCase):
         self.addCleanup(self.healthy.server_close)
         self.addCleanup(self.healthy.shutdown)
         sock, hung_port, self.hung_lines, held = _hung_server()
+        self.hung_port = hung_port
         self.addCleanup(lambda: [c.close() for c in held])
         self.addCleanup(sock.close)
 
@@ -252,6 +259,25 @@ class WatchdogTest(unittest.TestCase):
         out = self.run_watchdog("--fails", "3")
         self.assertIn("image: /health answers again after 1 failed check(s)", out)
         self.assertFalse((self.dir / "state" / "image.fails").exists())
+
+    def test_says_how_health_failed(self):
+        failing, failing_port = _healthy_server(_Failing)
+        self.addCleanup(failing.server_close)
+        self.addCleanup(failing.shutdown)
+        free = socket.socket()
+        free.bind(("127.0.0.1", 0))
+        refused_port = free.getsockname()[1]
+        free.close()
+        table = self.script.parent / "beta_services.sh"
+        table.write_text(table.read_text() + (
+            f'BETA_SERVICES=("image:i:main:app:{self.hung_port}"'
+            f' "chat:c:main:app:{refused_port}" "voice:v:main:app:{failing_port}")\n'))
+        for name in ("chat", "voice"):
+            self.set_pid(name, str(os.getpid()))
+        out = self.run_watchdog("--fails", "3")
+        self.assertRegex(out, r"image: /health failed on :\d+ \(1/3\), .*: no answer in 1s\n")
+        self.assertRegex(out, r"chat: /health failed on :\d+ \(1/3\), .*: connection refused\n")
+        self.assertRegex(out, r"voice: /health failed on :\d+ \(1/3\), .*: HTTP 500\n")
 
     def test_only_ever_calls_loopback_health(self):
         self.run_watchdog("--fails", "1")

@@ -90,16 +90,27 @@ for spec in "${BETA_SERVICES[@]}"; do
   fi
 
   fails=$(cat "$fails_file" 2>/dev/null || echo 0)
-  if curl -s -f -m "$TIMEOUT" -o /dev/null "http://127.0.0.1:$svc_port/health"; then
+  code=$(curl -s -f -m "$TIMEOUT" -o /dev/null -w '%{http_code}' \
+         "http://127.0.0.1:$svc_port/health")
+  rc=$?
+  if [ "$rc" -eq 0 ]; then
     if [ "$fails" -gt 0 ]; then
       say "$svc_name: /health answers again after $fails failed check(s)"
     fi
     rm -f "$fails_file"; continue
   fi
+  # Say how it failed: a hung server, one that stopped listening and one
+  # that answers with an error each need a different look in its log.
+  case "$rc" in
+    7) why="connection refused" ;;
+    22) why="HTTP $code" ;;
+    28) why="no answer in ${TIMEOUT}s" ;;
+    *) why="curl exit $rc" ;;
+  esac
 
   fails=$((fails + 1))
   echo "$fails" >"$fails_file"
-  say "$svc_name: /health failed on :$svc_port ($fails/$FAILS), pid $pid up ${up}s"
+  say "$svc_name: /health failed on :$svc_port ($fails/$FAILS), pid $pid up ${up}s: $why"
   [ "$fails" -ge "$FAILS" ] || continue
 
   # Restarts in the last hour, one epoch second per line.
