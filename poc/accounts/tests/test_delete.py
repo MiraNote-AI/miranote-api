@@ -21,6 +21,7 @@ import config
 import db
 import main
 import purge
+import tokens
 from tests.conftest import INTERNAL_SECRET, TEST_URL, new_ec_key_pem, run_sql
 from tests.test_auth import BUNDLE_ID, FakeApple, me, refresh, sign_in
 from tests.test_subscriptions import add_chain, api, configured, fake, row, sync  # noqa: F401 -- fixtures
@@ -204,6 +205,21 @@ def test_any_other_revoke_error_still_answers_deleted(client, fake_apple, monkey
     assert r.json() == {"deleted": True, "apple_revoked": False, "detail": "Apple did not revoke the sign-in"}
     assert run_sql("SELECT deletion_requested_at IS NOT NULL FROM users") == [(True,)]
     assert me(client, pair["access_token"]).status_code == 401
+
+
+def test_a_refresh_token_that_outlived_the_delete_is_refused(client, fake_apple):
+    # A refresh racing DELETE /me holds its token's row lock, so the delete's
+    # revoke waits and then misses the successor the refresh stores: that
+    # session stays unrevoked until the purge. It must not refresh.
+    pair = sign_in(client, fake_apple.token()).json()
+    assert delete_me(client, pair["access_token"]).status_code == 200
+    raced = tokens.new_refresh_token()
+    run_sql(
+        "INSERT INTO sessions (user_id, family_id, token_hash, expires_at) "
+        "VALUES (:u, gen_random_uuid(), :h, now() + interval '60 days')",
+        u=uuid.UUID(pair["user_id"]), h=tokens.hash_refresh_token(raced),
+    )
+    assert refresh(client, raced).status_code == 401
 
 
 def test_delete_needs_the_code_and_a_valid_token(client, fake_apple):

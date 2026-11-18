@@ -82,7 +82,10 @@ Apple again and sends the fresh `authorization_code` (single-use, valid
 5 minutes). In one request the server:
 
 1. sets `users.deletion_requested_at` and revokes every session of the
-   user: from now on `/me`, `/auth/refresh` and the AI guard answer 401;
+   user: from now on `/me`, `/auth/refresh` and the metered AI routes
+   answer 401. As after sign-out, an access token already issued still
+   opens the unmetered AI routes (voice-to-text, for one) until it
+   expires, at most 1 h;
 2. exchanges the code at Apple (`/auth/token`) and revokes the refresh
    token it gets at once (`/auth/revoke`), with a client secret signed by
    the Sign in with Apple key. Network errors and 5xx are tried 3 times;

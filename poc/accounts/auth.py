@@ -149,6 +149,13 @@ async def refresh(body: RefreshRequest, request: Request):
         ).one_or_none()
         if row is None or row.revoked_at is not None or row.expires_at <= now:
             raise _unauthorized("invalid refresh token")
+        # Marked by DELETE /me. Its revoke can miss the successor of a
+        # refresh that held this row's lock at the time; refuse that too.
+        marked = (
+            await conn.execute(select(users.c.deletion_requested_at).where(users.c.id == row.user_id))
+        ).scalar_one_or_none()
+        if marked is not None:
+            raise _unauthorized("invalid refresh token")
         if row.replaced_at is not None and now - row.replaced_at > REFRESH_GRACE:
             # A replaced token used again: someone else holds a copy. End
             # the whole sign-in; the user signs in again (design 3.2).
