@@ -91,7 +91,7 @@ Apple again and sends the fresh `authorization_code` (single-use, valid
 | answer | meaning |
 |---|---|
 | `200 {"deleted": true, "apple_revoked": true}` | done |
-| `502 {"deleted": true, "apple_revoked": false, "detail"}` | our data is deleted; Apple refused the code or did not answer |
+| `502 {"deleted": true, "apple_revoked": false, "detail"}` | our data is deleted; Apple refused the code or did not answer, or the revoke failed on our side (e.g. an unusable key; the log names the error) |
 | `503 {"deleted": true, "apple_revoked": false, "detail"}` | our data is deleted; no Sign in with Apple key configured |
 | `401` / `422` | bad access token / no `authorization_code`; nothing deleted |
 

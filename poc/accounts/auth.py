@@ -220,7 +220,8 @@ async def delete_me(body: DeleteAccount, request: Request, user_id: uuid.UUID = 
     """Marks the account and ends every sign-in at once; purge.py deletes
     the rest within 24 hours. Then Apple is asked to revoke the app's
     access. Our data is deleted whatever Apple answers: 200 when Apple
-    revoked too, otherwise 502 (Apple refused or was unreachable) or 503
+    revoked too, otherwise 502 (Apple refused or was unreachable, or the
+    revoke failed on our side, e.g. an unusable key) or 503
     (no Sign in with Apple key), both with "deleted": true. There is no
     later retry: the code is single-use and we keep no Apple token."""
     now = _now()
@@ -240,8 +241,12 @@ async def delete_me(body: DeleteAccount, request: Request, user_id: uuid.UUID = 
             {"deleted": True, "apple_revoked": False, "detail": "Sign in with Apple revocation is not configured"},
             status_code=503,
         )
-    except apple.RevokeFailed as exc:
-        log.warning("apple revoke failed", extra={"user_id": str(user_id), "reason": str(exc)})
+    except Exception as exc:  # noqa: BLE001 -- the account is deleted already; say so
+        # RevokeFailed, or anything else, such as an unusable SIWA key or an
+        # answer from Apple that is not JSON; of those only the exception's
+        # type is logged.
+        reason = str(exc) if isinstance(exc, apple.RevokeFailed) else type(exc).__name__
+        log.warning("apple revoke failed", extra={"user_id": str(user_id), "reason": reason})
         return JSONResponse(
             {"deleted": True, "apple_revoked": False, "detail": "Apple did not revoke the sign-in"},
             status_code=502,
