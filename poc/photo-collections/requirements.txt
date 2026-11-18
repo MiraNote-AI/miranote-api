@@ -8,3 +8,5 @@ httpx>=0.27
 pytest>=8.0
 # Shrinks the photos calls B and C see (compose.py); also tools/probe_model.py and run_h1.py
 Pillow>=10.0
+# ai_auth (repo root) verifies our access tokens.
+PyJWT[crypto]>=2.8

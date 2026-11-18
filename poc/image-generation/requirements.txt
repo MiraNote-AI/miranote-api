@@ -18,3 +18,5 @@ requests>=2.31
 httpx==0.28.1
 # Test-only.
 pytest>=8.0
+# ai_auth (repo root) verifies our access tokens.
+PyJWT[crypto]>=2.8

@@ -45,6 +45,8 @@ def new_ec_key_pem() -> str:
 # A throwaway signing key for this run; tests that rotate set their own.
 os.environ["ACCOUNTS_SIGNING_KEY"] = new_ec_key_pem()
 os.environ.pop("ACCOUNTS_PREVIOUS_PUBLIC_KEY", None)
+INTERNAL_SECRET = "test-internal-secret"
+os.environ["ACCOUNTS_INTERNAL_SECRET"] = INTERNAL_SECRET
 
 from alembic import command  # noqa: E402
 from alembic.config import Config  # noqa: E402

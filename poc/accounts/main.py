@@ -4,10 +4,12 @@ MiraNote -- Accounts API (port 8007)
 Users, sessions, subscriptions and the AI usage ledger (design
 docs/specs/2026-11-06-accounts-and-subscriptions-design.md). Steps 1-2
 of api #95: the schema, the service around it, and Sign in with Apple with
-our own tokens (auth.py).
+our own tokens (auth.py). Step 3: entitlements and the AI usage ledger
+(usage.py, caps in quotas.py).
 
     GET /health -> {"status", "db"}; 503 when the database does not answer
     /auth/*, /.well-known/jwks.json, /me -> see auth.py
+    /usage/reserve, /usage/settle (internal), /me/usage -> see usage.py
 """
 
 from __future__ import annotations
@@ -29,6 +31,7 @@ import auth
 import config
 import db
 import tokens
+import usage
 
 log = logging.getLogger("accounts")
 
@@ -79,6 +82,7 @@ async def lifespan(app: FastAPI):
     """Create the engine and probe the database once, so the log says at
     startup whether it is reachable. The service still starts when it is not
     (Neon may be waking up); /health answers 503 until it is."""
+    app.state.internal_secret = config.internal_secret()
     app.state.signer = tokens.Signer(config.signing_key_pem(), config.previous_public_key_pem())
     app.state.engine = db.create_engine(config.database_url())
     app.state.apple_keys = apple.AppleKeys(httpx.AsyncClient(timeout=5, transport=APPLE_TRANSPORT))
@@ -105,9 +109,11 @@ app = FastAPI(
 
 # No beta gate: every route proves its caller itself (an Apple identity
 # token, one of our refresh tokens, or current_user), and the shared beta
-# token would collide with our own Bearer tokens. Starlette makes the
+# token would collide with our own Bearer tokens. The internal /usage
+# routes check a shared secret instead (usage.py). Starlette makes the
 # last-added middleware the outermost: CORS -> request log -> route.
 app.include_router(auth.router)
+app.include_router(usage.router)
 
 
 # Logs method, path, status and time only. Never the body, the headers or

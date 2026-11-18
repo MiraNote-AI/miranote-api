@@ -16,7 +16,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
 
-import beta_auth
+import ai_auth
 from openai import OpenAI
 from yanyi_client import YanYiError, health as yanyi_health, transcribe as yanyi_transcribe
 import emotion
@@ -265,11 +265,12 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="MiraNote Voice-to-Text", version="0.1.0", lifespan=lifespan)
 
 # Reachable from the public internet through the Cloudflare tunnel, so every
-# request needs a beta token. Installed before CORSMiddleware on purpose: the
-# most recently added middleware is the outermost, and CORS must stay outside
-# the gate to answer a browser preflight, which carries no Authorization
-# header.
-beta_auth.install(app)
+# request needs our access token or (while ACCEPT_BETA_TOKENS is on) the beta
+# token. Installed before CORSMiddleware on purpose: the most recently added
+# middleware is the outermost, and CORS must stay outside the gate to answer a
+# browser preflight, which carries no Authorization header.
+# Signed in, but not metered: transcription has no cap in design 2.
+ai_auth.install(app)
 
 # POC default is permissive so the unified local UI can call across ports.
 # Set CORS_ALLOW_ORIGIN (comma-separated) to scope this in any real

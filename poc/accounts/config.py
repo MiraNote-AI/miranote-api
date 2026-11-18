@@ -60,3 +60,15 @@ def previous_public_key_pem() -> str:
     "". It stays in the JWKS and is still accepted for one access-token
     lifetime after a rotation (design 3.2)."""
     return os.environ.get("ACCOUNTS_PREVIOUS_PUBLIC_KEY", "").strip()
+
+
+def internal_secret() -> str:
+    """Shared secret the AI services send in X-Internal-Secret to
+    /usage/reserve and /usage/settle. Required: without it the AI services
+    could not meter, and an empty secret must never match."""
+    secret = os.environ.get("ACCOUNTS_INTERNAL_SECRET", "").strip()
+    if not secret:
+        raise RuntimeError(
+            "ACCOUNTS_INTERNAL_SECRET is not set -- put it in poc/accounts/.env (see README.md)"
+        )
+    return secret

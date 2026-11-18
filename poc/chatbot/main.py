@@ -17,7 +17,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from dotenv import load_dotenv
 
-import beta_auth
+import ai_auth
 from openai import OpenAI
 
 from poc.chatbot import canvas, journal, tools
@@ -83,11 +83,11 @@ def _dispatcher(name: str, args: Dict[str, Any]) -> Any:
 app = FastAPI(title="MiraNote Chatbot", version="0.2.0")
 
 # Reachable from the public internet through the Cloudflare tunnel, so every
-# request needs a beta token. Installed before CORSMiddleware on purpose: the
-# most recently added middleware is the outermost, and CORS must stay outside
-# the gate to answer a browser preflight, which carries no Authorization
-# header.
-beta_auth.install(app)
+# request needs our access token or (while ACCEPT_BETA_TOKENS is on) the beta
+# token. Installed before CORSMiddleware on purpose: the most recently added
+# middleware is the outermost, and CORS must stay outside the gate to answer a
+# browser preflight, which carries no Authorization header.
+ai_auth.install(app, metered={"/chat": ai_auth.Metered("chat")})
 
 app.add_middleware(
     CORSMiddleware,

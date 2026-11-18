@@ -20,7 +20,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field, StringConstraints
 from dotenv import load_dotenv
 
-import beta_auth
+import ai_auth
 from openai import OpenAI
 
 load_dotenv()
@@ -40,11 +40,21 @@ client = OpenAI(**client_kwargs)
 app = FastAPI(title="MiraNote Text Clean & Expand", version="0.1.0")
 
 # Reachable from the public internet through the Cloudflare tunnel, so every
-# request needs a beta token. Installed before CORSMiddleware on purpose: the
-# most recently added middleware is the outermost, and CORS must stay outside
-# the gate to answer a browser preflight, which carries no Authorization
-# header.
-beta_auth.install(app)
+# request needs our access token or (while ACCEPT_BETA_TOKENS is on) the beta
+# token. Installed before CORSMiddleware on purpose: the most recently added
+# middleware is the outermost, and CORS must stay outside the gate to answer a
+# browser preflight, which carries no Authorization header.
+# /mood keeps taking the beta token until App Attest lands (design 6.5);
+# signed in, it is metered like the rest.
+ai_auth.install(
+    app,
+    metered={
+        "/expand": ai_auth.Metered("expand", model=MODEL),
+        "/polish": ai_auth.Metered("expand", model=MODEL),
+        "/mood": ai_auth.Metered("mood", model=MODEL),
+    },
+    beta_always={"/mood"},
+)
 
 app.add_middleware(
     CORSMiddleware,
