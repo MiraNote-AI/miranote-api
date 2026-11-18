@@ -172,15 +172,17 @@ once a budget is reached, that feature answers
 ```
 
 The AI services pass it to the app as is. All budgets are off by default
-(unset or empty = no budget); set them in `.env`, in USD:
+(unset or empty = no budget); set them in `poc/accounts/.env` (not the
+repo root `.env`, which this service does not read), in USD:
 
 | variable | budget |
 |---|---|
 | `ACCOUNTS_DAILY_BUDGET_USD` | all features together |
 | `ACCOUNTS_DAILY_BUDGET_USD_CHAT`, `_EXPAND`, `_IMAGE_GENERATE`, `_IMAGE_EDIT`, `_PHOTO_PUSH`, `_MOOD` | one feature |
 
-`0` pauses a feature at once. A malformed value or an unknown feature
-stops the service at startup. The first refused call of the day logs
+`0` pauses a feature at once. A malformed value or an unknown name
+stops the service at startup, and the `daily budgets` line logged at
+startup lists the budgets in force. The first refused call of the day logs
 `daily budget reached` (scope, budget, spend) once per process.
 `.venv/bin/python budget.py` prints today's spend per feature next to the
 budgets.

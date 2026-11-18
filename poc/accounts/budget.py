@@ -69,6 +69,10 @@ def from_env() -> Dict[str, Decimal]:
             scope = TOTAL
         elif name.startswith(ENV_PREFIX + "_"):
             scope = name[len(ENV_PREFIX) + 1:].lower()
+        elif name.startswith(ENV_PREFIX):
+            # A typo such as ACCOUNTS_DAILY_BUDGET_USDCHAT: refused below,
+            # not skipped, or the service would run unbudgeted without a word.
+            scope = name.lower()
         else:
             continue
         if not value.strip():

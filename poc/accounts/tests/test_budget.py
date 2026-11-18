@@ -145,6 +145,7 @@ def test_a_tripped_budget_logs_once(start, monkeypatch):
 
 @pytest.mark.parametrize("name, value", [
     ("ACCOUNTS_DAILY_BUDGET_USD_CAHT", "5"),
+    ("ACCOUNTS_DAILY_BUDGET_USDCHAT", "5"),
     ("ACCOUNTS_DAILY_BUDGET_USD_CHAT", "five"),
     ("ACCOUNTS_DAILY_BUDGET_USD_CHAT", "-1"),
     ("ACCOUNTS_DAILY_BUDGET_USD", "NaN"),
@@ -153,6 +154,15 @@ def test_a_malformed_budget_stops_startup(monkeypatch, name, value):
     monkeypatch.setenv(name, value)
     with pytest.raises(RuntimeError, match=name):
         budget.from_env()
+
+
+def test_startup_logs_the_budgets_in_force(start, monkeypatch):
+    """So the log shows whether the switch is armed, e.g. when a budget was
+    put in the repo root .env, which this service does not read."""
+    logged = []
+    monkeypatch.setattr(main.log, "info", lambda msg, extra=None: logged.append((msg, extra)))
+    start(chat="1.5", total="20")
+    assert [extra["budgets"] for msg, extra in logged if msg == "daily budgets"] == [{"chat": "1.5", "total": "20"}]
 
 
 def test_an_empty_budget_is_unset(monkeypatch):
