@@ -85,6 +85,13 @@ class RotateLogsTest(unittest.TestCase):
         self.assertEqual(self.gz("voice-service.log.1.gz"), "")
         self.assertEqual(log.read_text(), "")
 
+    def test_drop_health_keeps_failed_health_checks(self):
+        failed = 'INFO:     127.0.0.1:50002 - "GET /health HTTP/1.1" 500 Internal Server Error\n'
+        log = self.dir / "image-service.log"
+        log.write_text(HEALTH * (MB // len(HEALTH) + 1) + failed + OTHER)
+        self.rotate("--drop-health")
+        self.assertEqual(self.gz("image-service.log.1.gz"), failed + OTHER)
+
     def test_drop_health_keeps_the_lines_of_a_log_with_a_nul_byte(self):
         # A NUL near the start (a truncated log's hole begins there) makes
         # grep call the whole file binary and print "Binary file ...

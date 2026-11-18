@@ -11,9 +11,9 @@
 # restarting anything.
 #
 # Generations are <log>.1.gz (newest) to <log>.KEEP.gz; the oldest is dropped.
-# With --drop-health the uvicorn access lines for GET /health are left out of
-# the copy: the health checks and the watchdog write one every few minutes
-# per service and they carry nothing worth keeping.
+# With --drop-health the uvicorn access lines for a GET /health that answered
+# 200 are left out of the copy: the health checks and the watchdog write one
+# every few minutes per service and they carry nothing worth keeping.
 #
 # Usage: rotate_logs.sh LOG_DIR [--max-mb N] [--keep N] [--drop-health]
 set -u -o pipefail
@@ -36,7 +36,8 @@ done
 [ -d "$LOG_DIR" ] || { echo "no such directory: $LOG_DIR"; exit 1; }
 
 # uvicorn: INFO:     127.0.0.1:52345 - "GET /health HTTP/1.1" 200 OK
-HEALTH_LINE='"GET /health HTTP/[0-9.]*" '
+# Only the 200s: a failed check is rare and worth keeping.
+HEALTH_LINE='"GET /health HTTP/[0-9.]*" 200 '
 LIMIT=$((MAX_MB * 1024 * 1024))
 stamp() { date '+%Y-%m-%d %H:%M:%S'; }
 

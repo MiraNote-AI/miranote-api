@@ -7,8 +7,9 @@
 
   Once a day at 04:00, rotate_logs.sh copies aside and truncates every log in
   __LOGS__ over 10 MB, keeping three gzipped generations, and leaves the
-  /health access lines out of the copy. Nothing is restarted. A Mac that was
-  asleep at 04:00 runs it on wake; one that was off skips that day.
+  /health access lines that answered 200 out of the copy. Nothing is
+  restarted. A Mac that was asleep at 04:00 runs it on wake; one that was
+  off skips that day.
 
   Runs from the checkout, unlike the health check: a checkout that is gone
   leaves nothing to rotate anyway.
