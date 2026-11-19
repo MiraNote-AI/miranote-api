@@ -45,6 +45,17 @@ BLOCKED = ProviderError(
     "inappropriate content.'}"
 )
 UNKNOWN = ProviderError("POST generation -> 400 {'code': 'InvalidApiKey'}")
+# The account not entitled to the model (MiraNote-AI/miranote-ios#207). On
+# 2026-11-19 one beta sticker's image call got this and /health recorded
+# "z-image-turbo: 502 AccessDenied.Unpurchased"; the next /generate, an hour
+# later, drew fine. DashScope documents it as a 403, which http_client does not
+# retry, so this is the text of the first and only attempt. The body is
+# response.text, JSON with double quotes, which is what main._error_summary
+# read the code out of.
+UNPURCHASED = ProviderError(
+    'POST generation -> 403 {"code":"AccessDenied.Unpurchased",'
+    '"message":"Access to model denied.","request_id":"r-1"}'
+)
 
 MODEL = config.IMAGE_MODELS_BY_MODE["sticker"]
 
@@ -54,6 +65,18 @@ class ClassificationTests(unittest.TestCase):
 
     def test_arrearage_is_a_quota_problem(self):
         self.assertEqual(main._classify_provider_error(ARREARAGE), "quota")
+
+    def test_an_unpurchased_model_is_a_quota_problem(self):
+        # Not entitled to the model is not a rate limit, but the advice is the
+        # same: nothing on the phone fixes it, and it is not "start the Mac".
+        self.assertEqual(main._classify_provider_error(UNPURCHASED), "quota")
+
+    def test_the_unpurchased_fixture_is_what_the_beta_recorded(self):
+        # Wrapped in the generic 502 it got before the marker existed, the
+        # fixture summarises to exactly what /health showed on 2026-11-19.
+        wrapped = HTTPException(status_code=502, detail=f"{MODEL}: {UNPURCHASED}")
+        self.assertEqual(main._error_summary(wrapped),
+                         "502 AccessDenied.Unpurchased")
 
     def test_a_surviving_429_is_a_quota_problem(self):
         # http_client already backed off four times. Reaching here means the
@@ -92,6 +115,18 @@ class StatusTests(unittest.TestCase):
         # A second call cannot succeed and the account is already empty.
         _, provider = self._call(ARREARAGE)
         self.assertEqual(provider.call_count, config.NUMBER_OF_IMAGES)
+
+    def test_an_unpurchased_model_is_503_not_502(self):
+        error, provider = self._call(UNPURCHASED)
+        self.assertEqual(error.status_code, 503)
+        self.assertEqual(provider.call_count, config.NUMBER_OF_IMAGES,
+                         "a refused entitlement is not a reason to spend again")
+
+    def test_an_unpurchased_model_does_not_leak_provider_wording(self):
+        error, _ = self._call(UNPURCHASED)
+        self.assertEqual(error.detail, main.QUOTA_DETAIL)
+        self.assertNotIn("Unpurchased", error.detail)
+        self.assertNotIn("AccessDenied", error.detail)
 
     def test_a_content_block_is_502_and_not_retried(self):
         error, provider = self._call(BLOCKED)
@@ -169,6 +204,36 @@ class OverTheWireTests(unittest.IsolatedAsyncioTestCase):
         response = await self._post(ARREARAGE)
         self.assertEqual(response.status_code, 503)
         self.assertNotIn("Arrearage", response.text)
+
+    async def test_an_unpurchased_model_reaches_the_phone_as_503(self):
+        response = await self._post(UNPURCHASED)
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response.json()["detail"], main.QUOTA_DETAIL)
+        self.assertNotIn("Unpurchased", response.text)
+
+    async def test_an_unpurchased_expansion_reaches_the_phone_as_503(self):
+        """The expansion path classifies with the same function. A sticker
+        cannot be drawn without its expansion, so this refusal on the text
+        model answers 503 too, and no image call is spent. The text is the
+        image call's: the marker is a substring match, and the expander raises
+        through the same http_client."""
+        image = mock.Mock(return_value=[b"png"])
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=main.app),
+            base_url="http://probe",
+            headers={"Authorization": "Bearer test-token"},
+        ) as client:
+            with mock.patch.object(main.prompt_expander, "expand",
+                                   side_effect=UNPURCHASED), \
+                    mock.patch.object(main.image_providers, "generate", image):
+                response = await client.post(
+                    "/generate",
+                    json={"command": "sticker", "prompt": "a cat", "expand": True},
+                )
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response.json()["detail"], main.QUOTA_DETAIL)
+        self.assertNotIn("Unpurchased", response.text)
+        image.assert_not_called()
 
     async def test_a_content_block_reaches_the_phone_as_502(self):
         response = await self._post(BLOCKED)

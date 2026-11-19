@@ -149,6 +149,9 @@ def _quota_exhausted(model: str, error: Exception) -> HTTPException:
 _DASHSCOPE_QUOTA_MARKERS = (
     "Arrearage",      # account out of credit. Seen 2026-09-11: all three modes
                       # answered 400 Arrearage at once, mid-benchmark.
+    "AccessDenied.Unpurchased",  # account not entitled to the model. Seen
+                      # 2026-11-19 on the live beta: one sticker's z-image-turbo
+                      # call, fine again an hour later (miranote-ios#207).
     "429",            # survived http_client's four backoff attempts
 )
 _DASHSCOPE_REFUSAL_MARKERS = (
