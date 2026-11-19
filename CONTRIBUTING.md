@@ -134,8 +134,10 @@ PRs from the sync bot (branch matching `chore/sync-ai-docs-*`) are exempt.
 
 The files synced from `MiraNote-AI/.github` to each code repo
 (`CLAUDE.md`, `CONTRIBUTING.md`, `docs/ai/**`, `.claude/skills/**`,
-`.github/workflows/checks.yml`) must be edited only at the source. Direct
-edits to these paths inside a target repo will cause the eta check to fail.
+`.github/workflows/checks.yml`,
+`.github/workflows/pr-discord-announce.yml`) must be edited only at the
+source. Direct edits to these paths inside a target repo will cause the eta
+check to fail.
 
 The bot's own sync PRs (branch matching `chore/sync-ai-docs-*`) are
 exempt -- those are the legitimate update path.

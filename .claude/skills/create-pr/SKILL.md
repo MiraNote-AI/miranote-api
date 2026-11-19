@@ -81,7 +81,7 @@ PR body must contain at least one of:
 
 A Discord announcement to `#general` is sent automatically by the
 `pr-discord-announce.yml` workflow on PR open, posting as the team bot
-(mirabot/LumaBot). **Do not** send team-facing announcements through your
+(MiraBot). **Do not** send team-facing announcements through your
 local `miranote-discord` MCP server -- that connection runs under a personal
 bot identity (Meng-Proxy), not the team bot, and using it for team comms
 mixes identities in the channel. The MCP server is for personal read-only

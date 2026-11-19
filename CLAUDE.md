@@ -29,8 +29,9 @@ the `sync-ai-docs.yml` workflow propagates changes to every code repo.
 6. **PR has reference** -- every PR body references an issue, URL,
    spec, design, ADR, or RFC.
 7. **Protected paths** -- synced files (this file,
-   `CONTRIBUTING.md`, `docs/ai/`, `.github/workflows/checks.yml`) are
-   edited only in `MiraNote-AI/.github`.
+   `CONTRIBUTING.md`, `docs/ai/`, `.github/workflows/checks.yml`,
+   `.github/workflows/pr-discord-announce.yml`) are edited only in
+   `MiraNote-AI/.github`.
 
 Full text and enforcement details are in [CONTRIBUTING.md](CONTRIBUTING.md).
 
