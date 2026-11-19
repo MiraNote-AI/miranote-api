@@ -227,9 +227,10 @@ here:
   timestamps, not `status`, decide). A Production chain wins over a
   Sandbox one; a Sandbox entitlement has its own lower caps.
 - Caps are all in `quotas.py` (`CAPS`); change a number and restart.
-  Features: `chat`, `expand` (expand and polish), `image_generate`,
-  `image_edit` (stylize, AI border), `photo_push`, `mood` (signed-in
-  only). Windows: rolling 24 h, rolling 7 days, or the UTC month.
+  Features: `chat`, `expand` (expand, polish and rewrite),
+  `image_generate`, `image_edit` (stylize, AI border), `photo_push`,
+  `mood` (signed-in only). Windows: rolling 24 h, rolling 7 days, or
+  the UTC month.
 - Reserve locks the user's row (`SELECT ... FOR UPDATE`), counts the window
   and inserts a `pending` row in one transaction, so parallel requests
   cannot overshoot a cap. `pending` and `ok` rows count, `failed` rows do

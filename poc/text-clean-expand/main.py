@@ -51,6 +51,7 @@ ai_auth.install(
     metered={
         "/expand": ai_auth.Metered("expand", model=MODEL),
         "/polish": ai_auth.Metered("expand", model=MODEL),
+        "/rewrite": ai_auth.Metered("expand", model=MODEL),
         "/mood": ai_auth.Metered("mood", model=MODEL),
     },
     beta_always={"/mood"},
@@ -70,6 +71,7 @@ _PROMPT_DIR = Path(__file__).parent / "prompts"
 CLEAN_SYSTEM = (_PROMPT_DIR / "clean.txt").read_text(encoding="utf-8")
 EXPAND_SYSTEM = (_PROMPT_DIR / "expand.txt").read_text(encoding="utf-8")
 POLISH_SYSTEM = (_PROMPT_DIR / "polish.txt").read_text(encoding="utf-8")
+REWRITE_SYSTEM = (_PROMPT_DIR / "rewrite.txt").read_text(encoding="utf-8")
 SHORTEN_SYSTEM = (_PROMPT_DIR / "shorten.txt").read_text(encoding="utf-8")
 KEYWORDS_SYSTEM = (_PROMPT_DIR / "keywords.txt").read_text(encoding="utf-8")
 CAPTION_SYSTEM = (_PROMPT_DIR / "caption.txt").read_text(encoding="utf-8")
@@ -94,6 +96,29 @@ class ExpandResponse(BaseModel):
 class PolishResponse(BaseModel):
     original: str
     polished: str
+
+
+# Unlike /polish, /rewrite caps every field: the instruction can force the
+# language-mismatch retry, and a prompt near the model's context window makes
+# that retry fail as an uncharged 502 after a paid first call.
+REWRITE_TEXT_CAP = 8000
+REWRITE_INSTRUCTION_CAP = 500
+_REWRITE_TAG = re.compile(r"</?\s*(request|block|context)\s*>", re.IGNORECASE)
+
+
+class RewriteRequest(BaseModel):
+    text: str = Field(..., min_length=1, max_length=REWRITE_TEXT_CAP, description="The block to rewrite")
+    instruction: Annotated[
+        str, StringConstraints(strip_whitespace=True, min_length=1, max_length=REWRITE_INSTRUCTION_CAP)
+    ] = Field(..., description="The user's own words for the edit, e.g. 'make it warmer'")
+    context: Optional[str] = Field(
+        None, max_length=REWRITE_TEXT_CAP, description="Optional nearby text from the same note"
+    )
+
+
+class RewriteResponse(BaseModel):
+    original: str
+    rewritten: str
 
 
 class ShortenRequest(BaseModel):
@@ -391,6 +416,26 @@ async def polish_text(req: TextRequest):
     """Polish: final editing pass. Improve word choice and flow, preserve structure and meaning."""
     polished = await call_llm(POLISH_SYSTEM, req.text, max_tokens=2048, temperature=0.3)
     return PolishResponse(original=req.text, polished=polished)
+
+
+@app.post("/rewrite", response_model=RewriteResponse)
+async def rewrite_text(req: RewriteRequest):
+    """Rewrite one block following the user's free-form instruction."""
+    # The instruction and context are tagged data in the user turn, never
+    # part of the system prompt. The reply follows the block's language,
+    # not the instruction's.
+    # Our tag names are dropped from the fields so none can close its
+    # section and forge another.
+    def data(s: str) -> str:
+        return _REWRITE_TAG.sub("", s)
+
+    user_msg = f"<request>\n{data(req.instruction)}\n</request>\n\n<block>\n{data(req.text)}\n</block>"
+    if req.context:
+        user_msg += f"\n\n<context>\n{data(req.context)}\n</context>"
+    rewritten = await call_llm(
+        REWRITE_SYSTEM, user_msg, max_tokens=2048, language_ref=req.text, temperature=0.3
+    )
+    return RewriteResponse(original=req.text, rewritten=rewritten)
 
 
 @app.post("/shorten", response_model=ShortenResponse)

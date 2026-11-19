@@ -67,7 +67,7 @@ neither the text nor the result (section 6.5).
 |---|---|---|
 | Journal, canvas, layouts, sticker library, export, cutouts | on device, unlimited | unlimited |
 | Mood / star jar | on device: unlimited; `/mood`: 30 per rolling 24 h | same as Free |
-| Expand / polish | 10 per rolling 24 h | 300 per rolling 24 h |
+| Expand / polish / rewrite | 10 per rolling 24 h | 300 per rolling 24 h |
 | Mira chat | 5 turns per rolling 24 h | 200 turns per rolling 24 h |
 | Image generation (stickers, backgrounds) | 5 per UTC month, once per device | 100 images per UTC month, shared |
 | Image stylize / edit / borders | 2 per UTC month, once per device | (shared with the line above) |
@@ -374,7 +374,7 @@ public TestFlight testers cannot run up a real bill:
 | Feature | Sandbox entitlement | (Plus, for comparison) |
 |---|---|---|
 | Mira chat | 30 turns per rolling 24 h | 200 |
-| Expand / polish | 30 per rolling 24 h | 300 |
+| Expand / polish / rewrite | 30 per rolling 24 h | 300 |
 | Image generation and stylize / edit / borders | 10 per UTC month, shared | 100 |
 | Photo push | 1 per rolling 7 days | 1 per rolling 24 h |
 | `/mood` | 30 per rolling 24 h | 30 |
