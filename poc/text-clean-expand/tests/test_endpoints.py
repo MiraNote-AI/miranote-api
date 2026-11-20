@@ -263,6 +263,41 @@ def test_expand_invented_details_trigger_grounded_rewrite(client):
     assert "dad has been busy fixing the roof" in rewrite_note
 
 
+def test_a_failed_language_retry_keeps_the_first_reply(client):
+    """The first call succeeded and is paid for; its reply in the wrong
+    language is still usable, a 502 is not (api #123)."""
+    test_client, fake_llm = client
+    fake_llm.reply_with(ZH_REPLY)  # the retry finds nothing scripted and fails
+
+    r = test_client.post("/polish", json={"text": "today very tired"})
+
+    assert r.status_code == 200
+    assert r.json()["polished"] == ZH_REPLY
+    assert len(fake_llm.chat.completions.calls) == 2
+
+
+def test_expand_grounding_checker_call_failing_fails_open(client):
+    test_client, fake_llm = client
+    fake_llm.reply_with("A grounded expansion.")  # the checker call fails
+
+    r = test_client.post("/expand", json={"text": "short diary note"})
+
+    assert r.status_code == 200
+    assert r.json()["expanded"] == "A grounded expansion."
+    assert len(fake_llm.chat.completions.calls) == 2
+
+
+def test_expand_failed_grounded_rewrite_keeps_the_reply_it_checked(client):
+    test_client, fake_llm = client
+    fake_llm.reply_with("Called mom; dad fixed the roof.", '["dad fixed the roof"]')
+
+    r = test_client.post("/expand", json={"text": "called mom today"})
+
+    assert r.status_code == 200
+    assert r.json()["expanded"] == "Called mom; dad fixed the roof."
+    assert len(fake_llm.chat.completions.calls) == 3
+
+
 def test_expand_grounding_checker_garbage_fails_open(client):
     test_client, fake_llm = client
     fake_llm.reply_with("A grounded expansion.", "not json at all")
