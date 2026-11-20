@@ -98,9 +98,11 @@ class PolishResponse(BaseModel):
     polished: str
 
 
-# Unlike /polish, /rewrite caps every field: the instruction can force the
-# language-mismatch retry, and a prompt near the model's context window makes
-# that retry fail as an uncharged 502 after a paid first call.
+# Unlike /polish, /rewrite caps every field: that bounds what one call and
+# its language retry cost, and keeps the prompt well inside the model's
+# context window. The caps count code points, as len() does: a Chinese
+# character is one, an emoji with a skin tone or U+FE0F is two or more
+# (Swift's String.count calls it one).
 REWRITE_TEXT_CAP = 8000
 REWRITE_INSTRUCTION_CAP = 500
 # Our tag names in any case, with spaces or line breaks, attributes, a

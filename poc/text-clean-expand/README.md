@@ -25,6 +25,10 @@ ending") applied to the block being written.
   is the block, 1-8000 characters; `instruction` is the user's words,
   trimmed, 1-500 characters; `context` is optional nearby note text, at
   most 8000 characters, used for reference only and never rewritten.
+  The caps count Unicode code points (Python's `len`), not bytes: a
+  Chinese character is one, an emoji with a skin tone or a variation
+  selector (U+FE0F) is two or more, though Swift's `String.count` calls
+  it one. A client cutting to the cap counts `unicodeScalars`.
 - Response: `{"original": str, "rewritten": str}`, in the block's
   language whatever the instruction's language.
 - Errors: 422 for an empty or missing `instruction` / `text` or a field

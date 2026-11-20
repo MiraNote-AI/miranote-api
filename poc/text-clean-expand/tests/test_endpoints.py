@@ -140,6 +140,30 @@ def test_rewrite_rejects_bad_input_before_the_model(client, body):
     assert fake_llm.chat.completions.calls == []
 
 
+HAN = chr(0x6696)  # one Chinese character: 1 code point, 3 UTF-8 bytes
+HEART = chr(0x2764) + chr(0xFE0F)  # one emoji to Swift's String.count, 2 code points
+
+
+@pytest.mark.parametrize(
+    "text,instruction,status",
+    [
+        (HAN * 8000, HAN * 500, 200),
+        (HAN * 8001, "warmer", 422),
+        ("a line", HAN * 501, 422),
+        ("a line", chr(0x1F600) * 500, 200),
+        ("a line", HEART * 250, 200),
+        ("a line", HEART * 251, 422),  # 502 code points, though Swift counts 251
+    ],
+    ids=["han-8000-500", "han-text-8001", "han-instruction-501", "emoji-500", "heart-250", "heart-251"],
+)
+def test_rewrite_caps_count_code_points_not_bytes(client, text, instruction, status):
+    test_client, fake_llm = client
+    fake_llm.reply_with(ZH_REPLY if HAN in text else "A warmer line.")
+    r = test_client.post("/rewrite", json={"text": text, "instruction": instruction})
+    assert r.status_code == status
+    assert len(fake_llm.chat.completions.calls) == (1 if status == 200 else 0)
+
+
 def test_shorten_returns_short_version(client):
     test_client, fake_llm = client
     fake_llm.reply_with("Coffee strong, morning bright.")
