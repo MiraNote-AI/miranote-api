@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import List, Optional
+from typing import Optional
 
 from dotenv import load_dotenv
 
@@ -92,13 +92,16 @@ def taste_events_enabled() -> bool:
 # App Store (design 5). All optional: without them the service still starts
 # and /subscriptions/sync and /appstore/notifications answer 503.
 #
-# Apple's root certificates (DER, e.g. AppleRootCA-G3.cer from
-# https://www.apple.com/certificateauthority/), comma-separated paths. Every
-# signed transaction, renewal info and notification must chain to one.
+# Every signed transaction, renewal info and notification must chain to
+# Apple's root certificate: AppleRootCA-G3.cer from
+# https://www.apple.com/certificateauthority/, committed in certs/ as PEM
+# (`openssl x509 -inform DER`) and pinned by the SHA-256 of Apple's DER
+# file (appstore.from_config checks it at startup). No setting replaces
+# it; the tests patch these two names (tests/fake_appstore.py).
 # APPSTORE_APP_APPLE_ID is the app's numeric Apple ID in App Store Connect;
 # Production notifications must carry it.
-def appstore_root_cert_paths() -> List[str]:
-    return [p.strip() for p in os.getenv("APPSTORE_ROOT_CERTS", "").split(",") if p.strip()]
+APPLE_ROOT_CERT_PATH = HERE / "certs" / "AppleRootCA-G3.pem"
+APPLE_ROOT_CERT_SHA256 = "63343abfb89a6a03ebb57e9b3f5fa7be7c4f5c756f3017b3a8c488c3653e9179"
 
 
 def appstore_app_apple_id() -> Optional[int]:

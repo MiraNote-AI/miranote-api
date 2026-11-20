@@ -5,8 +5,9 @@ to run any number of times, in any order, on any number of hosts.
   do the rest: its sessions go, and subscriptions and ai_usage keep their
   rows with user_id set to null (pseudonymized). Taste events are
   already gone: DELETE /me deletes them, and they cascade. The running
-  service does a pass every PURGE_INTERVAL (main.py), well inside the 24
-  hours the app promises; signing in again purges that one account at once (auth.py).
+  service does a pass FIRST_PURGE_DELAY after start, then every
+  PURGE_INTERVAL (main.py), well inside the 24 hours the app promises;
+  signing in again purges that one account at once (auth.py).
 - Retention: rows past the periods in _retention are deleted, owned or
   not.
   app_store_notifications never held an owner: payloads are stored
@@ -33,6 +34,8 @@ from models import AiUsage, AppAttestKey, AppStoreNotification, Session, Subscri
 
 log = logging.getLogger("accounts.purge")
 
+# The first pass waits only for startup to settle, not a whole interval.
+FIRST_PURGE_DELAY = dt.timedelta(seconds=60)
 PURGE_INTERVAL = dt.timedelta(hours=1)
 
 users = User.__table__
@@ -92,10 +95,13 @@ async def run_once(engine: AsyncEngine, now: dt.datetime) -> Dict[str, int]:
 
 
 async def run_forever(engine: AsyncEngine) -> None:
-    """main.py runs this for the service's lifetime, every PURGE_INTERVAL.
-    A failed run is logged and retried at the next one."""
+    """main.py runs this for the service's lifetime: FIRST_PURGE_DELAY
+    after start, then every PURGE_INTERVAL. A failed run is logged and
+    retried at the next one."""
+    delay = FIRST_PURGE_DELAY
     while True:
-        await asyncio.sleep(PURGE_INTERVAL.total_seconds())
+        await asyncio.sleep(delay.total_seconds())
+        delay = PURGE_INTERVAL
         try:
             await run_once(engine, dt.datetime.now(dt.timezone.utc))
         except Exception as exc:  # noqa: BLE001 -- the next run retries

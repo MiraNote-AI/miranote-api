@@ -59,9 +59,7 @@ def fake():
 
 @pytest.fixture
 def configured(fake, tmp_path, monkeypatch):
-    root = tmp_path / "root.cer"
-    root.write_bytes(fake.root_der())
-    monkeypatch.setenv("APPSTORE_ROOT_CERTS", str(root))
+    fake.trust(monkeypatch, tmp_path)
     monkeypatch.setenv("APPSTORE_APP_APPLE_ID", str(APP_APPLE_ID))
     monkeypatch.setenv("APPSTORE_ONLINE_CHECKS", "0")
 
@@ -310,7 +308,7 @@ def test_sync_refuses_data_apple_did_not_sign_for_us(client, fake, case):
 
 
 def test_unconfigured_service_starts_and_answers_503(clean_db, fake, monkeypatch):
-    monkeypatch.delenv("APPSTORE_ROOT_CERTS", raising=False)
+    monkeypatch.delenv("APPSTORE_APP_APPLE_ID", raising=False)
     with TestClient(main.app) as c:
         assert c.get("/health").status_code == 200
         user = new_user()

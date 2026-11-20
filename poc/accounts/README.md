@@ -85,10 +85,9 @@ Apple again and sends the fresh `authorization_code` (single-use, valid
 
 1. sets `users.deletion_requested_at`, revokes every session of the
    user and deletes their taste events: from now on `/me`,
-   `/auth/refresh`, `/events` and the metered AI routes answer 401. As
-   after sign-out, an access token already issued still opens the
-   unmetered AI routes (voice-to-text, for one) until it expires, at
-   most 1 h;
+   `/auth/refresh`, `/events` and every AI route answer 401, even to an
+   access token issued before (the unmetered AI routes, voice-to-text for
+   one, ask the internal `/usage/user` on every signed-in call);
 2. exchanges the code at Apple (`/auth/token`) and revokes the refresh
    token it gets at once (`/auth/revoke`), with a client secret signed by
    the Sign in with Apple key. Network errors and 5xx are tried 3 times;
@@ -106,11 +105,11 @@ account is deleted. If Apple was not told, the user can still remove
 MiraNote under Sign in with Apple in their Apple ID settings.
 
 The purge (`purge.py`) then deletes the marked account: the service runs
-it every hour, `.venv/bin/python purge.py` runs it once by hand. Signing
-in again with the same Apple ID purges the old account first and creates
-a new, empty one; its subscription has no owner and the first Restore
-reclaims it (Subscriptions API below, including the 30-day re-link
-limit).
+it a minute after start and then every hour, `.venv/bin/python purge.py`
+runs it once by hand. Signing in again with the same Apple ID purges the
+old account first and creates a new, empty one; its subscription has no
+owner and the first Restore reclaims it (Subscriptions API below,
+including the 30-day re-link limit).
 
 Settings (`.env`, optional; without them deletion answers 503 as above):
 
@@ -220,6 +219,7 @@ here:
 |---|---|---|---|
 | `POST /usage/reserve` | AI services | `{"user_id", "feature", "request_id", "units"?, "model"?, "cost_usd"?}` | 200; 401 `unknown_user`; 409 `duplicate_request` / `request_id_conflict`; 429 `quota`; 503 `service_paused` |
 | `POST /usage/settle` | AI services | `{"request_id", "status": "ok" \| "failed", "cost_usd"}` | `{"status"}`; 404 `unknown_request` |
+| `POST /usage/user` | AI services, on every signed-in call that does not reserve | `{"user_id"}` | `{"user_id"}`; 401 `unknown_user` (deleted or never existed) |
 | `GET /me/usage` | app, `Authorization: Bearer <access>` | | `{"plan", "environment", "features": {feature: {"limit", "used", "remaining", "window", "resets_at"}}}` |
 
 - Entitlement: Plus while the user owns an unrevoked subscription whose
@@ -233,8 +233,11 @@ here:
   the UTC month.
 - Reserve locks the user's row (`SELECT ... FOR UPDATE`), counts the window
   and inserts a `pending` row in one transaction, so parallel requests
-  cannot overshoot a cap. `pending` and `ok` rows count, `failed` rows do
-  not. A retried `request_id` runs again only if its row failed.
+  cannot overshoot a cap. `ok` rows count, `failed` rows do not, and a
+  `pending` row counts for 10 minutes (`PENDING_COUNTS_FOR`): long enough
+  for the longest call (the 300 s compose cap), so a call that never
+  settles stops holding its unit. A retried `request_id` runs again only
+  if its row failed.
 - A 429 body: `{"reason": "quota", "feature", "plan", "limit",
   "resets_at"}`; `resets_at` is when the next unit frees up.
 
@@ -276,7 +279,7 @@ unmetered until App Attest (design 6.5).
 
 ### Internal routes stay off the tunnel
 
-`/usage/reserve` and `/usage/settle` take `X-Internal-Secret`
+`/usage/reserve`, `/usage/settle` and `/usage/user` take `X-Internal-Secret`
 (`ACCOUNTS_INTERNAL_SECRET`, the same value in the repo root `.env` for the
 AI services). The AI services call them on `127.0.0.1:8007`, never through
 the tunnel. The tunnel must not serve them: put this rule **above** the
@@ -302,7 +305,7 @@ header is answered 404 by the service itself, secret or not.
   transaction and of the renewal info from `Product.SubscriptionInfo.Status`,
   after a purchase, on launch when signed in, and on Restore.
 - Everything Apple signs is verified with Apple's `app-store-server-library`
-  (chain to `APPSTORE_ROOT_CERTS`, Apple's OIDs, our bundle id, and the
+  (chain to Apple's root certificate, Apple's OIDs, our bundle id, and the
   app's Apple ID on Production notifications). Production and Sandbox are
   both accepted and tagged on the row; Xcode / local StoreKit data is not.
 - The row is recomputed from the snapshot every time (design 5.1); one
@@ -320,12 +323,20 @@ header is answered 404 by the service itself, secret or not.
   `CONSUMPTION_REQUEST` and `TEST` are stored, not applied. A refund
   removes Plus; used quota stays used.
 
-Settings (`.env`, all optional; without the first two both routes answer
-503 and the rest of the service runs):
+Apple's root certificate is committed: `AppleRootCA-G3.cer` from
+<https://www.apple.com/certificateauthority/>, as PEM in
+`certs/AppleRootCA-G3.pem` (the repo's text checks refuse binary files).
+At startup the SHA-256 of its DER form is checked against the pin in
+`config.py`; on a mismatch, or when the file cannot be read, the error is
+logged and both routes answer 503 (the rest of the service runs). No
+setting replaces this root, so nothing but Apple's can vouch for a
+purchase.
+
+Settings (`.env`, all optional; without `APPSTORE_APP_APPLE_ID` both
+routes answer 503 and the rest of the service runs):
 
 | setting | what |
 |---|---|
-| `APPSTORE_ROOT_CERTS` | path(s), comma-separated, to Apple's root certificates in DER: `AppleRootCA-G3.cer` from <https://www.apple.com/certificateauthority/> |
 | `APPSTORE_APP_APPLE_ID` | the app's numeric Apple ID (App Store Connect, App Information) |
 | `APPSTORE_KEY_PATH`, `APPSTORE_KEY_ID`, `APPSTORE_ISSUER_ID` | the In-App Purchase key (.p8) and its ids (App Store Connect, Users and Access, Integrations). For Set App Account Token and `backfill.py`; without it a sync still links, Apple keeps the old token |
 
@@ -444,5 +455,6 @@ is faked with a locally generated key served as a JWKS through
 endpoints for deletion: the tests never reach the network beyond Postgres.
 The App Store is faked the same way (`tests/fake_appstore.py`): a locally
 made root CA, intermediate and leaf with Apple's OIDs sign the JWS, and the
-tests configure that root as `APPSTORE_ROOT_CERTS` with
-`APPSTORE_ONLINE_CHECKS=0` (no OCSP), so Apple's real verifier runs offline.
+tests trust that root by patching the committed root and its pin in
+`config.py` (`FakeAppStore.trust`), with `APPSTORE_ONLINE_CHECKS=0` (no
+OCSP), so Apple's real verifier runs offline.

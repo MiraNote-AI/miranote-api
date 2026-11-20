@@ -2,6 +2,7 @@
 
     POST /usage/reserve  internal  {user_id, feature, request_id, units, model, cost_usd}
     POST /usage/settle   internal  {request_id, status: ok|failed, cost_usd}
+    POST /usage/user     internal  {user_id} -> 200, or 401 once deleted
     GET  /me/usage       app       remaining per feature and reset times
 
 The AI services call reserve before a paid model call and settle after it.
@@ -73,6 +74,10 @@ class ReserveRequest(BaseModel):
     # The call's estimated cost, kept on the pending row until settle sets
     # the real one, so the daily budgets (budget.py) see calls in flight.
     cost_usd: Decimal = Field(Decimal(0), ge=0)
+
+
+class UserRequest(BaseModel):
+    user_id: uuid.UUID
 
 
 class SettleRequest(BaseModel):
@@ -157,6 +162,22 @@ async def reserve(body: ReserveRequest, request: Request):
         "plan": plan,
         "remaining": cap.limit - used.used - body.units,
     }
+
+
+@router.post("/usage/user", dependencies=[Depends(internal_caller)])
+async def check_user(body: UserRequest, request: Request):
+    """Whether the user still exists. ai_auth asks on every signed-in call
+    that does not reserve, so DELETE /me cuts off the unmetered AI routes
+    at once too (design 3.2, 6.1). One primary-key read."""
+    async with request.app.state.engine.connect() as conn:
+        found = (
+            await conn.execute(
+                select(users.c.id).where(users.c.id == body.user_id, users.c.deletion_requested_at.is_(None))
+            )
+        ).scalar_one_or_none()
+    if found is None:
+        return JSONResponse({"reason": "unknown_user"}, status_code=401)
+    return {"user_id": str(found)}
 
 
 @router.post("/usage/settle", dependencies=[Depends(internal_caller)])

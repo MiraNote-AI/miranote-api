@@ -311,3 +311,24 @@ def test_retention_deletes_only_rows_past_their_period(clean_db):
     assert run_sql("SELECT key_id FROM app_attest_keys") == [("recent",)]
     assert run_sql("SELECT count(*) FROM taste_events") == [(1,)]
     assert run_sql("SELECT count(*) FROM users") == [(1,)]
+
+
+def test_the_first_purge_pass_runs_a_minute_after_start_then_hourly(monkeypatch):
+    """Not an hour after start (api #123): a restart would otherwise put
+    off every marked account by up to another hour."""
+    sleeps, runs = [], []
+
+    async def fake_sleep(seconds):
+        sleeps.append(seconds)
+        if len(sleeps) == 3:
+            raise asyncio.CancelledError
+
+    async def fake_run_once(engine, now):
+        runs.append(len(sleeps))
+
+    monkeypatch.setattr(purge.asyncio, "sleep", fake_sleep)
+    monkeypatch.setattr(purge, "run_once", fake_run_once)
+    with pytest.raises(asyncio.CancelledError):
+        asyncio.run(purge.run_forever(None))
+    assert sleeps == [60, 3600, 3600]
+    assert runs == [1, 2]

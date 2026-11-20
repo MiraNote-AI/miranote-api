@@ -2,7 +2,8 @@
 
 Every cap lives in CAPS below; change a number there and restart. A cap
 counts the `units` of the ai_usage rows of one or more features in a
-window; `pending` and `ok` rows count, `failed` rows do not.
+window; `ok` rows and `pending` rows younger than PENDING_COUNTS_FOR
+count, `failed` rows do not.
 
 Windows: rolling 24 h and rolling 7 days, or the UTC calendar month.
 """
@@ -26,6 +27,13 @@ DAY = "rolling_24h"
 WEEK = "rolling_7d"
 MONTH = "utc_month"
 _ROLLING = {DAY: dt.timedelta(hours=24), WEEK: dt.timedelta(days=7)}
+
+# How long a pending row counts. A call that never settles (a restart
+# mid-call, a lost settle, a lost compose job) would otherwise hold its unit
+# until it leaves the window: up to a week for free photo push, or the rest
+# of the month for images. The longest calls are the 50 s /generate
+# deadline and the 300 s compose cap.
+PENDING_COUNTS_FOR = dt.timedelta(minutes=10)
 
 FREE = "free"
 PLUS = "plus"
@@ -135,7 +143,10 @@ async def usage(conn: AsyncConnection, user_id: uuid.UUID, cap: Cap, now: dt.dat
     counted = and_(
         ai_usage.c.user_id == user_id,
         ai_usage.c.feature.in_(cap.counts),
-        ai_usage.c.status != "failed",
+        or_(
+            ai_usage.c.status == "ok",
+            and_(ai_usage.c.status == "pending", ai_usage.c.created_at > now - PENDING_COUNTS_FOR),
+        ),
         in_window,
     )
     used, oldest = (

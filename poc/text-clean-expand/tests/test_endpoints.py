@@ -3,6 +3,9 @@ from __future__ import annotations
 import re
 
 import pytest
+from fastapi.testclient import TestClient
+
+from fake_accounts import FakeAccounts
 
 # Chinese sample text, built with chr() to keep this file ASCII-only (rule 3).
 ZH_NOTE = chr(0x4ECA) + chr(0x5929) + chr(0x5F88) + chr(0x7D2F)  # "today very tired"
@@ -413,6 +416,47 @@ def test_expand_invented_details_trigger_grounded_rewrite(client):
     rewrite_note = calls[2]["messages"][3]["content"]
     assert "invented" in rewrite_note
     assert "dad has been busy fixing the roof" in rewrite_note
+
+
+def test_a_failed_language_retry_keeps_the_first_reply(client):
+    """The first call succeeded and is paid for; its reply in the wrong
+    language is still usable, a 502 is not (api #123)."""
+    test_client, fake_llm = client
+    fake_llm.reply_with(ZH_REPLY)  # the retry finds nothing scripted and fails
+
+    r = test_client.post("/polish", json={"text": "today very tired"})
+
+    assert r.status_code == 200
+    assert r.json()["polished"] == ZH_REPLY
+    assert len(fake_llm.chat.completions.calls) == 2
+
+
+def test_expand_grounding_checker_call_failing_fails_open(client):
+    test_client, fake_llm = client
+    fake_llm.reply_with("A grounded expansion.")  # the checker call fails
+
+    r = test_client.post("/expand", json={"text": "short diary note"})
+
+    assert r.status_code == 200
+    assert r.json()["expanded"] == "A grounded expansion."
+    assert len(fake_llm.chat.completions.calls) == 2
+
+
+def test_expand_failed_grounded_rewrite_is_a_502_not_charged(client, monkeypatch):
+    """The reply in hand is the one the checker just flagged as inventing
+    facts: when the rewrite fails, a 502 (settled failed, not charged)
+    beats serving it."""
+    test_client, fake_llm = client
+    accounts = FakeAccounts()
+    accounts.install(monkeypatch)
+    http = TestClient(test_client.app)
+    fake_llm.reply_with("Called mom; dad fixed the roof.", '["dad fixed the roof"]')  # the rewrite fails
+
+    r = http.post("/expand", json={"text": "called mom today"}, headers=accounts.headers())
+
+    assert r.status_code == 502
+    assert accounts.statuses("expand") == ["failed"]
+    assert len(fake_llm.chat.completions.calls) == 3
 
 
 def test_expand_grounding_checker_garbage_fails_open(client):

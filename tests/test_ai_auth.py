@@ -152,6 +152,18 @@ def test_unmetered_route_takes_a_user_token_without_a_reserve(client, fake):
     assert fake.rows == {}
 
 
+def test_a_deleted_user_is_cut_off_at_once_on_unmetered_routes(client, fake):
+    """Design 3.2, 6.1: DELETE /me cuts off at once, not when the access
+    token expires (up to 1 h) -- on /describe, /clean and transcription
+    too, which never reserve."""
+    headers = fake.headers()
+    assert client.post("/free", headers=headers).status_code == 200
+    fake.users.discard(fake.user_id)
+    r = client.post("/free", headers=headers)
+    assert r.status_code == 401 and r.json()["reason"] == "unknown_user"
+    assert fake.rows == {}
+
+
 def test_a_handler_that_takes_its_ticket_settles_it_itself(client, fake):
     assert client.post("/later", headers=fake.headers()).status_code == 200
     assert fake.statuses("photo_push") == ["pending"]
@@ -170,14 +182,15 @@ def test_accounts_down_fails_closed_with_503(client, fake):
     assert r.status_code == 503 and r.json()["reason"] == "accounts_unavailable"
 
 
-def test_accounts_down_after_the_keys_are_cached_still_fails_closed_on_reserve(client, fake):
+def test_accounts_down_after_the_keys_are_cached_still_fails_closed(client, fake):
     assert client.post("/free", headers=fake.headers()).status_code == 200
     fake.reachable = False
-    # Auth alone still works from the cached keys ...
-    assert client.post("/free", headers=fake.headers()).status_code == 200
-    # ... but nothing metered runs unmetered.
-    r = client.post("/expand", headers=fake.headers())
-    assert r.status_code == 503 and r.json()["reason"] == "accounts_unavailable"
+    # The cached keys still verify the token, but nothing runs without the
+    # accounts service: metered routes cannot reserve, unmetered ones cannot
+    # tell whether the account was deleted.
+    for path in ("/expand", "/free"):
+        r = client.post(path, headers=fake.headers())
+        assert r.status_code == 503 and r.json()["reason"] == "accounts_unavailable"
 
 
 def test_jwks_is_fetched_once_not_per_request(client, fake, monkeypatch):
@@ -294,6 +307,8 @@ def test_a_user_token_has_the_beta_tokens_rate_limit(client, fake, monkeypatch):
     assert r.status_code == 429 and r.json()["reason"] == "rate_limited"
     assert fake.rows == {}  # refused before anything was reserved
     # Another user, and the beta token, have their own windows.
-    other = {"Authorization": "Bearer " + fake.token(user_id=uuid.uuid4())}
+    other_id = uuid.uuid4()
+    fake.users.add(other_id)
+    other = {"Authorization": "Bearer " + fake.token(user_id=other_id)}
     assert client.post("/free", headers=other).status_code == 200
     assert client.post("/free", headers=BETA).status_code == 200

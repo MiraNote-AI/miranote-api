@@ -11,7 +11,7 @@ No scheduled job in 1.0.
                                                   unless the row says Sandbox,
                                                   or --sandbox)
 
-Needs DATABASE_URL, Apple's root certificates and the In-App Purchase key
+Needs DATABASE_URL, APPSTORE_APP_APPLE_ID and the In-App Purchase key
 (config.py).
 """
 
@@ -79,7 +79,7 @@ async def _main(argv: List[str]) -> int:
     try:
         applied, failed = await backfill(engine, store, args.ids, "Sandbox" if args.sandbox else "Production")
     except appstore.NotConfigured:
-        print("needs APPSTORE_ROOT_CERTS, APPSTORE_APP_APPLE_ID and the APPSTORE_KEY_* settings", file=sys.stderr)
+        print("needs APPSTORE_APP_APPLE_ID and the APPSTORE_KEY_* settings", file=sys.stderr)
         return 2
     finally:
         await engine.dispose()

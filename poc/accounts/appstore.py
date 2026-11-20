@@ -1,12 +1,13 @@
 """Apple's signed subscription data and the App Store Server API (design 5).
 
 Verification uses Apple's app-store-server-library: the JWS chain must end
-at one of Apple's root certificates (APPSTORE_ROOT_CERTS), the leaf and
-intermediate must carry Apple's OIDs, and bundleId (and, for Production
-notifications, the app's Apple ID) must be ours. Production and Sandbox
-are both accepted, one verifier each (5.2): App Review and TestFlight buy
-with Sandbox accounts in the production build. Xcode and LocalTesting
-data is not signed by Apple and is refused.
+at Apple's root certificate (committed in certs/, pinned by its SHA-256 in
+config.py), the leaf and intermediate must carry Apple's OIDs, and
+bundleId (and, for Production notifications, the app's Apple ID) must be
+ours. Production and Sandbox are both accepted, one verifier each (5.2):
+App Review and TestFlight buy with Sandbox accounts in the production
+build. Xcode and LocalTesting data is not signed by Apple and is
+refused.
 
 Nothing here touches the database; subscriptions.py does.
 """
@@ -15,11 +16,12 @@ from __future__ import annotations
 
 import asyncio
 import datetime as dt
+import hashlib
 import logging
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 import jwt
 from appstoreserverlibrary.api_client import AsyncAppStoreServerAPIClient
@@ -32,6 +34,8 @@ from appstoreserverlibrary.signed_data_verifier import (
     VerificationException,
     VerificationStatus,
 )
+from cryptography import x509
+from cryptography.hazmat.primitives import serialization
 
 import config
 
@@ -249,18 +253,48 @@ class AppStore:
             )
 
 
+def apple_root_der() -> bytes:
+    """Apple's committed root, as the DER Apple publishes. It is committed
+    as PEM: the repo's text checks would read a DER file as binary noise."""
+    pem = x509.load_pem_x509_certificate(config.APPLE_ROOT_CERT_PATH.read_bytes())
+    return pem.public_bytes(serialization.Encoding.DER)
+
+
+def _root_certs() -> Optional[List[bytes]]:
+    """Apple's committed root as the one trust anchor, or None (App Store
+    not configured) when it cannot be read, or does not match its pin and
+    so is not Apple's. No setting replaces it: the tests patch config.py
+    (tests/fake_appstore.py). Raised out of startup instead, an unreadable
+    file would take sign-in and /usage/* down with the App Store."""
+    try:
+        data = apple_root_der()
+    except (OSError, ValueError) as exc:
+        log.error(
+            "app store not configured: Apple root certificate is unreadable",
+            extra={"path": str(config.APPLE_ROOT_CERT_PATH), "error": type(exc).__name__},
+        )
+        return None
+    digest = hashlib.sha256(data).hexdigest()
+    if digest != config.APPLE_ROOT_CERT_SHA256:
+        log.error(
+            "app store not configured: Apple root certificate does not match its pin",
+            extra={"path": str(config.APPLE_ROOT_CERT_PATH), "sha256": digest},
+        )
+        return None
+    return [data]
+
+
 def from_config() -> AppStore:
     verifiers: Dict[str, SignedDataVerifier] = {}
-    paths = config.appstore_root_cert_paths()
     app_apple_id = config.appstore_app_apple_id()
-    if paths and app_apple_id is not None:
-        roots = [Path(p).read_bytes() for p in paths]
+    roots = _root_certs()
+    if roots is not None and app_apple_id is not None:
         for name, env in ENVIRONMENTS.items():
             verifiers[name] = SignedDataVerifier(
                 roots, config.appstore_online_checks(), env, config.APPLE_BUNDLE_ID, app_apple_id
             )
-    else:
-        log.warning("app store not configured: APPSTORE_ROOT_CERTS and APPSTORE_APP_APPLE_ID unset")
+    elif app_apple_id is None:
+        log.warning("app store not configured: APPSTORE_APP_APPLE_ID unset")
     clients: Dict[str, AsyncAppStoreServerAPIClient] = {}
     if config.APPSTORE_KEY_PATH and config.APPSTORE_KEY_ID and config.APPSTORE_ISSUER_ID:
         key = Path(config.APPSTORE_KEY_PATH).read_bytes()

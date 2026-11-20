@@ -86,6 +86,17 @@ def test_a_failed_provider_call_is_not_charged(svc):
     assert http.post("/polish", json={"text": "x"}, headers=accounts.headers()).status_code == 200
 
 
+def test_a_failed_retry_after_a_paid_first_call_is_served_and_charged(svc):
+    """Design 6.1: a call is charged when the user gets a result, and never
+    when they get an error. The language retry failing used to answer an
+    uncharged 502 after one paid model call (api #123)."""
+    http, fake_llm, accounts = svc
+    fake_llm.reply_with(chr(0x4ECA) + chr(0x5929) + chr(0x5F88) + chr(0x7D2F))  # the retry fails
+    r = http.post("/polish", json={"text": "today very tired"}, headers=accounts.headers())
+    assert r.status_code == 200
+    assert accounts.statuses("expand") == ["ok"]
+
+
 def test_unmetered_routes_take_a_user_token(svc):
     http, fake_llm, accounts = svc
     fake_llm.reply_with("Clean.")

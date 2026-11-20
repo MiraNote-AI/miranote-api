@@ -313,20 +313,35 @@ _GROUNDING_CHECK_SYSTEM = (
 async def _grounding_violations(note: str, expansion: str) -> list[str]:
     """Concrete facts in `expansion` that `note` never stated ([] on checker
     failure -- the checker must never take the endpoint down)."""
-    raw = await _completion(
-        [
-            {"role": "system", "content": _GROUNDING_CHECK_SYSTEM},
-            {"role": "user", "content": f"NOTE:\n{note}\n\nEXPANSION:\n{expansion}"},
-        ],
-        max_tokens=512,
-        temperature=0.0,
-    )
+    try:
+        raw = await _completion(
+            [
+                {"role": "system", "content": _GROUNDING_CHECK_SYSTEM},
+                {"role": "user", "content": f"NOTE:\n{note}\n\nEXPANSION:\n{expansion}"},
+            ],
+            max_tokens=512,
+            temperature=0.0,
+        )
+    except HTTPException:
+        return []
     raw = raw.strip().removeprefix("```json").removeprefix("```").removesuffix("```").strip()
     try:
         parsed = json.loads(raw)
         return [str(v) for v in parsed] if isinstance(parsed, list) else []
     except json.JSONDecodeError:
         return []
+
+
+async def _correction(reply: str, messages: list[dict], *args) -> str:
+    """One correction call (`_completion(messages, *args)`), or `reply` as
+    it is when that call fails. The first call already succeeded and is
+    charged (design 6.1: a call that answers is `ok`); a 502 here would
+    throw that paid reply away and leave the unit uncharged."""
+    try:
+        return await _completion(messages, *args)
+    except HTTPException as e:
+        print(f"Correction call failed, keeping the reply in hand: {e.detail}")
+        return reply
 
 
 async def call_llm(
@@ -349,8 +364,10 @@ async def call_llm(
 
     The model sometimes ignores these rules in the prompt, so violations are
     detected here and corrected with one explicit retry. If the retry
-    violates too, the reply is returned as-is: an imperfect reply is still
-    usable, a 502 is not.
+    violates too, or fails, the reply is returned as-is: an imperfect reply
+    is still usable, a 502 is not. The grounded rewrite is the exception:
+    when it fails, the answer is a 502, since the reply in hand has
+    invented facts.
     """
     messages = [
         {"role": "system", "content": system},
@@ -375,7 +392,7 @@ async def call_llm(
             {"role": "assistant", "content": reply},
             {"role": "user", "content": "\n\n".join(notes)},
         ]
-        reply = await _completion(messages, max_tokens, temperature, reject_cut, thinking_off)
+        reply = await _correction(reply, messages, max_tokens, temperature, reject_cut, thinking_off)
 
     # Fabrication is checked last, on whatever reply survived the retry:
     # a fact-checker pass lists invented specifics, one rewrite removes them.
@@ -400,6 +417,9 @@ async def call_llm(
                     ),
                 },
             ]
+            # Not _correction: the reply in hand is the one the checker just
+            # flagged as inventing facts. If the rewrite fails, a 502 (not
+            # charged) beats serving it.
             reply = await _completion(messages, max_tokens, temperature)
     return reply
 
