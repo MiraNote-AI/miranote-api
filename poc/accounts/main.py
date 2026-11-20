@@ -9,8 +9,9 @@ our own tokens (auth.py). Step 3: entitlements and the AI usage ledger
 Step 5: subscription sync and App Store
 Server Notifications (subscriptions.py, Apple's side in appstore.py).
 Step 6: account deletion (DELETE /me in auth.py) and the purge and
-retention jobs (purge.py), run here every hour. Step 8: taste events and
-their switch (taste.py), off unless TASTE_EVENTS_ENABLED=1.
+retention jobs (purge.py), run here a minute after start, then every
+hour. Step 8: taste events and their switch (taste.py), off unless
+TASTE_EVENTS_ENABLED=1.
 
     GET /health -> {"status", "db"}; 503 when the database does not answer
     /auth/*, /.well-known/jwks.json, /me, DELETE /me -> see auth.py

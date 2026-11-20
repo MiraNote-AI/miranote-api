@@ -105,11 +105,11 @@ account is deleted. If Apple was not told, the user can still remove
 MiraNote under Sign in with Apple in their Apple ID settings.
 
 The purge (`purge.py`) then deletes the marked account: the service runs
-it every hour, `.venv/bin/python purge.py` runs it once by hand. Signing
-in again with the same Apple ID purges the old account first and creates
-a new, empty one; its subscription has no owner and the first Restore
-reclaims it (Subscriptions API below, including the 30-day re-link
-limit).
+it a minute after start and then every hour, `.venv/bin/python purge.py`
+runs it once by hand. Signing in again with the same Apple ID purges the
+old account first and creates a new, empty one; its subscription has no
+owner and the first Restore reclaims it (Subscriptions API below,
+including the 30-day re-link limit).
 
 Settings (`.env`, optional; without them deletion answers 503 as above):
 
