@@ -436,9 +436,7 @@ def test_words_asked_for_after_a_look_survive_the_nudge():
     scripted = [
         _resp(_msg(tool_calls=[_tool_call("c1", "look_at_page", {})])),
         _resp(_msg(content=words)),
-        _resp(_msg(content=(
-            "I hadn't changed anything yet; you only asked for the words."
-        ))),
+        _resp(_msg(content="KEEP")),
     ]
     client = FakeClient(scripted)
     store = SessionStore(ttl_seconds=60)
@@ -454,7 +452,6 @@ def test_words_asked_for_after_a_look_survive_the_nudge():
     history = store.get(result.session_id)
     assert history[-1] == {"role": "assistant", "content": words}
     assert all("did not act" not in (m.get("content") or "") for m in history)
-    assert all("hadn't changed" not in (m.get("content") or "") for m in history)
 
 
 def test_a_keep_reply_to_the_nudge_is_never_shown():
@@ -619,3 +616,44 @@ def test_the_keep_word_after_an_edit_is_never_shown(keep_reply):
     result = _edit_after_the_nudge("make the title bigger", first, keep_reply)
     assert result.reply == first
     assert [t["name"] for t in result.tool_trace] == ["look_at_page", "edit_page"]
+
+
+def test_a_claimed_change_the_model_cannot_make_is_not_shown_as_done():
+    # The first reply claims a change; after the nudge the model says it
+    # cannot make it. Its honest answer stands, not the false claim.
+    honest = "Sorry -- I can't change fonts. I can move, resize, recolor or layer the title."
+    scripted = [
+        _resp(_msg(tool_calls=[_tool_call("c1", "look_at_page", {})])),
+        _resp(_msg(content="I changed the title to a serif font.")),
+        _resp(_msg(content=honest)),
+    ]
+    store = SessionStore(ttl_seconds=60)
+    result = run_turn(
+        client=FakeClient(scripted), session_store=store, session_id=None,
+        user_message="change the title font to serif", model="fake",
+        tools=[{"type": "function", "function": {"name": "x"}}],
+        tool_dispatcher=lambda name, args: {"status": "ok"},
+        max_iterations=6, max_history=40,
+        system_prompt="sys", action_guard=_guard(),
+    )
+    assert result.reply == honest
+    assert store.get(result.session_id)[-1] == {"role": "assistant", "content": honest}
+
+
+def test_a_note_made_in_answer_to_the_nudge_reaches_the_app():
+    scripted = [
+        _resp(_msg(tool_calls=[_tool_call("c1", "look_at_page", {})])),
+        _resp(_msg(content="Here is a summary of your page: a beach day.")),
+        _resp(_msg(tool_calls=[_tool_call("c2", "create_note", {"title": "Beach", "body": "A beach day."})])),
+        _resp(_msg(content="I saved it as a new note.")),
+    ]
+    result = run_turn(
+        client=FakeClient(scripted), session_store=SessionStore(ttl_seconds=60), session_id=None,
+        user_message="save a note about this page", model="fake",
+        tools=[{"type": "function", "function": {"name": "x"}}],
+        tool_dispatcher=lambda name, args: {"status": "ok"},
+        max_iterations=6, max_history=40,
+        system_prompt="sys", action_guard=_guard(),
+    )
+    assert result.reply == "I saved it as a new note."
+    assert [t["name"] for t in result.tool_trace] == ["look_at_page", "create_note"]

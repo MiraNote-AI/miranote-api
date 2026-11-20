@@ -24,11 +24,12 @@ class ActionGuard:
     answered in prose without calling any of `action_tools` -- the weak
     model's way of DESCRIBING a change instead of making it. The nudge
     rides as a user-role message so the loop can hand the model its
-    tools again. If the model still makes no change, the first reply was
-    the answer (a question, or words the user asked for): it is returned
-    and the nudge exchange -- messages and tool calls -- is dropped. The
-    nudge asks for the `keep` word in that case; a reply that is that
-    word (see _says_keep) is never shown."""
+    tools again. The nudge asks for the `keep` word when no change was
+    asked for. If the model answers with it (see _says_keep) and makes no
+    change, the first reply was the answer (a question, or words the user
+    asked for): it is returned and the nudge exchange -- messages and tool
+    calls -- is dropped. Any other answer stands, as the model's reply to
+    "make the change now"; the keep word itself is never shown."""
 
     look_tool: str
     action_tools: List[str]
@@ -189,10 +190,15 @@ def run_turn(
                 empty_retries += 1
                 reply = None
                 continue
-            if nudged_at is not None and not acted():
-                # The nudge changed nothing, so the first reply was the
-                # answer; whatever the model said to the nudge (KEEP, or
-                # "I hadn't changed anything") never reaches the user.
+            if nudged_at is not None and not acted() and (
+                not reply.strip() or _says_keep(reply, action_guard.keep)
+            ):
+                # The model confirmed no change was asked for (or said
+                # nothing), so the first reply was the answer. Any other
+                # reply without a change -- "I can't change fonts", a
+                # question back -- is the model's answer to "make the
+                # change now", and stands: the first reply may claim a
+                # change that never happened.
                 reply = keep_first_reply()
             elif nudged_at is not None and _says_keep(reply, action_guard.keep):
                 # It changed the page and still said KEEP: the change

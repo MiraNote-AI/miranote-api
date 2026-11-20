@@ -209,8 +209,9 @@ LOOK_ACTION_NUDGE = (
 
 # The loop-level guard's nudge (chat_loop.ActionGuard): fired when the
 # model looked at the page and then answered in prose instead of acting.
-# If the model then makes no change, the loop keeps its first reply, so
-# the ACTION_KEEP answer is never shown -- it just saves a rewrite.
+# If the model answers ACTION_KEEP and makes no change, the loop keeps its
+# first reply, so the ACTION_KEEP answer is never shown -- it just saves a
+# rewrite.
 ACTION_KEEP = "KEEP"
 ACTION_NUDGE = (
     "You looked at the page but have not changed it. If the user asked "
