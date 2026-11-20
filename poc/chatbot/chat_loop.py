@@ -27,8 +27,8 @@ class ActionGuard:
     tools again. If the model still makes no change, the first reply was
     the answer (a question, or words the user asked for): it is returned
     and the nudge exchange -- messages and tool calls -- is dropped. The
-    nudge asks for the bare word `keep` in that case; a reply carrying it
-    is never shown."""
+    nudge asks for the `keep` word in that case; a reply that is that
+    word (see _says_keep) is never shown."""
 
     look_tool: str
     action_tools: List[str]
@@ -64,6 +64,25 @@ def drop_unrenderable(text: str) -> str:
         return True
 
     return "".join(ch for ch in text if keep(ch)).strip()
+
+
+# Where a reply's clauses break: sentence and clause punctuation, dashes,
+# markdown marks and line breaks, with the CJK full-width forms (escaped:
+# this file stays ASCII-only).
+_CLAUSE_BREAKS = re.compile(
+    r"[.!?;:,*_`\n\u2013\u2014\u3001\u3002\uff01\uff0c\uff1a\uff1b\uff1f-]+"
+)
+
+
+def _says_keep(reply: str, keep: str) -> bool:
+    """Whether a reply to the guard's nudge is its keep word rather than an
+    answer: the word alone in any case ("KEEP", "Keep.", "**keep**"), or
+    in capitals as a clause of its own ("KEEP -- nothing to change",
+    "Moved it. KEEP"). Inside a phrase or in quotes it is page text the
+    user can see ("KEEP GOING is 36pt now"), and that reply is shown."""
+    if re.sub(r"[\W_]+", "", reply).lower() == keep.lower():
+        return True
+    return any(part.strip() == keep for part in _CLAUSE_BREAKS.split(reply))
 
 
 def _contains_cjk(text: str) -> bool:
@@ -175,9 +194,7 @@ def run_turn(
                 # answer; whatever the model said to the nudge (KEEP, or
                 # "I hadn't changed anything") never reaches the user.
                 reply = keep_first_reply()
-            elif nudged_at is not None and re.search(
-                rf"\b{re.escape(action_guard.keep)}\b", reply
-            ):
+            elif nudged_at is not None and _says_keep(reply, action_guard.keep):
                 # It changed the page and still said KEEP: the change
                 # stands, and the first reply describes it.
                 reply = first_reply

@@ -571,3 +571,51 @@ def test_keep_after_a_change_returns_the_first_reply():
     )
     assert result.reply == first
     assert [t["name"] for t in result.tool_trace] == ["look_at_page", "edit_page"]
+
+
+def _edit_after_the_nudge(user_message, first, final):
+    """Look, answer in prose, get nudged, edit the page, then `final`."""
+    scripted = [
+        _resp(_msg(tool_calls=[_tool_call("c1", "look_at_page", {})])),
+        _resp(_msg(content=first)),
+        _resp(_msg(tool_calls=[_tool_call("c2", "edit_page", {"changes": [{"id": "t1", "size": 36}]})])),
+        _resp(_msg(content=final)),
+    ]
+    client = FakeClient(scripted)
+    result = run_turn(
+        client=client, session_store=SessionStore(ttl_seconds=60), session_id=None,
+        user_message=user_message, model="fake",
+        tools=[{"type": "function", "function": {"name": "x"}}],
+        tool_dispatcher=lambda name, args: {"status": "ok"},
+        max_iterations=6, max_history=40,
+        system_prompt="sys", action_guard=_guard(),
+    )
+    assert len(client.chat.completions.calls) == 4
+    return result
+
+
+@pytest.mark.parametrize("user_message, answer", [
+    # Page text in capitals is the user's own words, not the keep word.
+    ("make KEEP GOING bigger", "Done -- KEEP GOING is 36pt now and anchors the page."),
+    ("make KEEP GOING bigger", "KEEP GOING is 36pt now."),
+    ("make the KEEP sticker bigger", "I made the 'KEEP' sticker bigger."),
+    ("make the title bigger", "Keep calm: the title is 36pt now."),
+    ("make the title bigger", "The keeper photo sits behind the 36pt title now."),
+    # zh: 'make KEEP bigger' / 'Made "KEEP" 36pt.'
+    ("\u628aKEEP\u8c03\u5927", "\u5df2\u628a\u201cKEEP\u201d\u8c03\u5230 36pt\u3002"),
+])
+def test_a_real_answer_after_the_nudge_is_shown_even_when_it_says_keep(user_message, answer):
+    result = _edit_after_the_nudge(user_message, "I'd make it 36pt so it anchors the page.", answer)
+    assert result.reply == answer
+
+
+@pytest.mark.parametrize("keep_reply", [
+    "KEEP", "KEEP.", "Keep.", "keep", "**KEEP**", "`KEEP`",
+    "KEEP -- no change was asked for.", "Made the change. KEEP",
+    "\u597d\u7684\uff0cKEEP",  # zh: 'OK, KEEP'
+])
+def test_the_keep_word_after_an_edit_is_never_shown(keep_reply):
+    first = "I'd make the title 36pt so it anchors the page."
+    result = _edit_after_the_nudge("make the title bigger", first, keep_reply)
+    assert result.reply == first
+    assert [t["name"] for t in result.tool_trace] == ["look_at_page", "edit_page"]
