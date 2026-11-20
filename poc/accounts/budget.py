@@ -16,8 +16,8 @@ until the next UTC midnight, or until the budget is raised (restart).
 Unset or empty means no budget, so nothing changes until one is set. 0
 pauses the feature at once.
 
-- The day is the UTC calendar day, not the rolling 24 h of design 6.3: it
-  resets at a known time and matches what `python budget.py` prints.
+- The day is the UTC calendar day (design 6.3): it resets at a known time
+  and matches what `python budget.py` prints.
 - A pending row counts at the estimate the AI service sent with reserve
   (ai_auth.COST_USD) until settle sets the real cost, so calls in flight
   and calls whose settle never arrives count too. Reserves of different

@@ -307,9 +307,10 @@ Rules:
   job deletes rows older than 18 months.
 - Collected only when signed in **and** the Settings switch "Use my
   choices to improve and personalize MiraNote" is on (default on).
-  Signed out: events are dropped on the device, not queued. Turning the
-  switch off stops collection and deletes the user's collected events
-  (`DELETE /me/taste-events`).
+  Signed out: events are dropped on the device, not queued. The switch
+  lives on the server: `GET /me/preferences` reads it, and
+  `PUT /me/preferences` with `taste_events_enabled: false` turns it off,
+  which stops collection and deletes the user's collected events.
 - Off means no personalization, not only no upload (decided
   2026-11-13): with the switch off the app also stops on-device style
   ranking and shows the default order, stops recording choices on the
@@ -478,8 +479,12 @@ updates an unowned row; the next launch sync links it (5.3).
 
 In 1.0 the App Store Server API (`Get All Subscription Statuses`) is
 called when a sync disagrees with our row, and from a manual backfill
-script (Notification History) after any downtime. No scheduled job
-until there is real traffic.
+script after any downtime. The script calls Get All Subscription
+Statuses for every chain already in `subscriptions` (or the ones named)
+and applies each snapshot as a notification would; it does not read
+Notification History, so a chain the service has never seen waits for
+the app's next launch sync (5.3). No scheduled job until there is real
+traffic.
 
 The app also reads `Transaction.currentEntitlements` locally so a paid
 user is not locked out of local features while offline. The server
@@ -528,10 +533,17 @@ Caps live in config, not code, and start at the values in section 2.
 
 ### 6.3 Cost kill switch
 
-Each feature has a daily budget in USD (sum of `cost_usd` over the
-rolling 24 h, read through the (`feature`, `created_at`) index). Over
-budget, that feature returns 503 for everyone until it drops back or
-the budget is raised. This bounds the damage of a bug or an abuse wave.
+Each feature can have a daily budget in USD (set in config; unset means
+none), and all features together a global one: the sum of `cost_usd`
+over the UTC calendar day (not a rolling 24 h, so it resets at a known
+time), read through the (`feature`, `created_at`) index. A call in
+flight counts at its estimated cost until it settles. Over its budget a
+feature returns 503 for everyone, and over the global one every feature
+does, until the next UTC midnight or until the budget is raised.
+Reserves of different users at the same moment can each read the spend
+before the others' rows commit (the lock is per user), so a budget can
+be overshot by about one call per pooled database connection. This
+bounds the damage of a bug or an abuse wave.
 
 ### 6.4 App Attest and DeviceCheck
 
@@ -611,15 +623,18 @@ service never accepts it (8.4).
    settings, as Apple requires).
 2. The app runs Sign in with Apple again and gets a fresh authorization
    code.
-3. `DELETE /me` with that code. The server exchanges it for Apple tokens
+3. `DELETE /me` with that code. The server first sets
+   `deletion_requested_at`, revokes all `sessions` and deletes the
+   user's taste events, in one transaction, so the account is cut off
+   whatever Apple answers. Then it exchanges the code for Apple tokens
    (with a client secret signed by the Sign in with Apple key, step 9)
-   and immediately calls Apple's `/auth/revoke`, then sets
-   `deletion_requested_at` and revokes all `sessions`. If the exchange
-   or the revoke still fails after a few retries inside the request,
-   deletion proceeds and the failure is logged (user id only). There is
-   no later retry: the code is single-use and short-lived, and we keep
-   no Apple token that could revoke. The user can still remove MiraNote
-   under Sign in with Apple in their Apple ID settings.
+   and immediately calls Apple's `/auth/revoke`. If the exchange or the
+   revoke still fails after a few retries inside the request, the
+   account stays deleted, the failure is logged (user id only) and the
+   answer says Apple was not told. There is no later retry: the code is
+   single-use and short-lived, and we keep no Apple token that could
+   revoke. The user can still remove MiraNote under Sign in with Apple
+   in their Apple ID settings.
 4. The app signs out and shows "Your account is deleted. The rest of
    your server data is erased within 24 hours." -- that screen is the
    confirmation (we hold no email to send one).
@@ -739,7 +754,7 @@ behind Cloudflare too), so it lands before public TestFlight.
     `GET /.well-known/jwks.json`, `GET /me`;
   - to come: `/auth/apple/notifications`, `DELETE /me`,
     `/subscriptions/sync`, `/appstore/notifications`,
-    `/attest/challenge`, `/attest`, `/events`, `/me/taste-events`,
+    `/attest/challenge`, `/attest`, `/events`, `/me/preferences`,
     purge and retention jobs;
   - Alembic migrations.
 
@@ -784,8 +799,8 @@ Postgres.
    (tested with Apple's documented sample attestation); signed-out
    `/mood` with per-device limits.
 7. Taste events: the `taste_events` migration, `POST /events` (batch),
-   registered-name check, `DELETE /me/taste-events`, 18-month retention
-   job.
+   registered-name check, `GET`/`PUT /me/preferences` (the switch; off
+   deletes the user's events), 18-month retention job.
 8. Deletion: `DELETE /me` (Apple revoke mocked), purge job, retention
    jobs for every row of 7.2.
 
