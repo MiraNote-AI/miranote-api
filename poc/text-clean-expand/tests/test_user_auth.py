@@ -48,6 +48,35 @@ def test_expand_and_polish_share_one_cap_and_over_it_is_429(svc):
     assert len(fake_llm.chat.completions.calls) == 1
 
 
+def test_rewrite_is_metered_on_the_expand_cap(svc):
+    """/rewrite spends the same free cap as /expand and /polish, so the app's
+    quota 429 (the paywall) covers it too."""
+    http, fake_llm, accounts = svc
+    body = {"text": "x", "instruction": "warmer"}
+    fake_llm.reply_with("Warmer.")
+    assert http.post("/rewrite", json=body, headers=accounts.headers()).status_code == 200
+    assert accounts.statuses("expand") == ["ok"]
+    r = http.post("/rewrite", json=body, headers=accounts.headers())
+    assert r.status_code == 429
+    assert r.json()["reason"] == "quota" and r.json()["feature"] == "expand"
+    assert len(fake_llm.chat.completions.calls) == 1
+
+
+def test_a_cut_rewrite_is_a_502_and_not_charged(svc):
+    http, fake_llm, accounts = svc
+    fake_llm.reply_with(("The morning light was", "length"))
+    r = http.post("/rewrite", json={"text": "x", "instruction": "warmer"}, headers=accounts.headers())
+    assert r.status_code == 502
+    assert accounts.statuses("expand") == ["failed"]
+
+
+def test_rewrite_without_a_token_is_401(svc):
+    http, fake_llm, _ = svc
+    r = http.post("/rewrite", json={"text": "x", "instruction": "warmer"})
+    assert r.status_code == 401 and r.json()["reason"] == "missing_token"
+    assert fake_llm.chat.completions.calls == []
+
+
 def test_a_failed_provider_call_is_not_charged(svc):
     http, fake_llm, accounts = svc
     # Nothing scripted: the fake model raises, the route answers 502.
