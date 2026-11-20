@@ -319,7 +319,9 @@ async def call_llm(
     The model sometimes ignores these rules in the prompt, so violations are
     detected here and corrected with one explicit retry. If the retry
     violates too, or fails, the reply is returned as-is: an imperfect reply
-    is still usable, a 502 is not.
+    is still usable, a 502 is not. The grounded rewrite is the exception:
+    when it fails, the answer is a 502, since the reply in hand has
+    invented facts.
     """
     messages = [
         {"role": "system", "content": system},
@@ -369,7 +371,10 @@ async def call_llm(
                     ),
                 },
             ]
-            reply = await _correction(reply, messages, max_tokens, temperature)
+            # Not _correction: the reply in hand is the one the checker just
+            # flagged as inventing facts. If the rewrite fails, a 502 (not
+            # charged) beats serving it.
+            reply = await _completion(messages, max_tokens, temperature)
     return reply
 
 
