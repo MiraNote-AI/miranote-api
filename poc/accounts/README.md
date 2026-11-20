@@ -301,7 +301,7 @@ header is answered 404 by the service itself, secret or not.
   transaction and of the renewal info from `Product.SubscriptionInfo.Status`,
   after a purchase, on launch when signed in, and on Restore.
 - Everything Apple signs is verified with Apple's `app-store-server-library`
-  (chain to `APPSTORE_ROOT_CERTS`, Apple's OIDs, our bundle id, and the
+  (chain to Apple's root certificate, Apple's OIDs, our bundle id, and the
   app's Apple ID on Production notifications). Production and Sandbox are
   both accepted and tagged on the row; Xcode / local StoreKit data is not.
 - The row is recomputed from the snapshot every time (design 5.1); one
@@ -319,12 +319,21 @@ header is answered 404 by the service itself, secret or not.
   `CONSUMPTION_REQUEST` and `TEST` are stored, not applied. A refund
   removes Plus; used quota stays used.
 
-Settings (`.env`, all optional; without the first two both routes answer
-503 and the rest of the service runs):
+Apple's root certificate is committed: `AppleRootCA-G3.cer` from
+<https://www.apple.com/certificateauthority/>, as PEM in
+`certs/AppleRootCA-G3.pem` (the repo's text checks refuse binary files).
+At startup the SHA-256 of its DER form is checked against the pin in
+`config.py`; on a mismatch the error is logged
+and both routes answer 503. `APPSTORE_ROOT_CERTS` (DER, comma-separated
+paths) replaces it, for the tests' own root only: a file that is not DER
+is refused the same way, and one that is not Apple's is used and logged as
+an error.
+
+Settings (`.env`, all optional; without `APPSTORE_APP_APPLE_ID` both
+routes answer 503 and the rest of the service runs):
 
 | setting | what |
 |---|---|
-| `APPSTORE_ROOT_CERTS` | path(s), comma-separated, to Apple's root certificates in DER: `AppleRootCA-G3.cer` from <https://www.apple.com/certificateauthority/> |
 | `APPSTORE_APP_APPLE_ID` | the app's numeric Apple ID (App Store Connect, App Information) |
 | `APPSTORE_KEY_PATH`, `APPSTORE_KEY_ID`, `APPSTORE_ISSUER_ID` | the In-App Purchase key (.p8) and its ids (App Store Connect, Users and Access, Integrations). For Set App Account Token and `backfill.py`; without it a sync still links, Apple keeps the old token |
 

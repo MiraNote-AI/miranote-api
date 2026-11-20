@@ -310,7 +310,7 @@ def test_sync_refuses_data_apple_did_not_sign_for_us(client, fake, case):
 
 
 def test_unconfigured_service_starts_and_answers_503(clean_db, fake, monkeypatch):
-    monkeypatch.delenv("APPSTORE_ROOT_CERTS", raising=False)
+    monkeypatch.delenv("APPSTORE_APP_APPLE_ID", raising=False)
     with TestClient(main.app) as c:
         assert c.get("/health").status_code == 200
         user = new_user()
