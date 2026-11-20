@@ -129,7 +129,7 @@ def test_rewrite_never_answers_with_an_empty_or_cut_reply(client, reply):
         {"text": "x"},
         {"text": "", "instruction": "warmer"},
         {"text": "x", "instruction": "w" * 501},
-        {"text": "w" * 8001, "instruction": "warmer"},
+        {"text": "w" * 3001, "instruction": "warmer"},
         {"text": "x", "instruction": "warmer", "context": "w" * 8001},
     ],
 )
@@ -145,21 +145,37 @@ HEART = chr(0x2764) + chr(0xFE0F)  # one emoji to Swift's String.count, 2 code p
 
 
 @pytest.mark.parametrize(
-    "text,instruction,status",
+    "text,instruction,context,status",
     [
-        (HAN * 8000, HAN * 500, 200),
-        (HAN * 8001, "warmer", 422),
-        ("a line", HAN * 501, 422),
-        ("a line", chr(0x1F600) * 500, 200),
-        ("a line", HEART * 250, 200),
-        ("a line", HEART * 251, 422),  # 502 code points, though Swift counts 251
+        (HAN * 3000, HAN * 500, None, 200),
+        (HAN * 3001, "warmer", None, 422),
+        ("w" * 3000, "warmer", None, 200),
+        ("a line", HAN * 501, None, 422),
+        ("a line", chr(0x1F600) * 500, None, 200),
+        ("a line", HEART * 250, None, 200),
+        ("a line", HEART * 251, None, 422),  # 502 code points, though Swift counts 251
+        ("a line", "warmer", HAN * 8000, 200),  # the context keeps its own, larger cap
+        ("a line", "warmer", HAN * 8001, 422),
     ],
-    ids=["han-8000-500", "han-text-8001", "han-instruction-501", "emoji-500", "heart-250", "heart-251"],
+    ids=[
+        "han-text-3000-instruction-500",
+        "han-text-3001",
+        "ascii-text-3000",
+        "han-instruction-501",
+        "emoji-500",
+        "heart-250",
+        "heart-251",
+        "han-context-8000",
+        "han-context-8001",
+    ],
 )
-def test_rewrite_caps_count_code_points_not_bytes(client, text, instruction, status):
+def test_rewrite_caps_count_code_points_not_bytes(client, text, instruction, context, status):
     test_client, fake_llm = client
     fake_llm.reply_with(ZH_REPLY if HAN in text else "A warmer line.")
-    r = test_client.post("/rewrite", json={"text": text, "instruction": instruction})
+    body = {"text": text, "instruction": instruction}
+    if context is not None:
+        body["context"] = context
+    r = test_client.post("/rewrite", json=body)
     assert r.status_code == status
     assert len(fake_llm.chat.completions.calls) == (1 if status == 200 else 0)
 

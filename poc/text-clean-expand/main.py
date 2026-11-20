@@ -103,8 +103,14 @@ class PolishResponse(BaseModel):
 # context window. The caps count code points, as len() does: a Chinese
 # character is one, an emoji with a skin tone or U+FE0F is two or more
 # (Swift's String.count calls it one).
-REWRITE_TEXT_CAP = 8000
+# The block's cap is lower than the context's because the reply is a whole
+# new block and must fit in max_tokens=2048: deepseek-chat spends about 0.6
+# token per Chinese character, so 3000 leaves room for a block that grows a
+# little. A larger max_tokens is no way out, since the beta sits behind
+# Cloudflare's 100 s timeout: a longer reply would trade a cut one for a 524.
+REWRITE_TEXT_CAP = 3000
 REWRITE_INSTRUCTION_CAP = 500
+REWRITE_CONTEXT_CAP = 8000
 # Our tag names in any case, with spaces or line breaks, attributes, a
 # self-closing slash, or fullwidth angle brackets (U+FF1C, U+FF1E).
 _REWRITE_TAG = re.compile(
@@ -127,7 +133,7 @@ class RewriteRequest(BaseModel):
         str, StringConstraints(strip_whitespace=True, min_length=1, max_length=REWRITE_INSTRUCTION_CAP)
     ] = Field(..., description="The user's own words for the edit, e.g. 'make it warmer'")
     context: Optional[str] = Field(
-        None, max_length=REWRITE_TEXT_CAP, description="Optional nearby text from the same note"
+        None, max_length=REWRITE_CONTEXT_CAP, description="Optional nearby text from the same note"
     )
 
 

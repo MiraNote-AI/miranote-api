@@ -22,10 +22,13 @@ The editor's free-form request ("make it warmer", "more formal", "add an
 ending") applied to the block being written.
 
 - Request: `{"text": str, "instruction": str, "context"?: str}`. `text`
-  is the block, 1-8000 characters; `instruction` is the user's words,
+  is the block, 1-3000 characters; `instruction` is the user's words,
   trimmed, 1-500 characters; `context` is optional nearby note text, at
   most 8000 characters, used for reference only and never rewritten.
-  The caps count Unicode code points (Python's `len`), not bytes: a
+  The block's cap is the lower one because the rewrite of a whole block
+  has to fit in the reply's 2048 tokens (about 3400 Chinese characters
+  on deepseek-chat), and a longer reply would outlast Cloudflare's 100 s
+  timeout in front of the beta. The caps count Unicode code points (Python's `len`), not bytes: a
   Chinese character is one, an emoji with a skin tone or a variation
   selector (U+FE0F) is two or more, though Swift's `String.count` calls
   it one. A client cutting to the cap counts `unicodeScalars`.
