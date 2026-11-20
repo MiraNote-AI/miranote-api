@@ -327,10 +327,9 @@ Apple's root certificate is committed: `AppleRootCA-G3.cer` from
 `certs/AppleRootCA-G3.pem` (the repo's text checks refuse binary files).
 At startup the SHA-256 of its DER form is checked against the pin in
 `config.py`; on a mismatch, or when the file cannot be read, the error is
-logged and both routes answer 503 (the rest of the service runs).
-`APPSTORE_ROOT_CERTS` (DER, comma-separated paths) replaces it, for the
-tests' own root only: a file that is missing or not DER is refused the
-same way, and one that is not Apple's is used and logged as an error.
+logged and both routes answer 503 (the rest of the service runs). No
+setting replaces this root, so nothing but Apple's can vouch for a
+purchase.
 
 Settings (`.env`, all optional; without `APPSTORE_APP_APPLE_ID` both
 routes answer 503 and the rest of the service runs):
@@ -455,5 +454,6 @@ is faked with a locally generated key served as a JWKS through
 endpoints for deletion: the tests never reach the network beyond Postgres.
 The App Store is faked the same way (`tests/fake_appstore.py`): a locally
 made root CA, intermediate and leaf with Apple's OIDs sign the JWS, and the
-tests configure that root as `APPSTORE_ROOT_CERTS` with
-`APPSTORE_ONLINE_CHECKS=0` (no OCSP), so Apple's real verifier runs offline.
+tests trust that root by patching the committed root and its pin in
+`config.py` (`FakeAppStore.trust`), with `APPSTORE_ONLINE_CHECKS=0` (no
+OCSP), so Apple's real verifier runs offline.

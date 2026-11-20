@@ -1,6 +1,6 @@
 """Apple's root certificate (api #123): committed, pinned by its SHA-256 and
-checked at startup. The tests' own root still goes through
-APPSTORE_ROOT_CERTS, and is logged as not Apple's."""
+checked at startup. Nothing replaces it: the tests that need their own
+root patch config.py (FakeAppStore.trust)."""
 
 from __future__ import annotations
 
@@ -8,7 +8,6 @@ import hashlib
 import logging
 
 import pytest
-from cryptography.hazmat.primitives import serialization
 
 import appstore
 import config
@@ -39,7 +38,6 @@ def errors():
 
 @pytest.fixture(autouse=True)
 def app_apple_id(monkeypatch):
-    monkeypatch.delenv("APPSTORE_ROOT_CERTS", raising=False)
     monkeypatch.setenv("APPSTORE_APP_APPLE_ID", "1234567890")
     monkeypatch.setenv("APPSTORE_ONLINE_CHECKS", "0")
 
@@ -48,7 +46,7 @@ def test_the_committed_root_is_apples_and_matches_the_pin():
     assert hashlib.sha256(appstore.apple_root_der()).hexdigest() == config.APPLE_ROOT_CERT_SHA256
 
 
-def test_without_appstore_root_certs_apples_pinned_root_is_used(errors):
+def test_apples_pinned_root_is_used(errors):
     store = appstore.from_config()
     assert set(store.verifiers) == {"Production", "Sandbox"}
     assert errors == []
@@ -74,26 +72,12 @@ def test_an_unreadable_committed_root_leaves_only_the_app_store_unconfigured(err
     assert [r.getMessage() for r in errors] == ["app store not configured: Apple root certificate is unreadable"]
 
 
-def test_a_missing_replacement_root_is_refused_loudly_at_startup(errors, tmp_path, monkeypatch):
-    monkeypatch.setenv("APPSTORE_ROOT_CERTS", str(tmp_path / "missing.cer"))
-    assert appstore.from_config().verifiers == {}
-    assert [r.getMessage() for r in errors] == ["app store not configured: root certificate is unreadable"]
-
-
-def test_a_pem_root_is_refused_loudly_at_startup(errors, tmp_path, monkeypatch):
-    # Before: a PEM file started fine, then refused every genuine payload.
-    pem = tmp_path / "root.pem"
-    pem.write_bytes(FakeAppStore().root.public_bytes(serialization.Encoding.PEM))
-    monkeypatch.setenv("APPSTORE_ROOT_CERTS", str(pem))
-    assert appstore.from_config().verifiers == {}
-    assert [r.getMessage() for r in errors] == ["app store not configured: root certificate is not DER"]
-
-
-def test_a_replacement_root_is_used_and_logged_as_not_apples(errors, tmp_path, monkeypatch):
+def test_appstore_root_certs_left_in_an_env_is_ignored(errors, tmp_path, monkeypatch):
+    # It used to replace the pinned root anywhere, with only an error log:
+    # the one setting that made the service accept data a non-Apple root
+    # signed, such as a forged purchase that grants Plus.
     der = tmp_path / "root.cer"
     der.write_bytes(FakeAppStore().root_der())
     monkeypatch.setenv("APPSTORE_ROOT_CERTS", str(der))
-    assert set(appstore.from_config().verifiers) == {"Production", "Sandbox"}
-    assert [r.getMessage() for r in errors] == [
-        "app store trusts a root certificate that is not Apple's (APPSTORE_ROOT_CERTS)"
-    ]
+    assert appstore._root_certs() == [appstore.apple_root_der()]
+    assert errors == []

@@ -59,9 +59,7 @@ def fake():
 
 @pytest.fixture
 def configured(fake, tmp_path, monkeypatch):
-    root = tmp_path / "root.cer"
-    root.write_bytes(fake.root_der())
-    monkeypatch.setenv("APPSTORE_ROOT_CERTS", str(root))
+    fake.trust(monkeypatch, tmp_path)
     monkeypatch.setenv("APPSTORE_APP_APPLE_ID", str(APP_APPLE_ID))
     monkeypatch.setenv("APPSTORE_ONLINE_CHECKS", "0")
 

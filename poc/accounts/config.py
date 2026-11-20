@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import List, Optional
+from typing import Optional
 
 from dotenv import load_dotenv
 
@@ -96,17 +96,12 @@ def taste_events_enabled() -> bool:
 # Apple's root certificate: AppleRootCA-G3.cer from
 # https://www.apple.com/certificateauthority/, committed in certs/ as PEM
 # (`openssl x509 -inform DER`) and pinned by the SHA-256 of Apple's DER
-# file (appstore.from_config checks it at startup).
-# APPSTORE_ROOT_CERTS (DER, comma-separated paths) replaces it; only the
-# tests set it, to trust their own locally made root.
+# file (appstore.from_config checks it at startup). No setting replaces
+# it; the tests patch these two names (tests/fake_appstore.py).
 # APPSTORE_APP_APPLE_ID is the app's numeric Apple ID in App Store Connect;
 # Production notifications must carry it.
 APPLE_ROOT_CERT_PATH = HERE / "certs" / "AppleRootCA-G3.pem"
 APPLE_ROOT_CERT_SHA256 = "63343abfb89a6a03ebb57e9b3f5fa7be7c4f5c756f3017b3a8c488c3653e9179"
-
-
-def appstore_root_cert_paths() -> List[str]:
-    return [p.strip() for p in os.getenv("APPSTORE_ROOT_CERTS", "").split(",") if p.strip()]
 
 
 def appstore_app_apple_id() -> Optional[int]:

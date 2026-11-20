@@ -1,13 +1,14 @@
 """A stand-in for Apple's App Store signing: a locally made root CA, an
 intermediate and a leaf with Apple's OIDs, and ES256 JWS with the x5c chain
 in the header -- the shape app-store-server-library verifies. Nothing here
-is Apple's; the verifier trusts this root only because the tests configure
-it as APPSTORE_ROOT_CERTS."""
+is Apple's; the verifier trusts this root only while a test has called
+trust(), which patches the committed root and its pin in config.py."""
 
 from __future__ import annotations
 
 import base64
 import datetime as dt
+import hashlib
 import time
 import uuid
 from typing import Any, Dict, List, Optional
@@ -73,6 +74,18 @@ class FakeAppStore:
 
     def root_der(self) -> bytes:
         return self.root.public_bytes(serialization.Encoding.DER)
+
+    def trust(self, monkeypatch, tmp_path) -> None:
+        """For one test, put this root where Apple's committed one is read
+        (as PEM, like certs/) and pin it. No setting replaces Apple's root,
+        so this is the only way to trust a test root, and it stays inside
+        the test's process."""
+        import config
+
+        path = tmp_path / "fake-root.pem"
+        path.write_bytes(self.root.public_bytes(serialization.Encoding.PEM))
+        monkeypatch.setattr(config, "APPLE_ROOT_CERT_PATH", path)
+        monkeypatch.setattr(config, "APPLE_ROOT_CERT_SHA256", hashlib.sha256(self.root_der()).hexdigest())
 
     def sign(self, claims: Dict[str, Any], key=None, x5c: Optional[List[str]] = None) -> str:
         return jwt.encode(claims, key or self.key, algorithm="ES256", headers={"x5c": x5c or self.x5c})

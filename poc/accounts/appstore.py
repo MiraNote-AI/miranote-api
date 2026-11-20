@@ -261,55 +261,27 @@ def apple_root_der() -> bytes:
 
 
 def _root_certs() -> Optional[List[bytes]]:
-    """The trust anchors, or None (App Store not configured) when one is
-    unusable. Apple's committed root that does not match its pin is not
-    Apple's. A replacement root from APPSTORE_ROOT_CERTS is the tests' own:
-    a file that is not DER would load, then refuse every genuine payload;
-    one that is DER is used, and logged as an error so it cannot go
-    unnoticed anywhere else. A file that cannot be read is refused too:
-    raised out of startup, it would take sign-in and /usage/* down with
-    the App Store."""
-    paths = config.appstore_root_cert_paths()
-    if not paths:
-        try:
-            data = apple_root_der()
-        except (OSError, ValueError) as exc:
-            log.error(
-                "app store not configured: Apple root certificate is unreadable",
-                extra={"path": str(config.APPLE_ROOT_CERT_PATH), "error": type(exc).__name__},
-            )
-            return None
-        digest = hashlib.sha256(data).hexdigest()
-        if digest != config.APPLE_ROOT_CERT_SHA256:
-            log.error(
-                "app store not configured: Apple root certificate does not match its pin",
-                extra={"path": str(config.APPLE_ROOT_CERT_PATH), "sha256": digest},
-            )
-            return None
-        return [data]
-    roots = []
-    for path in paths:
-        try:
-            data = Path(path).read_bytes()
-        except OSError as exc:
-            log.error(
-                "app store not configured: root certificate is unreadable",
-                extra={"path": path, "error": type(exc).__name__},
-            )
-            return None
-        try:
-            x509.load_der_x509_certificate(data)
-        except ValueError:
-            log.error("app store not configured: root certificate is not DER", extra={"path": path})
-            return None
-        digest = hashlib.sha256(data).hexdigest()
-        if digest != config.APPLE_ROOT_CERT_SHA256:
-            log.error(
-                "app store trusts a root certificate that is not Apple's (APPSTORE_ROOT_CERTS)",
-                extra={"path": path, "sha256": digest},
-            )
-        roots.append(data)
-    return roots
+    """Apple's committed root as the one trust anchor, or None (App Store
+    not configured) when it cannot be read, or does not match its pin and
+    so is not Apple's. No setting replaces it: the tests patch config.py
+    (tests/fake_appstore.py). Raised out of startup instead, an unreadable
+    file would take sign-in and /usage/* down with the App Store."""
+    try:
+        data = apple_root_der()
+    except (OSError, ValueError) as exc:
+        log.error(
+            "app store not configured: Apple root certificate is unreadable",
+            extra={"path": str(config.APPLE_ROOT_CERT_PATH), "error": type(exc).__name__},
+        )
+        return None
+    digest = hashlib.sha256(data).hexdigest()
+    if digest != config.APPLE_ROOT_CERT_SHA256:
+        log.error(
+            "app store not configured: Apple root certificate does not match its pin",
+            extra={"path": str(config.APPLE_ROOT_CERT_PATH), "sha256": digest},
+        )
+        return None
+    return [data]
 
 
 def from_config() -> AppStore:
