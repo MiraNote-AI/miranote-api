@@ -85,10 +85,9 @@ Apple again and sends the fresh `authorization_code` (single-use, valid
 
 1. sets `users.deletion_requested_at`, revokes every session of the
    user and deletes their taste events: from now on `/me`,
-   `/auth/refresh`, `/events` and the metered AI routes answer 401. As
-   after sign-out, an access token already issued still opens the
-   unmetered AI routes (voice-to-text, for one) until it expires, at
-   most 1 h;
+   `/auth/refresh`, `/events` and every AI route answer 401, even to an
+   access token issued before (the unmetered AI routes, voice-to-text for
+   one, ask the internal `/usage/user` on every signed-in call);
 2. exchanges the code at Apple (`/auth/token`) and revokes the refresh
    token it gets at once (`/auth/revoke`), with a client secret signed by
    the Sign in with Apple key. Network errors and 5xx are tried 3 times;
@@ -278,7 +277,7 @@ unmetered until App Attest (design 6.5).
 
 ### Internal routes stay off the tunnel
 
-`/usage/reserve` and `/usage/settle` take `X-Internal-Secret`
+`/usage/reserve`, `/usage/settle` and `/usage/user` take `X-Internal-Secret`
 (`ACCOUNTS_INTERNAL_SECRET`, the same value in the repo root `.env` for the
 AI services). The AI services call them on `127.0.0.1:8007`, never through
 the tunnel. The tunnel must not serve them: put this rule **above** the

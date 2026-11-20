@@ -4,18 +4,22 @@ Replaces beta_auth.install on every AI service. A request carries
 `Authorization: Bearer <token>`, where the token is either
 
 - our access JWT from the accounts service: verified here against the
-  accounts JWKS (fetched once, cached; no per-request call for auth), then
+  accounts JWKS (fetched once, cached; verifying needs no per-request
+  call), then
   a metered route reserves one unit with the accounts service before the
   handler runs and settles it after: `ok` on a 2xx answer, `failed` (not
-  charged) on anything else; or
+  charged) on anything else. Any other route (/describe, /clean,
+  transcription, ...) asks the accounts service whether the user still
+  exists (/usage/user, one primary-key read), so a deleted account is cut
+  off at once there too (design 3.2, 6.1); or
 - the shared beta token (beta_auth), accepted while ACCEPT_BETA_TOKENS is on
   (default) so TestFlight builds without sign-in keep working. Not metered;
   beta_auth's rate limit still applies. Paths in `beta_always` take it even
   with the flag off (/mood, until App Attest lands: design 6.5).
 
-Fail closed: when the accounts service cannot be reached for a metered
-route (or its keys were never fetched), the answer is 503
-{"reason": "accounts_unavailable"}, never an unmetered call.
+Fail closed: when the accounts service cannot be reached for a signed-in
+call (or its keys were never fetched), the answer is 503
+{"reason": "accounts_unavailable"}, never an unchecked or unmetered call.
 
 Answers the app can act on, all JSON with a `reason`:
     401 missing_token | invalid_token | token_expired | unknown_user
@@ -223,6 +227,22 @@ def reserve(user_id: uuid.UUID, feature: str, request_id: uuid.UUID, model: str)
     return response
 
 
+def user_exists(user_id: uuid.UUID) -> bool:
+    """Whether the accounts service still knows this user: False once
+    DELETE /me has marked the account. By id with the internal secret, not
+    by re-sending the token, so a token that expires in between (or clock
+    skew) is never mistaken for a deleted account. Raises
+    AccountsUnavailable for anything but 200 or 401."""
+    try:
+        with _client() as client:
+            response = client.post("/usage/user", headers=_internal_headers(), json={"user_id": str(user_id)})
+    except httpx.HTTPError as exc:
+        raise AccountsUnavailable(type(exc).__name__)
+    if response.status_code not in (200, 401):
+        raise AccountsUnavailable("user check answered {}".format(response.status_code))
+    return response.status_code == 200
+
+
 def _reason(response: httpx.Response) -> Optional[str]:
     try:
         return response.json().get("reason")
@@ -333,6 +353,14 @@ def install(
 
         spec = metered.get(path)
         if spec is None or request.method != "POST" or (spec.applies is not None and not spec.applies(request)):
+            # No reserve to notice a deleted account, so ask (design 6.1).
+            try:
+                exists = await asyncio.to_thread(user_exists, user_id)
+            except AccountsUnavailable as exc:
+                log.warning("user check unavailable: %s", exc)
+                return _reject(503, "accounts_unavailable", "sign-in service unavailable, try again shortly")
+            if not exists:
+                return _reject(401, "unknown_user", "this account no longer exists; sign in again")
             return await call_next(request)
 
         request_id = _request_id(request.headers.get("X-Request-ID"))
@@ -361,8 +389,8 @@ def install(
     if jwt is None:
         print("[ai_auth] WARNING: PyJWT[crypto] is not installed -- signed-in calls will "
               "answer 503; run pip install -r requirements.txt")
-    if not os.environ.get("ACCOUNTS_INTERNAL_SECRET", "").strip() and metered:
-        print("[ai_auth] WARNING: ACCOUNTS_INTERNAL_SECRET is empty -- signed-in calls to "
-              "{} will answer 503".format(sorted(metered)))
+    if not os.environ.get("ACCOUNTS_INTERNAL_SECRET", "").strip():
+        print("[ai_auth] WARNING: ACCOUNTS_INTERNAL_SECRET is empty -- every signed-in call "
+              "will answer 503")
     print("[ai_auth] gate active: user tokens via {}, beta tokens {}".format(
         accounts_url(), "accepted" if accept_beta_tokens() else "refused"))

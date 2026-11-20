@@ -103,6 +103,19 @@ def test_internal_routes_answer_404_through_the_tunnel(client):
     assert r.status_code == 404
 
 
+def test_user_check_needs_the_secret_and_refuses_a_deleted_user(client):
+    def check(user, headers=SECRET):
+        return client.post("/usage/user", headers=headers, json={"user_id": str(user)})
+
+    live = new_user()
+    assert check(live).status_code == 200
+    assert check(live, headers={}).status_code == 403
+    assert check(live, headers=dict(SECRET, **{"Cf-Connecting-IP": "203.0.113.9"})).status_code == 404
+    for user in (new_user(deleting=True), uuid.uuid4()):
+        r = check(user)
+        assert r.status_code == 401 and r.json()["reason"] == "unknown_user"
+
+
 def test_internal_secret_is_required(monkeypatch):
     monkeypatch.delenv("ACCOUNTS_INTERNAL_SECRET")
     with pytest.raises(RuntimeError, match="ACCOUNTS_INTERNAL_SECRET is not set"):
@@ -451,6 +464,10 @@ def _ai_service():
             raise HTTPException(502, detail="provider failed")
         return {"expanded": "..."}
 
+    @app.post("/describe")
+    async def describe():
+        return {"description": "..."}
+
     ai_auth.install(app, metered={"/expand": ai_auth.Metered("expand", model="test-model")})
     return app
 
@@ -484,3 +501,16 @@ def test_ai_gate_refuses_a_deleted_user_with_a_valid_token(client, ai_client):
     token = main.app.state.signer.issue(user, dt.datetime.now(dt.timezone.utc))
     r = ai_client.post("/expand", headers={"Authorization": "Bearer " + token})
     assert r.status_code == 401 and r.json()["reason"] == "unknown_user"
+
+
+def test_ai_gate_refuses_a_deleted_user_on_unmetered_routes(client, ai_client):
+    """DELETE /me cuts off the routes that never reserve too (design 3.2,
+    6.1), not only when the access token expires."""
+    user = new_user()
+    token = main.app.state.signer.issue(user, dt.datetime.now(dt.timezone.utc))
+    auth = {"Authorization": "Bearer " + token}
+    assert ai_client.post("/describe", headers=auth).status_code == 200
+    run_sql("UPDATE users SET deletion_requested_at = now() WHERE id = :u", u=user)
+    r = ai_client.post("/describe", headers=auth)
+    assert r.status_code == 401 and r.json()["reason"] == "unknown_user"
+    assert ledger(user) == []
