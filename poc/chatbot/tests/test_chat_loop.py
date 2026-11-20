@@ -350,6 +350,7 @@ def _guard(**overrides):
         "look_tool": "look_at_page",
         "action_tools": ["edit_page", "restyle_photo"],
         "nudge": "you looked but did not act -- act now",
+        "keep": "KEEP",
     }
     defaults.update(overrides)
     return ActionGuard(**defaults)
@@ -425,3 +426,148 @@ def test_a_change_after_a_look_needs_no_nudge():
     nudges = [m for m in history if m.get("role") == "user" and "did not act" in m.get("content", "")]
     assert nudges == []
     assert len(client.chat.completions.calls) == 3
+
+
+def test_words_asked_for_after_a_look_survive_the_nudge():
+    # S1-b (#121): the user asked for words, the model looked, then
+    # answered with them. The nudge's reply makes no change, so the
+    # words -- not the reply to the nudge -- are the answer.
+    words = "The tide came in slow. We stayed until the light went gold."
+    scripted = [
+        _resp(_msg(tool_calls=[_tool_call("c1", "look_at_page", {})])),
+        _resp(_msg(content=words)),
+        _resp(_msg(content=(
+            "I hadn't changed anything yet; you only asked for the words."
+        ))),
+    ]
+    client = FakeClient(scripted)
+    store = SessionStore(ttl_seconds=60)
+    result = run_turn(
+        client=client, session_store=store, session_id=None,
+        user_message="write me two sentences for this page", model="fake",
+        tools=[{"type": "function", "function": {"name": "x"}}],
+        tool_dispatcher=lambda name, args: {"status": "ok"},
+        max_iterations=6, max_history=40,
+        system_prompt="sys", action_guard=_guard(),
+    )
+    assert result.reply == words
+    history = store.get(result.session_id)
+    assert history[-1] == {"role": "assistant", "content": words}
+    assert all("did not act" not in (m.get("content") or "") for m in history)
+    assert all("hadn't changed" not in (m.get("content") or "") for m in history)
+
+
+def test_a_keep_reply_to_the_nudge_is_never_shown():
+    words = "Two quiet lines for the page."
+    scripted = [
+        _resp(_msg(tool_calls=[_tool_call("c1", "look_at_page", {})])),
+        _resp(_msg(content=words)),
+        _resp(_msg(content="KEEP -- no change was asked for.")),
+    ]
+    client = FakeClient(scripted)
+    store = SessionStore(ttl_seconds=60)
+    result = run_turn(
+        client=client, session_store=store, session_id=None,
+        user_message="give me a caption", model="fake",
+        tools=[{"type": "function", "function": {"name": "x"}}],
+        tool_dispatcher=lambda name, args: {"status": "ok"},
+        max_iterations=6, max_history=40,
+        system_prompt="sys", action_guard=_guard(),
+    )
+    assert result.reply == words
+    assert len(client.chat.completions.calls) == 3
+    history = store.get(result.session_id)
+    assert history[-1] == {"role": "assistant", "content": words}
+    assert all("KEEP" not in (m.get("content") or "") for m in history)
+
+
+def test_a_described_change_is_still_nudged_into_a_real_one():
+    scripted = [
+        _resp(_msg(tool_calls=[_tool_call("c1", "look_at_page", {})])),
+        _resp(_msg(content="I moved the title to the top for you.")),
+        _resp(_msg(tool_calls=[_tool_call("c2", "edit_page", {"changes": [{"id": "t1", "y": 0}]})])),
+        _resp(_msg(content="The title is at the top now.")),
+    ]
+    client = FakeClient(scripted)
+    store = SessionStore(ttl_seconds=60)
+    result = run_turn(
+        client=client, session_store=store, session_id=None,
+        user_message="move the title to the top", model="fake",
+        tools=[{"type": "function", "function": {"name": "x"}}],
+        tool_dispatcher=lambda name, args: {"status": "ok"},
+        max_iterations=6, max_history=40,
+        system_prompt="sys", action_guard=_guard(),
+    )
+    assert result.reply == "The title is at the top now."
+    assert [t["name"] for t in result.tool_trace] == ["look_at_page", "edit_page"]
+    sent = [m["content"] for m in client.chat.completions.calls[2]["messages"] if m.get("role") == "user"]
+    assert "did not act" in sent[-1]
+
+
+def test_running_out_of_iterations_after_the_nudge_keeps_the_first_reply():
+    words = "A line for the page."
+    scripted = [
+        _resp(_msg(tool_calls=[_tool_call("c1", "look_at_page", {})])),
+        _resp(_msg(content=words)),
+        _resp(_msg(tool_calls=[_tool_call("c2", "look_at_page", {})])),
+    ]
+    client = FakeClient(scripted)
+    store = SessionStore(ttl_seconds=60)
+    result = run_turn(
+        client=client, session_store=store, session_id=None,
+        user_message="write a line for this page", model="fake",
+        tools=[{"type": "function", "function": {"name": "x"}}],
+        tool_dispatcher=lambda name, args: {"status": "ok"},
+        max_iterations=3, max_history=40,
+        system_prompt="sys", action_guard=_guard(),
+    )
+    assert result.reply == words
+    history = store.get(result.session_id)
+    assert [m["role"] for m in history] == ["system", "user", "assistant", "tool", "assistant"]
+
+
+
+def test_tool_calls_answering_a_nudge_that_changed_nothing_are_dropped():
+    # create_note is not a page change; a turn that keeps its first
+    # reply must not hand the app a note the session never mentions.
+    words = "A line for the page."
+    scripted = [
+        _resp(_msg(tool_calls=[_tool_call("c1", "look_at_page", {})])),
+        _resp(_msg(content=words)),
+        _resp(_msg(tool_calls=[_tool_call("c2", "create_note", {"title": "x"})])),
+        _resp(_msg(content="KEEP")),
+    ]
+    client = FakeClient(scripted)
+    store = SessionStore(ttl_seconds=60)
+    result = run_turn(
+        client=client, session_store=store, session_id=None,
+        user_message="write a line for this page", model="fake",
+        tools=[{"type": "function", "function": {"name": "x"}}],
+        tool_dispatcher=lambda name, args: {"status": "ok"},
+        max_iterations=6, max_history=40,
+        system_prompt="sys", action_guard=_guard(),
+    )
+    assert result.reply == words
+    assert [t["name"] for t in result.tool_trace] == ["look_at_page"]
+
+
+def test_keep_after_a_change_returns_the_first_reply():
+    first = "I moved the title to the top."
+    scripted = [
+        _resp(_msg(tool_calls=[_tool_call("c1", "look_at_page", {})])),
+        _resp(_msg(content=first)),
+        _resp(_msg(tool_calls=[_tool_call("c2", "edit_page", {"changes": [{"id": "t1"}]})])),
+        _resp(_msg(content="KEEP.")),
+    ]
+    client = FakeClient(scripted)
+    store = SessionStore(ttl_seconds=60)
+    result = run_turn(
+        client=client, session_store=store, session_id=None,
+        user_message="move the title to the top", model="fake",
+        tools=[{"type": "function", "function": {"name": "x"}}],
+        tool_dispatcher=lambda name, args: {"status": "ok"},
+        max_iterations=6, max_history=40,
+        system_prompt="sys", action_guard=_guard(),
+    )
+    assert result.reply == first
+    assert [t["name"] for t in result.tool_trace] == ["look_at_page", "edit_page"]

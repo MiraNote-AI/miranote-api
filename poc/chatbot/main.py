@@ -184,6 +184,7 @@ async def chat(req: ChatRequest):
             look_tool="look_at_page",
             action_tools=sorted(canvas.CANVAS_TOOL_NAMES - {"look_at_page"}),
             nudge=canvas.ACTION_NUDGE,
+            keep=canvas.ACTION_KEEP,
         )
     elif journal_mode:
         message = journal.compose_user_message(

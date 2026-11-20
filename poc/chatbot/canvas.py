@@ -209,12 +209,17 @@ LOOK_ACTION_NUDGE = (
 
 # The loop-level guard's nudge (chat_loop.ActionGuard): fired when the
 # model looked at the page and then answered in prose instead of acting.
+# If the model then makes no change, the loop keeps its first reply, so
+# the ACTION_KEEP answer is never shown -- it just saves a rewrite.
+ACTION_KEEP = "KEEP"
 ACTION_NUDGE = (
     "You looked at the page but have not changed it. If the user asked "
-    "you to change the page, apply the change now with the matching "
-    "tool -- edit_page for layout, restyle_photo for a photo's look, "
-    "set_background or clear_background for the backdrop. If they only "
-    "asked how the page looks, answer now."
+    "you to change the page, make the change now with the matching tool "
+    "-- edit_page for layout, restyle_photo for a photo's look, "
+    "set_background or clear_background for the backdrop. If they did "
+    "not ask for a change (a question about the page, or words they "
+    "asked for in the chat), your reply already answered them: reply "
+    "with exactly " + ACTION_KEEP + "."
 )
 
 

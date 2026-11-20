@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import unicodedata
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional
@@ -23,12 +24,16 @@ class ActionGuard:
     answered in prose without calling any of `action_tools` -- the weak
     model's way of DESCRIBING a change instead of making it. The nudge
     rides as a user-role message so the loop can hand the model its
-    tools again; a look-only question costs one extra completion and
-    keeps its reply."""
+    tools again. If the model still makes no change, the first reply was
+    the answer (a question, or words the user asked for): it is returned
+    and the nudge exchange -- messages and tool calls -- is dropped. The
+    nudge asks for the bare word `keep` in that case; a reply carrying it
+    is never shown."""
 
     look_tool: str
     action_tools: List[str]
     nudge: str
+    keep: str
 
 
 def drop_unrenderable(text: str) -> str:
@@ -130,7 +135,22 @@ def run_turn(
     trace: List[Dict[str, Any]] = []
     reply: Optional[str] = None
     empty_retries = 0
-    nudged = False
+    # Where the nudge exchange starts in history and trace, and the reply
+    # it would replace; set once the guard has nudged.
+    nudged_at: Optional[int] = None
+    trace_at = 0
+    first_reply = ""
+
+    def acted() -> bool:
+        return action_guard is not None and bool(
+            set(action_guard.action_tools) & {t["name"] for t in trace}
+        )
+
+    def keep_first_reply() -> str:
+        del history[nudged_at:]
+        del trace[trace_at:]
+        return first_reply
+
     for _ in range(max_iterations):
         kwargs = {
             "model": model,
@@ -150,19 +170,31 @@ def run_turn(
                 empty_retries += 1
                 reply = None
                 continue
-            called = {t["name"] for t in trace}
-            if (
-                action_guard is not None
-                and not nudged
-                and reply.strip()
-                and action_guard.look_tool in called
-                and not (set(action_guard.action_tools) & called)
+            if nudged_at is not None and not acted():
+                # The nudge changed nothing, so the first reply was the
+                # answer; whatever the model said to the nudge (KEEP, or
+                # "I hadn't changed anything") never reaches the user.
+                reply = keep_first_reply()
+            elif nudged_at is not None and re.search(
+                rf"\b{re.escape(action_guard.keep)}\b", reply
             ):
-                # The model LOOKED and then described the change in
-                # prose instead of making it. One corrective turn, with
-                # the tools still on the table; a look-only question
-                # just answers again.
-                nudged = True
+                # It changed the page and still said KEEP: the change
+                # stands, and the first reply describes it.
+                reply = first_reply
+            elif (
+                action_guard is not None
+                and nudged_at is None
+                and reply.strip()
+                and action_guard.look_tool in {t["name"] for t in trace}
+                and not acted()
+            ):
+                # The model LOOKED and then answered in prose without
+                # changing the page. One corrective turn, with the tools
+                # still on the table, in case it described a change
+                # instead of making it.
+                nudged_at = len(history)
+                trace_at = len(trace)
+                first_reply = reply
                 history.append({"role": "assistant", "content": reply})
                 history.append({"role": "user", "content": action_guard.nudge})
                 reply = None
@@ -221,6 +253,11 @@ def run_turn(
                 "result_preview": result_str[:300],
             })
 
+    if reply is None and nudged_at is not None and not acted():
+        # Ran out of iterations after the nudge without a change: the
+        # first reply still stands.
+        reply = keep_first_reply()
+        history.append({"role": "assistant", "content": reply})
     if reply is None:
         reply = "(stopped: hit MAX_TOOL_ITERATIONS -- partial tool use, no final answer)"
         history.append({"role": "assistant", "content": reply})
