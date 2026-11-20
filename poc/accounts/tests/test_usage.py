@@ -196,6 +196,27 @@ def test_failed_rows_are_not_charged(client):
     assert reserve(client, user, "chat").status_code == 200
 
 
+def test_a_pending_row_counts_while_its_call_can_still_be_running(client):
+    user = new_user()
+    add_usage(user, "photo_push", status="pending", ago=dt.timedelta(minutes=9))
+    assert reserve(client, user, "photo_push").status_code == 429
+
+
+def test_a_pending_row_that_never_settled_stops_counting_after_ten_minutes(client):
+    """A restart mid-call, a lost settle or a lost compose job leaves the row
+    pending; it must not hold the unit until it leaves its window (a week
+    for free photo push, the rest of the month for images)."""
+    user = new_user()
+    add_usage(user, "photo_push", status="pending", ago=dt.timedelta(minutes=11))
+    add_usage(user, "image_generate", n=5, status="pending", ago=dt.timedelta(hours=1))
+    assert reserve(client, user, "photo_push").status_code == 200
+    assert reserve(client, user, "image_generate").status_code == 200
+    # An ok row of the same age still counts.
+    other = new_user()
+    add_usage(other, "photo_push", status="ok", ago=dt.timedelta(minutes=11))
+    assert reserve(client, other, "photo_push").status_code == 429
+
+
 def test_a_retry_of_a_counted_request_id_is_refused(client):
     """Pending or ok: the result is not stored, so a rerun would be free."""
     user = new_user()

@@ -256,7 +256,7 @@ before the reuse check.
 | units | int | e.g. images, turns; 0 on grant rows |
 | cost_usd | numeric | estimated from the model's list price; 0 until the call ends |
 | environment | text | `Sandbox` when the request ran on a Sandbox entitlement (lower caps, 5.2), otherwise `Production`, including free and signed-out requests |
-| status | text | `pending`, `ok` or `failed`; pending and ok rows count toward quotas, failed rows do not |
+| status | text | `pending`, `ok` or `failed`; ok rows count toward quotas, pending rows for their first 10 minutes (a call that never settles stops counting), failed rows do not |
 | created_at | timestamptz | |
 
 Indexes: (`user_id`, `created_at`) and (`device_key_id`, `created_at`)

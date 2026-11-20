@@ -232,7 +232,8 @@ def _reason(response: httpx.Response) -> Optional[str]:
 
 def settle(request_id: uuid.UUID, feature: str, ok: bool) -> None:
     """Never raises: a settle that does not arrive leaves the row pending,
-    which still counts -- the safe side for cost."""
+    which still counts -- the safe side for cost: toward the caps for its
+    first 10 minutes, toward the daily budget at its estimate."""
     body = {"request_id": str(request_id), "status": "ok" if ok else "failed", "cost_usd": COST_USD[feature] if ok else 0}
     try:
         with _client() as client:

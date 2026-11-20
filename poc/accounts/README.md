@@ -232,8 +232,11 @@ here:
   only). Windows: rolling 24 h, rolling 7 days, or the UTC month.
 - Reserve locks the user's row (`SELECT ... FOR UPDATE`), counts the window
   and inserts a `pending` row in one transaction, so parallel requests
-  cannot overshoot a cap. `pending` and `ok` rows count, `failed` rows do
-  not. A retried `request_id` runs again only if its row failed.
+  cannot overshoot a cap. `ok` rows count, `failed` rows do not, and a
+  `pending` row counts for 10 minutes (`PENDING_COUNTS_FOR`): long enough
+  for the longest call (the 300 s compose cap), so a call that never
+  settles stops holding its unit. A retried `request_id` runs again only
+  if its row failed.
 - A 429 body: `{"reason": "quota", "feature", "plan", "limit",
   "resets_at"}`; `resets_at` is when the next unit frees up.
 
