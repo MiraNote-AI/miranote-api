@@ -219,6 +219,7 @@ here:
 |---|---|---|---|
 | `POST /usage/reserve` | AI services | `{"user_id", "feature", "request_id", "units"?, "model"?, "cost_usd"?}` | 200; 401 `unknown_user`; 409 `duplicate_request` / `request_id_conflict`; 429 `quota`; 503 `service_paused` |
 | `POST /usage/settle` | AI services | `{"request_id", "status": "ok" \| "failed", "cost_usd"}` | `{"status"}`; 404 `unknown_request` |
+| `POST /usage/user` | AI services, on every signed-in call that does not reserve | `{"user_id"}` | `{"user_id"}`; 401 `unknown_user` (deleted or never existed) |
 | `GET /me/usage` | app, `Authorization: Bearer <access>` | | `{"plan", "environment", "features": {feature: {"limit", "used", "remaining", "window", "resets_at"}}}` |
 
 - Entitlement: Plus while the user owns an unrevoked subscription whose
