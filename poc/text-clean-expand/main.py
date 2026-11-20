@@ -103,7 +103,20 @@ class PolishResponse(BaseModel):
 # that retry fail as an uncharged 502 after a paid first call.
 REWRITE_TEXT_CAP = 8000
 REWRITE_INSTRUCTION_CAP = 500
-_REWRITE_TAG = re.compile(r"</?\s*(request|block|context)\s*>", re.IGNORECASE)
+# Our tag names in any case, with spaces or line breaks, attributes, a
+# self-closing slash, or fullwidth angle brackets (U+FF1C, U+FF1E).
+_REWRITE_TAG = re.compile(
+    r"[<\uff1c]\s*(?:/\s*)?(?:request|block|context)\b[^<>\uff1c\uff1e]*[>\uff1e]", re.IGNORECASE
+)
+
+
+def _strip_rewrite_tags(s: str) -> str:
+    """`s` without our tag names. Repeated until none is left: one pass
+    over "</req</request>uest>" leaves "</request>"."""
+    while True:
+        s, n = _REWRITE_TAG.subn("", s)
+        if not n:
+            return s
 
 
 class RewriteRequest(BaseModel):
@@ -426,9 +439,7 @@ async def rewrite_text(req: RewriteRequest):
     # not the instruction's.
     # Our tag names are dropped from the fields so none can close its
     # section and forge another.
-    def data(s: str) -> str:
-        return _REWRITE_TAG.sub("", s)
-
+    data = _strip_rewrite_tags
     user_msg = f"<request>\n{data(req.instruction)}\n</request>\n\n<block>\n{data(req.text)}\n</block>"
     if req.context:
         user_msg += f"\n\n<context>\n{data(req.context)}\n</context>"
