@@ -28,7 +28,8 @@ ending") applied to the block being written.
 - Response: `{"original": str, "rewritten": str}`, in the block's
   language whatever the instruction's language.
 - Errors: 422 for an empty or missing `instruction` / `text` or a field
-  over its cap; 502 when the model call fails. Auth and metering are the
+  over its cap; 502 (not charged) when the model call fails or its reply
+  comes back empty or cut off at max_tokens. Auth and metering are the
   gate's (`ai_auth.py`): 401 `missing_token` / `invalid_token` /
   `token_expired` / `unknown_user`; 429 `quota` with `feature: "expand"`
   (the cap /expand and /polish share; the paywall), 429 `rate_limited`

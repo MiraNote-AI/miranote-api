@@ -443,8 +443,11 @@ async def rewrite_text(req: RewriteRequest):
     user_msg = f"<request>\n{data(req.instruction)}\n</request>\n\n<block>\n{data(req.text)}\n</block>"
     if req.context:
         user_msg += f"\n\n<context>\n{data(req.context)}\n</context>"
+    # reject_cut: the app shows the reply in place of the block, so an empty
+    # reply would blank it and a max_tokens-cut one would drop its end; a 502
+    # (not charged) leaves the block as it is.
     rewritten = await call_llm(
-        REWRITE_SYSTEM, user_msg, max_tokens=2048, language_ref=req.text, temperature=0.3
+        REWRITE_SYSTEM, user_msg, max_tokens=2048, language_ref=req.text, temperature=0.3, reject_cut=True
     )
     return RewriteResponse(original=req.text, rewritten=rewritten)
 

@@ -109,6 +109,18 @@ def test_rewrite_no_field_can_forge_a_section_however_the_tag_is_written(client,
     assert "evil" in sent
 
 
+@pytest.mark.parametrize("reply", [("", "stop"), ("The morning light was soft and the cof", "length")])
+def test_rewrite_never_answers_with_an_empty_or_cut_reply(client, reply):
+    """The app shows the reply in place of the block, so an empty reply would
+    blank it and a max_tokens-cut one would drop its end. A 502 leaves the
+    block as it is."""
+    test_client, fake_llm = client
+    fake_llm.reply_with(reply)
+    r = test_client.post("/rewrite", json={"text": "morning light. coffee.", "instruction": "warmer"})
+    assert r.status_code == 502
+    assert len(fake_llm.chat.completions.calls) == 1
+
+
 @pytest.mark.parametrize(
     "body",
     [

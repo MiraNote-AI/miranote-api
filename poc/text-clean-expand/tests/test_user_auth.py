@@ -62,6 +62,14 @@ def test_rewrite_is_metered_on_the_expand_cap(svc):
     assert len(fake_llm.chat.completions.calls) == 1
 
 
+def test_a_cut_rewrite_is_a_502_and_not_charged(svc):
+    http, fake_llm, accounts = svc
+    fake_llm.reply_with(("The morning light was", "length"))
+    r = http.post("/rewrite", json={"text": "x", "instruction": "warmer"}, headers=accounts.headers())
+    assert r.status_code == 502
+    assert accounts.statuses("expand") == ["failed"]
+
+
 def test_rewrite_without_a_token_is_401(svc):
     http, fake_llm, _ = svc
     r = http.post("/rewrite", json={"text": "x", "instruction": "warmer"})
