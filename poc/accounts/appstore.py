@@ -266,10 +266,19 @@ def _root_certs() -> Optional[List[bytes]]:
     Apple's. A replacement root from APPSTORE_ROOT_CERTS is the tests' own:
     a file that is not DER would load, then refuse every genuine payload;
     one that is DER is used, and logged as an error so it cannot go
-    unnoticed anywhere else."""
+    unnoticed anywhere else. A file that cannot be read is refused too:
+    raised out of startup, it would take sign-in and /usage/* down with
+    the App Store."""
     paths = config.appstore_root_cert_paths()
     if not paths:
-        data = apple_root_der()
+        try:
+            data = apple_root_der()
+        except (OSError, ValueError) as exc:
+            log.error(
+                "app store not configured: Apple root certificate is unreadable",
+                extra={"path": str(config.APPLE_ROOT_CERT_PATH), "error": type(exc).__name__},
+            )
+            return None
         digest = hashlib.sha256(data).hexdigest()
         if digest != config.APPLE_ROOT_CERT_SHA256:
             log.error(
@@ -280,7 +289,14 @@ def _root_certs() -> Optional[List[bytes]]:
         return [data]
     roots = []
     for path in paths:
-        data = Path(path).read_bytes()
+        try:
+            data = Path(path).read_bytes()
+        except OSError as exc:
+            log.error(
+                "app store not configured: root certificate is unreadable",
+                extra={"path": path, "error": type(exc).__name__},
+            )
+            return None
         try:
             x509.load_der_x509_certificate(data)
         except ValueError:

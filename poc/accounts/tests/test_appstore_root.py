@@ -62,6 +62,24 @@ def test_a_committed_root_that_does_not_match_the_pin_is_refused_loudly(errors, 
     ]
 
 
+@pytest.mark.parametrize("content", [None, b"not a certificate\n"])
+def test_an_unreadable_committed_root_leaves_only_the_app_store_unconfigured(errors, tmp_path, monkeypatch, content):
+    # Missing or not a certificate: refused like a pin mismatch, not raised
+    # out of startup, which would take sign-in and /usage/* down with it.
+    path = tmp_path / "AppleRootCA-G3.pem"
+    if content is not None:
+        path.write_bytes(content)
+    monkeypatch.setattr(config, "APPLE_ROOT_CERT_PATH", path)
+    assert appstore.from_config().verifiers == {}
+    assert [r.getMessage() for r in errors] == ["app store not configured: Apple root certificate is unreadable"]
+
+
+def test_a_missing_replacement_root_is_refused_loudly_at_startup(errors, tmp_path, monkeypatch):
+    monkeypatch.setenv("APPSTORE_ROOT_CERTS", str(tmp_path / "missing.cer"))
+    assert appstore.from_config().verifiers == {}
+    assert [r.getMessage() for r in errors] == ["app store not configured: root certificate is unreadable"]
+
+
 def test_a_pem_root_is_refused_loudly_at_startup(errors, tmp_path, monkeypatch):
     # Before: a PEM file started fine, then refused every genuine payload.
     pem = tmp_path / "root.pem"
