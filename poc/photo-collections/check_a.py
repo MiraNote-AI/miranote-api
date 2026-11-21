@@ -17,6 +17,8 @@ import re
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
+import config
+
 SUBJECT_TYPES = ("food", "drink", "person", "animal", "object", "scenery")
 FLAGS = (
     "screenshot", "document", "unrecognizable",
@@ -299,4 +301,75 @@ def validate(raw, input_ids: List[str]) -> AResult:
     # Rule 6: fewer than 3 selected -> not pushed.
     if len(selected) < MIN_SELECTED:
         result.verdict = "too_few_selected"
+    return result
+
+
+REPEAT_DROPPED = ("unclear", "sensitive", "duplicate")
+
+
+def validate_repeat(raw, input_ids: List[str], days: Dict[str, str]) -> AResult:
+    """Check call A's output for a repeat theme. There is no selection step:
+    every photo that is kept, not sensitive and not dropped as unclear or
+    duplicate is selected. `days` maps a photo id to its local yyyy-MM-dd.
+    Verdicts: ok, sensitive / skip_screenshots (skip=true), too_few_days."""
+    if not isinstance(raw, dict):
+        raise CheckFailed("output is not an object")
+    items = raw.get("photos")
+    if not isinstance(items, list):
+        raise CheckFailed("photos missing or not a list")
+    photos: Dict[str, PhotoFacts] = {}
+    for item in items:
+        p = _photo(item)
+        if p.id in photos:
+            raise CheckFailed("photo {} described twice".format(p.id))
+        photos[p.id] = p
+    missing = [pid for pid in input_ids if pid not in photos]
+    extra = [pid for pid in photos if pid not in input_ids]
+    if missing:
+        raise CheckFailed("photos missing ids {}".format(missing))
+    if extra:
+        raise CheckFailed("photos has unknown ids {}".format(extra))
+
+    skip_reason = raw.get("skip_reason") if isinstance(raw.get("skip_reason"), str) else ""
+    if raw.get("skip") is True:
+        sensitive = any(SENSITIVE_FLAGS.intersection(p.flags) for p in photos.values())
+        return AResult(
+            photos=photos, selected=[], peak="",
+            verdict="sensitive" if sensitive else "skip_screenshots",
+            order=list(input_ids), skip_reason=skip_reason,
+        )
+
+    selected = [
+        pid for pid in input_ids
+        if photos[pid].keep
+        and not SENSITIVE_FLAGS.intersection(photos[pid].flags)
+        and photos[pid].drop_reason not in REPEAT_DROPPED
+    ]
+    blank = [pid for pid in selected if not photos[pid].description]
+    if blank:
+        raise CheckFailed("selected photos without a description: {}".format(blank))
+
+    peak = raw.get("peak_id")
+    peak = peak.strip() if isinstance(peak, str) else ""
+    if peak not in input_ids:
+        raise CheckFailed("peak_id {!r} is not an input id".format(peak))
+
+    result = AResult(
+        photos=photos, selected=selected, peak=peak, verdict="ok",
+        order=list(input_ids), skip_reason=skip_reason,
+    )
+    if len({days[pid] for pid in selected}) < config.REPEAT_MIN_DAYS:
+        result.verdict = "too_few_days"
+        result.peak = ""
+        return result
+
+    # A peak that was dropped or flagged is replaced by the unflagged selected
+    # photo with the most subjects (tie -> the latest); none left -> not pushed.
+    if peak not in selected or photos[peak].flags:
+        clean = [pid for pid in selected if not photos[pid].flags]
+        if not clean:
+            result.verdict = "skip_screenshots"
+            return result
+        result.peak_replaced_from = peak
+        result.peak = max(clean, key=lambda pid: (len(photos[pid].subjects), input_ids.index(pid)))
     return result

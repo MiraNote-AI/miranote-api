@@ -1,6 +1,7 @@
 {
   "sensitive": "这组照片涉及敏感场景，不推",
   "skip_screenshots": "这组大多是截图或资料，不推",
+  "too_few_days": "不同日子的照片不到 5 天，不推",
   "too_few_selected": "精选不到 3 张",
   "check_failed": "AI 的结果没通过检查",
   "timeout": "AI 超时",

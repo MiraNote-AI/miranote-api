@@ -592,6 +592,9 @@ def run(meta: dict, images: Dict[str, bytes], deadline: float) -> dict:
     """Compose one memory. meta and images are already validated. Never
     raises: an unexpected error still writes the log line (raw output and
     cost of the calls made so far) and answers error / model_error."""
+    if meta.get("mode") == "repeat":
+        import repeat  # late: repeat imports this module
+        return repeat.run(meta, images, deadline)
     job = _Job(meta, deadline)
     try:
         return _compose(job, meta, images)

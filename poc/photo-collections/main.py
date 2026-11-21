@@ -126,6 +126,35 @@ def _check_photo(p) -> bool:
     return True
 
 
+def _check_repeat_meta(meta: dict) -> Optional[dict]:
+    """A repeat-theme meta: a theme, 5..9 photos (days are checked by call A)."""
+    if not isinstance(meta.get("group_key"), str) or not meta["group_key"].strip():
+        return None
+    if not _is_str_list(meta.get("recent_question_types")):
+        return None
+    tz = meta.get("tz")
+    if tz is not None and not (isinstance(tz, str) and len(tz) <= config.MAX_TZ_CHARS):
+        return None
+    theme = meta.get("theme")
+    if not isinstance(theme, dict):
+        return None
+    for key in ("id", "name", "noun", "same_part"):
+        value = theme.get(key)
+        if not isinstance(value, str) or not value.strip() or len(value) > rounds.MAX_TEXT_CHARS:
+            return None
+    if theme.get("where") is not None and not rounds._check_where(theme["where"]):
+        return None
+    photos = meta.get("photos")
+    if not isinstance(photos, list) or not config.REPEAT_MIN_PHOTOS <= len(photos) <= config.REPEAT_MAX_PHOTOS:
+        return None
+    if not all(_check_photo(p) for p in photos):
+        return None
+    ids = [p["id"] for p in photos]
+    if len(set(ids)) != len(ids):
+        return None
+    return meta
+
+
 def _check_meta(raw) -> Optional[dict]:
     """The parsed meta when it matches handoff 5.1, else None."""
     if not isinstance(raw, str):
@@ -134,6 +163,11 @@ def _check_meta(raw) -> Optional[dict]:
         meta = json.loads(raw)
     except ValueError:
         return None
+    if isinstance(meta, dict) and "mode" in meta:
+        if meta["mode"] == "repeat":
+            return _check_repeat_meta(meta)
+        if meta["mode"] != "life_fragment":
+            return None
     if not isinstance(meta, dict) or any(k not in meta for k in REQUIRED_META):
         return None
     if not isinstance(meta["group_key"], str) or not meta["group_key"].strip():
