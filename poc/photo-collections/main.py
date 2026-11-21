@@ -327,7 +327,7 @@ async def round1_route(request: Request):
     return await _round_route(
         request, "round1", rounds.check_round1, config.ROUND1_MAX_PHOTOS,
         rounds.messages_round1,
-        lambda m: {"photos": len(m["photos"]), "pile": m["pile"], "reask": m.get("old") is not None})
+        lambda m: {"photos": len(m["photos"]), "pile": {k: m["pile"][k] for k in ("photo_count", "day_count")}, "reask": m.get("old") is not None})
 
 
 @app.post("/collections/rounds/2")

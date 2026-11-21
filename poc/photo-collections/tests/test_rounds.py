@@ -84,10 +84,10 @@ def test_round1_renders_where_lines(client, fake_model):
     meta = _meta1(split_a=[_group("A1"), _group("A2", other)],
                   split_b=[_group("B1", dict(WHERE, places=3, weekpart="weekend"))])
     where = _post1(client, meta).json()["where"]
-    assert where["A1"] == "多在傍晚，18–20 点，工作日，同一个地点"
+    assert where["A1"] == "多在傍晚，18–20 点，工作日，一个固定的地点"
     assert where["A2"] == ""
     assert where["B1"] == "多在傍晚，18–20 点，周末，3 个地点"
-    assert "A1：多在傍晚，18–20 点，工作日，同一个地点" in _text(fake_model.calls[0])
+    assert "A1：多在傍晚，18–20 点，工作日，一个固定的地点" in _text(fake_model.calls[0])
 
 
 def test_round1_reask_prepends_old_names(client, fake_model):
@@ -325,3 +325,36 @@ def test_round1_prompt_body_matches_the_draft():
 
 def test_round2_prompt_body_matches_the_draft():
     assert _body("repeat_round2_user") == ROUND2_PROMPT
+
+
+def test_round2_accepts_pile_theme_without_noun_or_same_part(client, fake_model):
+    fake_model.reply("r2", REPLY)
+    meta = _meta2()
+    meta["theme"] = {"name": "THEME_NAME", "noun": "", "same_part": ""}
+    assert _post2(client, meta).status_code == 200
+    text = _text(fake_model.calls[0])
+    assert "THEME_NAME" in text and "短名词：无" in text and "是：无。" in text
+
+
+def test_round2_still_requires_theme_name(client):
+    meta = _meta2()
+    meta["theme"] = {"name": "", "noun": "", "same_part": ""}
+    assert _post2(client, meta).status_code == 400
+
+
+def test_shorten_accepts_empty_same_part(client, fake_model):
+    fake_model.reply("rs", '{"items": []}')
+    r = client.post("/collections/rounds/shorten",
+                    json={"items": [{"key": "pile", "name": "N" * 14, "same_part": ""}]})
+    assert r.status_code == 200
+    for bad in ({"key": "", "name": "n", "same_part": ""}, {"key": "k", "name": "", "same_part": ""}):
+        assert client.post("/collections/rounds/shorten", json={"items": [bad]}).status_code == 400
+
+
+def test_round1_log_keeps_only_validated_pile_fields(client, fake_model, tmp_log):
+    fake_model.reply("r1", REPLY)
+    meta = _meta1()
+    meta["pile"]["extra_secret"] = "LEAKED_VALUE"
+    _post1(client, meta)
+    logged = tmp_log.read_text(encoding="utf-8")
+    assert "photo_count" in logged and "LEAKED_VALUE" not in logged

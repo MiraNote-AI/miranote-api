@@ -139,7 +139,7 @@
   },
   "where_places": {
     "0": "",
-    "1": "同一个地点",
+    "1": "一个固定的地点",
     "many": "{n} 个地点",
     "null": ""
   },
@@ -158,10 +158,10 @@
   "month_one": "{m}月",
   "month_span": "{m1}月–{m2}月",
   "month_years": "{y1}.{m1}–{y2}.{m2}",
-  "_repeat_patterns_note": "Repeat themes only (decision 2026-11-20 H2): counts and frequency in a detail sentence or question. Regexes, matched on the NFKC-folded text. A count right after 每 这 那 哪 第 上 下 (every / this / that / which / ordinal / last / next time) is left alone.",
+  "_repeat_patterns_note": "Repeat themes only (decision 2026-11-20 H2): counts and frequency in a detail sentence or question. Regexes, matched on the NFKC-folded text. A count right after 每 这 那 哪 第 上 下 (every / this / that / which / ordinal / last / next time) is left alone; a lone 一 次 is also left alone after 有 的 再 (once upon a time / the most X one / once more).",
   "repeat_patterns": [
     "拍了\\s*[0-9一二两三四五六七八九十百千几多好]+\\s*次",
-    "(?<![每这那哪第上下])(?:[0-9]+|[一二两三四五六七八九十百千几]+)\\s*次",
+    "(?:(?<![每这那哪第上下有的再])一|(?<![每这那哪第上下])(?:[0-9]+|[二两三四五六七八九十百千几]+))\\s*次",
     "每\\s*一?\\s*天",
     "天天"
   ]

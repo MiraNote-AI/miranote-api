@@ -137,9 +137,12 @@ def check_round2(raw: str) -> Optional[dict]:
     if meta is None:
         return None
     theme = meta.get("theme")
-    if not isinstance(theme, dict) or not all(
-            _is_text(theme.get(k), MAX_TEXT_CHARS) for k in ("name", "noun", "same_part")):
+    if not isinstance(theme, dict) or not _is_text(theme.get("name"), MAX_TEXT_CHARS):
         return None
+    for k in ("noun", "same_part"):  # a pile has neither; empty is fine
+        v = theme.get(k, "")
+        if not (isinstance(v, str) and len(v) <= MAX_TEXT_CHARS):
+            return None
     photos = meta.get("photos")
     if not isinstance(photos, list) or not 1 <= len(photos) <= config.ROUND2_MAX_PHOTOS:
         return None
@@ -168,7 +171,10 @@ def check_shorten(body) -> Optional[dict]:
     keys = []
     for item in items:
         if not isinstance(item, dict) or not all(
-                _is_text(item.get(k), MAX_TEXT_CHARS) for k in ("key", "name", "same_part")):
+                _is_text(item.get(k), MAX_TEXT_CHARS) for k in ("key", "name")):
+            return None
+        same = item.get("same_part")  # a pile has none: "" is fine
+        if not (isinstance(same, str) and len(same) <= MAX_TEXT_CHARS):
             return None
         keys.append(item["key"])
     return body if len(set(keys)) == len(keys) else None
@@ -256,7 +262,8 @@ def messages_round2(meta: dict, images: Dict[int, bytes]) -> List[dict]:
     names = texts.json("names")
     theme = meta["theme"]
     numbers = sorted(photo_numbers(meta))
-    lines = [names["round2_theme"].format(name=theme["name"], noun=theme["noun"], same_part=theme["same_part"]),
+    lines = [names["round2_theme"].format(name=theme["name"], noun=theme.get("noun", "").strip() or names["none"],
+                                         same_part=theme.get("same_part", "").strip() or names["none"]),
              names["round2_candidates"].format(count=len(numbers))]
     if meta["pushed"]:
         lines.append(names["round2_pushed"].format(names=names["sep"].join(meta["pushed"])))

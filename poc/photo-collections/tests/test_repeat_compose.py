@@ -172,6 +172,18 @@ def test_repeat_patterns_leave_every_time_alone(text):
     assert body.reject_reason(c, _facts(), mode="repeat") is None
 
 
+@pytest.mark.parametrize("text", ["有一次推开窗", "再一次推开窗", "印象最深的一次是？", "每一次", "这一次", "下一次", "哪一次"])
+def test_repeat_patterns_leave_lone_once_alone(text):
+    c = body.Candidate(text=text, source="llm", photo_ids=["P4"])
+    assert body.reject_reason(c, _facts(), mode="repeat") is None
+
+
+@pytest.mark.parametrize("text", ["拍了 3 次", "拍了三次", "两次推开窗", "十次推开窗", "每天推开窗", "天天推开窗"])
+def test_repeat_patterns_still_block_counts(text):
+    c = body.Candidate(text=text, source="llm", photo_ids=["P4"])
+    assert body.reject_reason(c, _facts(), mode="repeat") is not None
+
+
 def test_repeat_question_types_and_bans():
     a = _facts()
     which = questions.Question(text=GOOD_Q["text"], type="which_most", source="llm")
