@@ -84,7 +84,20 @@ def model_for(call: str) -> str:
     return config.CALL_B_MODEL if call == "b" else config.LLM_MODEL
 
 
+ROUND_CALLS = ("r1", "r2", "rs")
+
+
 def _request(call: str, messages: List[dict], timeout: float) -> dict:
+    if call in ROUND_CALLS:
+        return {
+            "model": model_for(call),
+            "messages": messages,
+            "temperature": config.TEMPERATURE_ROUND,
+            "max_tokens": config.ROUND_MAX_TOKENS,
+            "timeout": timeout,
+            "response_format": {"type": "json_object"},
+            "extra_body": {"enable_thinking": False},
+        }
     mode = {"a": config.CALL_A_MODE, "b": config.CALL_B_MODE, "c": config.CALL_C_MODE}[call]
     if mode not in config.MODES:
         raise ModelError("unknown call mode " + repr(mode))
@@ -118,8 +131,8 @@ def _request(call: str, messages: List[dict], timeout: float) -> dict:
 def complete(messages: List[dict], *, call: str, timeout: float) -> LlmReply:
     """One model call. Raises ModelTimeout or ModelError, never anything else
     from the SDK. Reasoning text from a thinking model is dropped."""
-    if call not in ("a", "b", "c"):
-        raise ValueError("call must be 'a', 'b' or 'c'")
+    if call not in ("a", "b", "c") + ROUND_CALLS:
+        raise ValueError("call must be 'a', 'b', 'c', 'r1', 'r2' or 'rs'")
     if timeout <= 0:
         raise ModelTimeout("no time left for the call")
     kwargs = _request(call, messages, timeout)

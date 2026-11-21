@@ -32,7 +32,7 @@ class FakeModel:
     def __init__(self):
         self.calls: List[dict] = []
         self.unexpected: List[str] = []
-        self._script: Dict[str, list] = {"a": [], "b": [], "c": []}
+        self._script: Dict[str, list] = {"a": [], "b": [], "c": [], "r1": [], "r2": [], "rs": []}
         self._lock = threading.Lock()
         # Unscripted call C: every sentence grounded, every question grounded
         # and safe; a sentence mentions the cover when c_cover(text) is true.

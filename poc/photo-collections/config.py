@@ -49,6 +49,12 @@ TEMPERATURE_A = 0.2
 TEMPERATURE_B = 0.7
 TEMPERATURE_C = 0.2
 
+# Repeat-theme round calls (r1 name clusters, r2 check push candidates, rs
+# spare): LLM_MODEL, thinking off, JSON object, short capped reply.
+ROUND_MAX_TOKENS = 1000
+TEMPERATURE_ROUND = 0.2
+ROUND_TIMEOUT = 45.0
+
 # The copy rules the memory was written under; the phone keys its AI cache
 # on it, so a change of rules never serves old copy (copy refine handoff 5.4).
 COPY_VERSION = "copy_v3"  # copy_v3: question refine 2026-11-05
