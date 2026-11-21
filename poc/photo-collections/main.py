@@ -142,7 +142,7 @@ def _check_repeat_meta(meta: dict) -> Optional[dict]:
         value = theme.get(key)
         if not isinstance(value, str) or not value.strip() or len(value) > rounds.MAX_TEXT_CHARS:
             return None
-    if theme.get("where") is not None and not rounds._check_where(theme["where"]):
+    if theme.get("where") is not None and not rounds.check_where(theme["where"]):
         return None
     photos = meta.get("photos")
     if not isinstance(photos, list) or not config.REPEAT_MIN_PHOTOS <= len(photos) <= config.REPEAT_MAX_PHOTOS:
@@ -163,7 +163,7 @@ def _check_meta(raw) -> Optional[dict]:
         meta = json.loads(raw)
     except ValueError:
         return None
-    if isinstance(meta, dict) and "mode" in meta:
+    if isinstance(meta, dict) and "mode" in meta:  # null is not a mode
         if meta["mode"] == "repeat":
             return _check_repeat_meta(meta)
         if meta["mode"] != "life_fragment":

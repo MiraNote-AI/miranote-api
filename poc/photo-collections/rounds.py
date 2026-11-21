@@ -59,7 +59,7 @@ def _load(raw) -> Optional[dict]:
     return meta if isinstance(meta, dict) else None
 
 
-def _check_where(where) -> bool:
+def check_where(where) -> bool:
     if not isinstance(where, dict):
         return False
     if where.get("daypart") is not None and where["daypart"] not in DAYPARTS:
@@ -86,7 +86,7 @@ def _check_split(split, pattern) -> bool:
             return False
         if g["id"].endswith("0") or not (_is_int(g.get("days")) and g["days"] >= 0):
             return False
-        if not _check_where(g.get("where")):
+        if not check_where(g.get("where")):
             return False
         ids.append(g["id"])
     return len(set(ids)) == len(ids)

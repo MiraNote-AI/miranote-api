@@ -68,6 +68,19 @@ def test_repeat_meta_rejects_unknown_mode(client):
     assert _submit(client, _repeat_meta(6, mode="nope"), _files(6)).status_code == 400
 
 
+def test_repeat_meta_rejects_null_mode(client):
+    assert _submit(client, _repeat_meta(6, mode=None), _files(6)).status_code == 400
+
+
+def test_repeat_a_skip_for_sensitive_reason_gives_sensitive():
+    ids = ["P{}".format(i) for i in range(1, 7)]
+    days = {pid: "2026-10-{:02d}".format(i) for i, pid in enumerate(ids, 1)}
+    raw = json.loads(_a_repeat())
+    raw["photos"][0]["flags"] = ["hospital"]
+    raw["skip"] = True
+    assert check_a.validate_repeat(raw, ids, days).verdict == "sensitive"
+
+
 def test_repeat_meta_rejects_bad_theme(client):
     meta = _repeat_meta(6)
     del meta["theme"]["same_part"]
