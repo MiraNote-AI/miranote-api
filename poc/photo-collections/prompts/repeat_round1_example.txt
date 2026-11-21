@@ -1,0 +1,13 @@
+{
+  "sensitive": false,
+  "pile_name": "<整堆的名字>",
+  "pile_noun": "<短名词>",
+  "chosen": "B",
+  "groups": [
+    {"from": ["B1"], "name": "<这一组的名字>", "noun": "<短名词>", "same_part": "<每次都一样的是什么>", "evidence": []},
+    {"from": ["B2", "B3"], "name": "<合并后这一组的名字>", "noun": "<短名词>", "same_part": "<每次都一样的是什么>", "evidence": []}
+  ],
+  "drop_groups": ["B4"],
+  "not_in_pile": [17],
+  "two_kinds": false
+}

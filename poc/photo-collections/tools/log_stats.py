@@ -32,6 +32,8 @@ def summarize(path: Path) -> dict:
             continue
         if not isinstance(entry, dict):
             continue
+        if "kind" in entry:  # a repeat-theme round line, not a compose job
+            continue
         if str(entry.get("group_key") or "").startswith(TEST_PREFIX):
             skipped += 1
             continue

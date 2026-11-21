@@ -239,6 +239,36 @@ silent the code reads it so:
 - **T1's n** sums `represents` over every sent photo showing X, so the count
   is true of the whole group.
 
+### Repeat-theme rounds
+
+Three more routes forward the repeat-theme judge calls to the model (same
+bearer token as compose; not metered, so a signed-in call is not charged).
+The model's text comes back verbatim in `reply`; the phone parses and checks it.
+
+- `POST /collections/rounds/1` -- multipart `meta` plus photos `1.jpg`..`N.jpg`
+  (1-20 JPEGs, long side at most 336 px, at most 200 KB each). `meta`:
+  `pile {photo_count, day_count}`, `split_a` / `split_b` (0-6 groups of
+  `{id, days, where}`), `photos [{n, a, b, labels}]` (`n` = 1..N) and `old`
+  (`null`, or `{pile_name, groups}` to ask again with the earlier names).
+  The answer also holds `where`, the rendered "where it is concentrated"
+  line of each group id.
+- `POST /collections/rounds/2` -- multipart `meta` plus photos (1-15, same
+  limits). `meta`: `theme {name, noun, same_part}`, `photos [{n}]`,
+  `pushed` (at most 20 names), `blocked` (at most 50 names).
+- `POST /collections/rounds/shorten` -- JSON `{"items": [{key, name, same_part}]}`
+  (1-7 items, text only).
+
+```
+200 {"status": "ok", "reply": "<model text>", "where": {...},   # where: round 1 only
+     "usage": {"prompt_tokens", "completion_tokens", "cost_cny", "model"}}
+400 {"status": "error", "reason": "bad_request", ...}
+502 {"status": "error", "reason": "timeout" | "model_error", "usage": {zeros}}
+```
+
+Each call writes one line to the compose log (`kind` is `round1`, `round2` or
+`shorten`, with tokens, cost, latency and the raw reply, never an image); the
+7-day purge covers it and `tools/log_stats.py` skips it.
+
 ## Log
 
 One JSON line per job in `logs/photo-collections/compose.jsonl` (repo root,

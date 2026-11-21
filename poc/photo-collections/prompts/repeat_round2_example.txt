@@ -1,0 +1,8 @@
+{
+  "photos": [
+    {"id": 1, "belongs": true, "dup_of": null, "poor": false, "sensitive": false},
+    {"id": 2, "belongs": false, "dup_of": null, "poor": false, "sensitive": false},
+    {"id": 3, "belongs": true, "dup_of": 1, "poor": false, "sensitive": false}
+  ],
+  "similar_to": [{"name": "<名单里的名字>", "level": "很像"}]
+}

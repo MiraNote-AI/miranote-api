@@ -25,6 +25,7 @@ from typing import Dict, Optional
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from starlette.concurrency import run_in_threadpool
 
 import ai_auth
 import compose
@@ -32,6 +33,7 @@ import config
 import jobs
 import llm
 import logclean
+import rounds
 import texts
 
 _llm_status = llm.LLM_UNCONFIGURED
@@ -231,6 +233,86 @@ async def compose_route(request: Request):
         return _busy()
     return JSONResponse({"job_id": job_id}, status_code=202)
 
+
+
+async def _read_round_photos(form, numbers, limit: int) -> Optional[Dict[int, bytes]]:
+    """Round photos by number ("3.jpg" is photo 3), in memory only, when they
+    are exactly the numbers meta lists. Small by contract: 336 px, 200 KB."""
+    files = form.getlist("photos")
+    if not 1 <= len(files) <= limit:
+        return None
+    images: Dict[int, bytes] = {}
+    for f in files:
+        filename = getattr(f, "filename", None)
+        if not filename or not hasattr(f, "read"):
+            return None
+        stem = PurePath(filename).stem
+        if not stem.isdigit() or int(stem) in images:
+            return None
+        data = await f.read(config.ROUND_MAX_BYTES + 1)
+        await f.close()
+        if not data or len(data) > config.ROUND_MAX_BYTES:
+            return None
+        size = compose.jpeg_size(data)
+        if size is None or max(size) > config.ROUND_MAX_PX:
+            return None
+        images[int(stem)] = data
+    if set(images) != set(numbers):
+        return None
+    return images
+
+
+async def _round_route(request: Request, kind: str, check, limit: int, build, log_extra):
+    """Validate a multipart round request, call the model off the event loop."""
+    try:
+        form = await request.form(max_files=limit + 1)
+    except Exception:  # noqa: BLE001 -- not multipart, or malformed
+        return _bad_request()
+    try:
+        meta = check(form.get("meta"))
+        if meta is None:
+            return _bad_request()
+        images = await _read_round_photos(form, rounds.photo_numbers(meta), limit)
+        if images is None:
+            return _bad_request()
+    finally:
+        await form.close()
+    messages = build(meta, images)
+    status, body = await run_in_threadpool(rounds.call, kind, messages, log_extra(meta))
+    if kind == "round1" and status == 200:
+        body["where"] = rounds.group_where(meta, texts.json("names"))
+    return JSONResponse(body, status_code=status)
+
+
+@app.post("/collections/rounds/1")
+async def round1_route(request: Request):
+    """Name a pile and pick a split; the model's reply goes back verbatim."""
+    return await _round_route(
+        request, "round1", rounds.check_round1, config.ROUND1_MAX_PHOTOS,
+        rounds.messages_round1,
+        lambda m: {"photos": len(m["photos"]), "pile": m["pile"], "reask": m.get("old") is not None})
+
+
+@app.post("/collections/rounds/2")
+async def round2_route(request: Request):
+    """Check push candidates against a theme and the compare lists."""
+    return await _round_route(
+        request, "round2", rounds.check_round2, config.ROUND2_MAX_PHOTOS,
+        rounds.messages_round2, lambda m: {"photos": len(m["photos"])})
+
+
+@app.post("/collections/rounds/shorten")
+async def shorten_route(request: Request):
+    """Ask for shorter names; text only."""
+    try:
+        body = rounds.check_shorten(await request.json())
+    except Exception:  # noqa: BLE001 -- not JSON
+        body = None
+    if body is None:
+        return _bad_request()
+    status, out = await run_in_threadpool(
+        rounds.call, "shorten", rounds.messages_shorten(body["items"]), {"items": len(body["items"])})
+    return JSONResponse(out, status_code=status)
 
 
 MAX_BATCH_IDS = 20  # the phone sends at most 7; the bound stops abuse of one request

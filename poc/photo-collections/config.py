@@ -54,6 +54,11 @@ TEMPERATURE_C = 0.2
 ROUND_MAX_TOKENS = 1000
 TEMPERATURE_ROUND = 0.2
 ROUND_TIMEOUT = 45.0
+# Round photos arrive already small: 336 px on the long side, 200 KB each.
+ROUND_MAX_PX = 336
+ROUND_MAX_BYTES = 200 * 1024
+ROUND1_MAX_PHOTOS = 20
+ROUND2_MAX_PHOTOS = 15
 
 # The copy rules the memory was written under; the phone keys its AI cache
 # on it, so a change of rules never serves old copy (copy refine handoff 5.4).

@@ -119,5 +119,33 @@
     "第\\s*[一二三四五六七八九十\\d]+\\s*张"
   ],
   "shorten_line": "{i}. {text}（{n} 个字）｜style：{style}｜photo_ids：{ids}",
-  "shorten_q_line": "{i}. {text}（{n} 个字）｜type：{type}"
+  "shorten_q_line": "{i}. {text}（{n} 个字）｜type：{type}",
+  "round1_pile": "【这一堆】共 {count} 张，分在 {days} 个不同的日子。下面给你其中 {sent} 张。",
+  "round1_split_a": "【分法 A：按拍的是什么】{ids}（每组出现的天数：{days}）",
+  "round1_split_b": "【分法 B：按什么时候、在哪儿】{ids}（天数：{days}）",
+  "round1_group_line": "  · {id}：{where}",
+  "round1_photos_head": "【每张图的组号】{items}（A0、B0 = 不在任何组）",
+  "round1_photo_line": "图{n} {a}/{b}",
+  "round1_labels_head": "【每张图手机认出的标签】",
+  "round1_label_line": "图{n}：{labels}",
+  "reask_join": "」「",
+  "where_daypart": "多在{daypart}",
+  "where_hours": "{from}–{to} 点",
+  "where_weekpart": {
+    "weekday": "工作日",
+    "weekend": "周末",
+    "mixed": ""
+  },
+  "where_places": {
+    "0": "",
+    "1": "同一个地点",
+    "many": "{n} 个地点",
+    "null": ""
+  },
+  "where_sep": "，",
+  "photo_tag": "图 {n}",
+  "round2_theme": "【主题】{name}（短名词：{noun}）。每次都一样的是：{same_part}。",
+  "round2_candidates": "【候选】下面 {count} 张，每张来自不同的一天。",
+  "round2_pushed": "【比较名单 1：60 天内推过的】{names}",
+  "round2_blocked": "【比较名单 2：用户说过不想看的】{names}"
 }
