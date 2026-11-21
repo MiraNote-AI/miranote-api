@@ -68,6 +68,26 @@ def test_repeat_meta_accepted_without_life_fragment_fields(client, fake_model):
     assert done["status"] == "ok" and done["memory"]["mode"] == "repeat"
 
 
+def test_repeat_meta_accepts_empty_noun_and_same_part(client, fake_model):
+    meta = _repeat_meta(6)
+    meta["theme"].update(noun="", same_part="")
+    fake_model.reply("a", _a_repeat()).reply("b", _b_repeat())
+    r = _submit(client, meta, _files(6))
+    assert r.status_code == 202
+    done = _poll(client, r.json()["job_id"]).json()
+    assert done["status"] == "ok"
+    assert done["memory"]["ending"]["ctaLabel"] == "留住这些瞬间"
+    a_text = "\n".join(_texts(fake_model.calls[0]["messages"][1]["content"]))
+    assert "（无）" in a_text
+
+
+@pytest.mark.parametrize("key", ["id", "name"])
+def test_repeat_meta_rejects_empty_theme_id_or_name(client, key):
+    meta = _repeat_meta(6)
+    meta["theme"][key] = " "
+    assert _submit(client, meta, _files(6)).status_code == 400
+
+
 @pytest.mark.parametrize("n", [4, 10])
 def test_repeat_meta_rejects_4_or_10_photos(client, n):
     assert _submit(client, _repeat_meta(n), _files(n)).status_code == 400

@@ -140,7 +140,10 @@ def _check_repeat_meta(meta: dict) -> Optional[dict]:
         return None
     for key in ("id", "name", "noun", "same_part"):
         value = theme.get(key)
-        if not isinstance(value, str) or not value.strip() or len(value) > rounds.MAX_TEXT_CHARS:
+        if not isinstance(value, str) or len(value) > rounds.MAX_TEXT_CHARS:
+            return None
+        # Round 1 may give no noun or same part; spec 6.9 has a no-noun CTA.
+        if key in ("id", "name") and not value.strip():
             return None
     if theme.get("where") is not None and not rounds.check_where(theme["where"]):
         return None

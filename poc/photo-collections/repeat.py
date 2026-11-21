@@ -49,13 +49,18 @@ def month_range(taken_at: List[str]) -> str:
     return names["month_years"].format(y1=y1, m1=m1, y2=y2, m2=m2)
 
 
+def _same_part(theme: dict, names: dict) -> str:
+    """The theme's "same every time" line for the prompts; round 1 may give none."""
+    return (theme.get("same_part") or "").strip() or names["none"]
+
+
 def _messages_a(meta: dict, photos: List[dict], images: Dict[str, bytes]) -> List[dict]:
     names = texts.json("names")
     header, photo_tpl, task = compose.split_prompt("repeat_a_user")
     theme = meta["theme"]
     content: List[dict] = [{"type": "text", "text": header.format_map({
         "theme_name": theme["name"],
-        "same_part": theme["same_part"],
+        "same_part": _same_part(theme, names),
         "sent_count": len(photos),
     }).strip("\n")}]
     for p in photos:
@@ -87,7 +92,7 @@ def _messages_b(meta: dict, a: check_a.AResult, by_id: Dict[str, dict],
     content: List[dict] = [{"type": "text", "text": header.format_map({
         "theme_name": theme["name"],
         "noun": (theme.get("noun") or "").strip() or names["none"],
-        "same_part": theme["same_part"],
+        "same_part": _same_part(theme, names),
         "months": months,
         "where": where or names["none"],
         "k": len(a.selected),
@@ -162,7 +167,8 @@ def _run(job: "compose.Job", meta: dict, images: Dict[str, bytes]) -> dict:
     # ---- calls B and C, the shorten rounds (no cover rewrite, H2) ----
     d = compose.draft(job, a, images, _messages_b(meta, a, by_id, images, months), tpls,
                       raw_count=len(kept), when=when, mode=MODE, f0=f0,
-                      c_values={"theme_name": theme["name"], "same_part": theme["same_part"]})
+                      c_values={"theme_name": theme["name"],
+                                "same_part": _same_part(theme, names)})
     detail = d.detail
     final_qs = questions.final(d.qs, noun, MODE)
     job.log["peakRewrite"] = False

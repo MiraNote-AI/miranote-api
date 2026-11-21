@@ -317,7 +317,7 @@ def recheck(meta: dict, entry: dict, memory: dict) -> List[str]:
     raw_a = [c for c in entry.get("calls", []) if c["call"] == "a" and not c.get("error")]
     if not raw_a:
         return ["no successful call A in the log"]
-    ids = [p["id"] for p in sorted(meta["photos"], key=lambda p: compose._sort_key(
+    ids = [p["id"] for p in sorted(meta["photos"], key=lambda p: compose.sort_key(
         compose.parse_time(p["taken_at"])))]
     a = check_a.validate(check_a.parse_json(raw_a[-1]["raw"]), ids)
     detail = memory["ending"]["detail"] or memory["push"]["body"]
