@@ -254,3 +254,74 @@ def test_rounds_not_metered(client, fake_model, accounts):
     assert r.status_code == 200
     assert [c["call"] for c in fake_model.calls] == ["r1", "r2", "rs"]
     assert accounts.rows == {}
+
+
+# The third-version prompts of the draft (feature-photo-trigger/repeat themes,
+# Qwen judge prompt draft), written out so drift is caught. The draft lives
+# outside the repo. The example JSON follows the prompt body.
+ROUND1_PROMPT = """你是一个相册整理助手。下面的照片来自同一个人的相册，被手机归成了一堆，
+分布在很多个不同的日子里。手机还用两种方法把这一堆分成了小组：
+分法 A 按拍的是什么，分法 B 按什么时候、在哪儿拍。每张图都标了它在 A、B 里属于哪个组。
+
+请按顺序做：
+
+1. 敏感：这一堆是不是药、医院、体检单、体重或身体、证件这类内容？是的话，
+   sensitive 填 true，后面几步都不用做。
+
+2. 整堆的名字：2–10 个字，具体、口语，像这个人自己给相册合集起的名字。
+   名字要看着这些照片起；下面和回答格式里的例子只是说明写法，不要照抄。
+   不评价、不说教，不写「同一个」，不写次数。
+   再给一个 2–4 个字的短名词，用在「留住这些{短名词}」这句话里。
+   例：窗外的晚霞 → 晚霞；家里的晚饭 → 晚饭；各种拉花 → 拉花。
+
+3. 比较分法 A 和 B，选一种：
+   - 选「一组里的共同点一眼看得出、组和组的区别明显、名字说得出口」的那种；
+   - 都说不通，就选 none，整堆就是一个主题。
+
+4. 对选中的那种分法，每个组：
+   - 起名（规则同第 2 步，要比整堆的名字更具体），并给一个短名词；
+   - 两组的名字其实是一回事，就合并；看不出共同点的，标「去掉」；
+   - 只留「像一种习惯或一种收集」的组：同一个时段、地点、器具反复出现，
+     或者看得出这个人在特意拍这类东西。只是那天碰巧不一样的（自己带的饭今天海鲜、
+     明天肉），标「去掉」。拿不准就不拆。
+   - 每个留下的组写一句「每次都一样的是什么」，不超过 20 个字（含标点），
+     例：「傍晚在家，推开窗的时候」「端上来、还没喝的那一刻」。
+   - 只有选了分法 A 时，才给每个组选 1–3 个证据标签：只能从图片后面列的手机标签里选，
+     选「有这个标签，基本就是这个组」的那几个。选不出就留空。
+   组号为 0 的照片不算任何组。
+   用组号（A1、B2 这样）指代组，不要自己按图重新分组，也不要把照片挪到别的组。
+   一个组号只能出现在一个组里，不能把一个组拆成两个。
+   drop_groups 只列选中那种分法里你要去掉的组。
+
+5. 指出哪几张图明显不属于这一堆。
+
+6. 如果你觉得这一堆其实是两类不相干的东西（比如一半是饭、一半是书桌），
+   two_kinds 填 true。
+
+只用 JSON 回答，不要解释。回答格式见下面的例子：groups 的 from 和 drop_groups 填组号（A1、B2），
+只有 not_in_pile 填图号。"""
+
+ROUND2_PROMPT = """下面是一个人相册里的一个主题，以及这个主题的 15 张候选照片，每张来自不同的一天。
+请逐张检查：
+1. 属于这个主题吗？
+2. 和另一张几乎一样吗？是的话写出是哪一张。
+3. 太糊、太暗，或者看不清主体吗？
+4. 是不是药、医院、体检单、身体、证件、病历这类敏感内容？
+
+然后把这个主题和下面两份名单里的每个名字比一比：是同一种东西、很像，还是不同。
+只列出「同一种」或「很像」的，没有就留空。
+
+只用 JSON 回答，不要解释。"""
+
+
+def _body(name):
+    import texts
+    return texts.render(name, example="@@EXAMPLE@@", input="@@INPUT@@").split("@@EXAMPLE@@")[0].strip()
+
+
+def test_round1_prompt_body_matches_the_draft():
+    assert _body("repeat_round1_user") == ROUND1_PROMPT
+
+
+def test_round2_prompt_body_matches_the_draft():
+    assert _body("repeat_round2_user") == ROUND2_PROMPT
