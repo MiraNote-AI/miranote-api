@@ -86,7 +86,8 @@
   "slot_tokens": {
     "thing": "{物}",
     "moment": "{画面}",
-    "daypart": "{时段}"
+    "daypart": "{时段}",
+    "noun": "{短名词}"
   },
   "b_cover": "｜封面",
   "c_sentence": "{id}｜{text}",
@@ -147,5 +148,21 @@
   "round2_theme": "【主题】{name}（短名词：{noun}）。每次都一样的是：{same_part}。",
   "round2_candidates": "【候选】下面 {count} 张，每张来自不同的一天。",
   "round2_pushed": "【比较名单 1：60 天内推过的】{names}",
-  "round2_blocked": "【比较名单 2：用户说过不想看的】{names}"
+  "round2_blocked": "【比较名单 2：用户说过不想看的】{names}",
+  "repeat_title": "{name} · {months}",
+  "repeat_cta": "留住这些{noun}",
+  "repeat_noun_fallback": "瞬间",
+  "repeat_t1": "那些{daypart}，和{noun}",
+  "repeat_t2": "{n} 张{noun}，{n} 个不同的日子",
+  "repeat_f0": "{n} 张照片，{n} 个不同的日子",
+  "month_one": "{m}月",
+  "month_span": "{m1}月–{m2}月",
+  "month_years": "{y1}.{m1}–{y2}.{m2}",
+  "_repeat_patterns_note": "Repeat themes only (decision 2026-11-20 H2): counts and frequency in a detail sentence or question. Regexes, matched on the NFKC-folded text. A count right after 每 这 那 哪 第 上 下 (every / this / that / which / ordinal / last / next time) is left alone.",
+  "repeat_patterns": [
+    "拍了\\s*[0-9一二两三四五六七八九十百千几多好]+\\s*次",
+    "(?<![每这那哪第上下])(?:[0-9]+|[一二两三四五六七八九十百千几]+)\\s*次",
+    "每\\s*一?\\s*天",
+    "天天"
+  ]
 }

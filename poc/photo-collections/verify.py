@@ -4,6 +4,12 @@ photos", "does it fit the cover" and "does it read" (only plainly broken
 sentences fail, decision 2026-11-05 evening item 7), and per question, "is
 what it mentions in the photos" and "is it safe". It does not judge style.
 
+A repeat theme (mode "repeat", decision 2026-11-20 H1, H2) asks instead of
+"does it fit the cover" whether the sentence holds for the whole theme
+(whole_theme: not several times told as one, not an album caption, not
+about one time only); false drops the sentence, unsure passes. Fitting the
+theme is fitting the cover there, so every sentence mentions the cover.
+
 Sentences are S1.., questions Q1.., in the order given. An item the reply
 leaves out is dropped; an unsure (non-boolean) answer passes "grounded" and
 "fluent" and fails "safe" (decision 2026-11-04 item 3). A reply that answers nothing
@@ -14,7 +20,7 @@ and fallback questions only).
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import check_a
 import texts
@@ -27,6 +33,7 @@ class Verdict:
     mentions_cover: bool = True  # sentences only
     fluent: bool = True  # sentences only
     safe: bool = True  # questions only
+    whole_theme: bool = True  # sentences of a repeat theme only
 
 
 @dataclass
@@ -43,10 +50,15 @@ def question_id(i: int) -> str:
     return "Q{}".format(i + 1)
 
 
-def user_text(sentences: List[str], questions: List[str]) -> Tuple[str, str]:
-    """(the per-photo line template, the task after the photos)."""
+PROMPTS = {"life_fragment": "verify_c_user", "repeat": "repeat_verify_c_user"}
+
+
+def user_text(sentences: List[str], questions: List[str], mode: str = "life_fragment",
+              values: Optional[Dict[str, str]] = None) -> Tuple[str, str]:
+    """(the per-photo line template, the task after the photos). `values`
+    fill the task's other placeholders (a repeat theme's name)."""
     names = texts.json("names")
-    raw = texts.raw("verify_c_user")
+    raw = texts.raw(PROMPTS[mode])
     _, _, rest = raw.partition("=====PHOTO=====\n")
     photo_tpl, _, task = rest.partition("=====TASK=====\n")
     none = names["none"]
@@ -54,7 +66,8 @@ def user_text(sentences: List[str], questions: List[str]) -> Tuple[str, str]:
                         for i, t in enumerate(sentences)) or none
     q_lines = "\n".join(names["c_question"].format(id=question_id(i), text=t)
                         for i, t in enumerate(questions)) or none
-    return photo_tpl.strip("\n"), task.format_map({"sentences": s_lines, "questions": q_lines})
+    filled = dict(values or {}, sentences=s_lines, questions=q_lines)
+    return photo_tpl.strip("\n"), task.format_map(filled)
 
 
 def _bool(entry: dict, key: str, unsure: bool) -> bool:
@@ -96,7 +109,7 @@ def _reason(e: dict) -> str:
     return e.get("reason") if isinstance(e.get("reason"), str) else ""
 
 
-def parse(text: str, n_sentences: int, n_questions: int) -> CResult:
+def parse(text: str, n_sentences: int, n_questions: int, mode: str = "life_fragment") -> CResult:
     """Every asked sentence and question gets a verdict. An item the reply
     leaves out is unchecked, so dropped; a reply that answers none of the
     asked items fails the check (the pipeline retries once)."""
@@ -111,6 +124,14 @@ def parse(text: str, n_sentences: int, n_questions: int) -> CResult:
             out.sentences[sid] = Verdict(grounded=False, reason="no verdict", mentions_cover=False)
             continue
         answered += 1
+        if mode == "repeat":
+            out.sentences[sid] = Verdict(
+                grounded=_bool(e, "grounded", unsure=True),
+                whole_theme=_bool(e, "whole_theme", unsure=True),
+                fluent=_bool(e, "fluent", unsure=True),
+                reason=_reason(e),
+            )
+            continue
         out.sentences[sid] = Verdict(
             grounded=_bool(e, "grounded", unsure=True),
             mentions_cover=_bool(e, "mentions_cover", unsure=False),

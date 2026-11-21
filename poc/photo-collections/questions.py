@@ -5,6 +5,10 @@ grounding and safety, and up to three survivors go to the phone in the
 model's order. The phone picks one that does not repeat a neighbouring
 night's type. None survives -> B1, B2, B3 from prompts/question_bank.txt.
 
+A repeat theme (mode "repeat") has its own type table (V1's types and five
+more) and fallbacks, and also rejects its word list and counts (decision
+2026-11-20 H3).
+
 The old bank menus (A skeletons, {thing} / {moment} fills, action and sight
 verb lists) are no longer used; the bank file keeps only the fallbacks'
 role, and its other questions stay there as reference.
@@ -16,11 +20,13 @@ from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
 import texts
-from body import char_len, marker_leak, strip_echo
+from body import char_len, count_hit, marker_leak, repeat_words, strip_echo
 from check_a import AResult
 
 MAX_CHARS = 22
 TOP_N = 3
+TYPE_FILES = {"life_fragment": "question_types", "repeat": "repeat_question_types"}
+BANK_FILES = {"life_fragment": "question_bank", "repeat": "repeat_question_bank"}
 
 
 @dataclass
@@ -35,24 +41,25 @@ class Question:
         return {"text": self.text, "type": self.type, "source": self.source}
 
 
-def type_table() -> List[dict]:
-    return list(texts.json("question_types")["types"])
+def type_table(mode: str = "life_fragment") -> List[dict]:
+    return list(texts.json(TYPE_FILES[mode])["types"])
 
 
-def type_ids() -> List[str]:
-    return [t["id"] for t in type_table()]
+def type_ids(mode: str = "life_fragment") -> List[str]:
+    return [t["id"] for t in type_table(mode)]
 
 
-def prompt_types() -> str:
+def prompt_types(mode: str = "life_fragment") -> str:
     """The type table as lines for call B's prompt."""
     names = texts.json("names")
-    return "\n".join(names["type_line"].format(**dict({"note": ""}, **t)) for t in type_table())
+    return "\n".join(names["type_line"].format(**dict({"note": ""}, **t))
+                     for t in type_table(mode))
 
 
-def prompt_recent(recent: List[str]) -> str:
+def prompt_recent(recent: List[str], mode: str = "life_fragment") -> str:
     """The neighbouring nights' types by their Chinese names, or "none"."""
     names = texts.json("names")
-    by_id = {t["id"]: t["name"] for t in type_table()}
+    by_id = {t["id"]: t["name"] for t in type_table(mode)}
     shown = []
     for r in recent or []:
         if r in by_id and by_id[r] not in shown:
@@ -81,7 +88,7 @@ def _has_people(a: AResult) -> bool:
     return any(a.photos[pid].people_count != "0" for pid in a.selected)
 
 
-def reject_reason(q: Question, a: AResult) -> Optional[str]:
+def reject_reason(q: Question, a: AResult, mode: str = "life_fragment") -> Optional[str]:
     """Why the program rejects a model question, or None (handoff 2.3)."""
     names = texts.json("names")
     if not q.text:
@@ -91,6 +98,10 @@ def reject_reason(q: Question, a: AResult) -> Optional[str]:
     for w in names["forbidden_question_words"]:
         if w in q.text:
             return "forbidden:" + w
+    if mode == "repeat":
+        hit = next((w for w in repeat_words() if w in q.text), None) or count_hit(q.text)
+        if hit:
+            return "forbidden:" + hit
     rest = q.text
     for ok in names["question_pronoun_allowed"]:
         rest = rest.replace(ok, "")
@@ -100,20 +111,21 @@ def reject_reason(q: Question, a: AResult) -> Optional[str]:
     leak = marker_leak(q.text, a)
     if leak:
         return leak
-    if q.type not in type_ids():
+    if q.type not in type_ids(mode):
         return "unknown_type:" + q.type
     if q.type == "people" and not _has_people(a):
         return "people_without_people"
     return None
 
 
-def hard_check(qs: List[Question], a: AResult) -> Tuple[List[Question], List[Tuple[str, str]]]:
+def hard_check(qs: List[Question], a: AResult,
+               mode: str = "life_fragment") -> Tuple[List[Question], List[Tuple[str, str]]]:
     """The model's first TOP_N questions that pass the program, and the
     rejected ones with reasons. A repeated text is dropped."""
     passed: List[Question] = []
     rejected: List[Tuple[str, str]] = []
     for q in qs[:TOP_N]:
-        reason = reject_reason(q, a)
+        reason = reject_reason(q, a, mode)
         if reason is None and any(p.text == q.text for p in passed):
             reason = "duplicate"
         if reason:
@@ -123,11 +135,11 @@ def hard_check(qs: List[Question], a: AResult) -> Tuple[List[Question], List[Tup
     return passed, rejected
 
 
-def too_long(qs: List[Question], a: AResult) -> List[Question]:
+def too_long(qs: List[Question], a: AResult, mode: str = "life_fragment") -> List[Question]:
     """The model's first TOP_N questions the program cuts only for length:
     the ones the shorten round is asked about (decision 2026-11-05 evening,
     question item 5)."""
-    return [q for q in qs[:TOP_N] if reject_reason(q, a) == "too_long"]
+    return [q for q in qs[:TOP_N] if reject_reason(q, a, mode) == "too_long"]
 
 
 def with_shortened(qs: List[Question], long_qs: List[Question],
@@ -143,17 +155,22 @@ def with_shortened(qs: List[Question], long_qs: List[Question],
     return [swap.get(id(q), q) for q in qs[:TOP_N]]
 
 
-def fallbacks(daypart_name: str) -> List[Question]:
-    """B1, B2, B3 with the daypart filled in, each with its type."""
-    doc = texts.json("question_bank")
-    token = texts.json("names")["slot_tokens"]["daypart"]
+def fallbacks(fill: str, mode: str = "life_fragment") -> List[Question]:
+    """B1, B2, B3, each with its type. `fill` is the daypart name, or for a
+    repeat theme its noun (names.txt repeat_noun_fallback when it has none)."""
+    names = texts.json("names")
+    doc = texts.json(BANK_FILES[mode])
+    if mode == "repeat":
+        token, fill = names["slot_tokens"]["noun"], fill or names["repeat_noun_fallback"]
+    else:
+        token = names["slot_tokens"]["daypart"]
     by_id = {q["id"]: q for q in doc["questions"]}
-    return [Question(text=by_id[qid]["text"].replace(token, daypart_name),
+    return [Question(text=by_id[qid]["text"].replace(token, fill),
                      type=doc["fallback_types"][qid], source="fallback_" + qid)
             for qid in doc["fallback_order"]]
 
 
-def final(survivors: List[Question], daypart_name: str) -> List[Question]:
+def final(survivors: List[Question], fill: str, mode: str = "life_fragment") -> List[Question]:
     """What the phone gets: the survivors in the model's order, or the three
-    fallbacks when none survived."""
-    return list(survivors[:TOP_N]) or fallbacks(daypart_name)
+    fallbacks when none survived (`fill` as in fallbacks)."""
+    return list(survivors[:TOP_N]) or fallbacks(fill, mode)

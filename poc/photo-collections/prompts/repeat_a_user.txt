@@ -1,5 +1,5 @@
 这是同一个人在很多个不同的日子里反复拍的一类东西：{theme_name}（{same_part}）。
-下面是程序挑出的 {sent_count} 张，按拍摄时间排序，来自不同的日子。
+下面是程序挑出的 {sent_count} 张，按拍摄时间排序，大多来自不同的日子（也可能有同一天拍的）。
 =====PHOTO=====
 {id}｜{date} {time}｜端上标签（可能有误）：{labels}｜人脸 {faces}{favorite}
 =====TASK=====

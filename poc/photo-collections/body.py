@@ -3,13 +3,16 @@ the pick (copy refine handoff 2.3, 2.5, 2.6). Every Chinese word list and
 template comes from prompts/.
 
 The program checks only what it can check without the photos: length, the
-lexicon, photo ids and "lianpai" in the text. Whether a model sentence is
+lexicon, photo ids and "lianpai" in the text. A repeat theme (mode "repeat")
+adds its own word list and count patterns on top, and has its own
+templates (decision 2026-11-20 H2, H4). Whether a model sentence is
 true to the photos is call C's job (verify.py); the pipeline drops what C
 rejects before pick() sees it.
 """
 
 from __future__ import annotations
 
+import functools
 import logging
 import re
 import threading
@@ -29,6 +32,9 @@ _jieba_lock = threading.Lock()
 MAX_CHARS = 22
 NOUN_FLAGS = frozenset({"n", "nr", "ns", "nz"})
 SOURCES = ("llm", "template_T1", "template_T2", "fallback_F0")
+# The word lists each mode checks; a repeat theme checks V1's list and its own.
+LEXICONS = {"life_fragment": ("lexicon_push_body",),
+            "repeat": ("lexicon_push_body", "repeat_lexicon")}
 
 
 @dataclass
@@ -75,21 +81,45 @@ def _names() -> dict:
     return texts.json("names")
 
 
-def _lexicon() -> List[_Lexicon]:
+def _lexicon(mode: str = "life_fragment") -> List[_Lexicon]:
     out = []
-    for line in texts.lines("lexicon_push_body"):
-        parts = line.split("|")
-        if len(parts) < 2:
-            continue
-        exceptions = parts[2].split() if len(parts) > 2 else []
-        out.append(_Lexicon(
-            category=parts[0].strip(),
-            words=parts[1].split(),
-            allowed=[e for e in exceptions if not e.startswith("@")],
-            skip_t2="@T2" in exceptions,
-            subjects_shield="@nosubjects" not in exceptions,
-        ))
+    for name in LEXICONS[mode]:
+        for line in texts.lines(name):
+            parts = line.split("|")
+            if len(parts) < 2:
+                continue
+            exceptions = parts[2].split() if len(parts) > 2 else []
+            out.append(_Lexicon(
+                category=parts[0].strip(),
+                words=parts[1].split(),
+                allowed=[e for e in exceptions if not e.startswith("@")],
+                skip_t2="@T2" in exceptions,
+                subjects_shield="@nosubjects" not in exceptions,
+            ))
     return out
+
+
+def repeat_words() -> List[str]:
+    """Every word of the repeat-only list (prompts/repeat_lexicon.txt)."""
+    return [w for line in texts.lines("repeat_lexicon") if "|" in line
+            for w in line.split("|")[1].split()]
+
+
+@functools.lru_cache(maxsize=4)
+def _compiled(patterns: Tuple[str, ...]) -> List[re.Pattern]:
+    return [re.compile(p) for p in patterns]
+
+
+def count_hit(text: str) -> Optional[str]:
+    """Repeat themes: the first count or frequency in text ("taken 3 times",
+    "every day": names.txt repeat_patterns), or None. Each pattern set is
+    compiled once."""
+    folded = unicodedata.normalize("NFKC", text)
+    for rx in _compiled(tuple(_names()["repeat_patterns"])):
+        m = rx.search(folded)
+        if m:
+            return m.group(0)
+    return None
 
 
 def strip_echo(text: str) -> str:
@@ -185,6 +215,27 @@ def templates(a: AResult, meta: dict, when: When) -> List[Candidate]:
     return out
 
 
+def templates_repeat(theme: dict, photo_ids: List[str]) -> List[Candidate]:
+    """A repeat theme's templates in fallback order (decision 2026-11-20 H4):
+    T1 when the theme has a daypart and a noun, T2 when it has a noun, F0
+    always and last. n is the number of photos on the page."""
+    names = _names()
+    noun = (theme.get("noun") or "").strip()
+    daypart = (theme.get("where") or {}).get("daypart")
+    n = len(photo_ids)
+    out: List[Candidate] = []
+    if noun and daypart:
+        out.append(Candidate(text=names["repeat_t1"].format(daypart=names["dayparts"][daypart],
+                                                            noun=noun),
+                             source="template_T1", photo_ids=list(photo_ids)))
+    if noun:
+        out.append(Candidate(text=names["repeat_t2"].format(n=n, noun=noun),
+                             source="template_T2", photo_ids=list(photo_ids)))
+    out.append(Candidate(text=names["repeat_f0"].format(n=n), source="fallback_F0",
+                         photo_ids=list(photo_ids)))
+    return out
+
+
 def from_b(b: Optional[dict]) -> List[Candidate]:
     """Model candidates from call B's parsed output (empty if cannot_write)."""
     if not isinstance(b, dict) or b.get("cannot_write") is True:
@@ -214,11 +265,11 @@ def _spans(text: str, needle: str) -> Iterable[Tuple[int, int]]:
         start = text.find(needle, start + 1)
 
 
-def _lexicon_hit(t: str, c: Candidate, a: AResult) -> Optional[str]:
+def _lexicon_hit(t: str, c: Candidate, a: AResult, mode: str = "life_fragment") -> Optional[str]:
     """The first lexicon word in t that is not inside a photo's text, a
     subject name (unless its category says @nosubjects), or its category's
     allowed words."""
-    for cat in _lexicon():
+    for cat in _lexicon(mode):
         if cat.skip_t2 and c.source == "template_T2":
             continue
         shields = (_subject_names(a) if cat.subjects_shield else []) + _texts(a)
@@ -235,15 +286,18 @@ def _lexicon_hit(t: str, c: Candidate, a: AResult) -> Optional[str]:
     return None
 
 
-def reject_reason(c: Candidate, a: AResult) -> Optional[str]:
+def reject_reason(c: Candidate, a: AResult, mode: str = "life_fragment") -> Optional[str]:
     """Why the program rejects this candidate, or None. Order: empty ->
-    length -> lexicon -> (model-written only) photo id -> lianpai."""
+    length -> lexicon (a repeat theme: then its counts) -> (model-written
+    only) photo id -> lianpai."""
     t = clean(c.text)
     if not t:
         return "empty"
     if char_len(t) > MAX_CHARS:
         return "too_long"
-    hit = _lexicon_hit(t, c, a)
+    hit = _lexicon_hit(t, c, a, mode)
+    if not hit and mode == "repeat":
+        hit = count_hit(t)
     if hit:
         return "lexicon:" + hit
     if c.source == "llm":
@@ -310,14 +364,16 @@ def f0_text(raw_count: int, when: When) -> str:
 
 
 def pick(ai: List[Candidate], templates: List[Candidate], a: AResult, *,
-         raw_count: int, when: When) -> BodyPick:
+         raw_count: int, when: When, mode: str = "life_fragment",
+         f0: Optional[str] = None) -> BodyPick:
     """Check every candidate, score the survivors, return the best one; F0
-    when none survives. Model candidates are expected to have passed call C
-    already; the hard checks run again here for templates and as a guard."""
+    (the text `f0` when given) when none survives. Model candidates are
+    expected to have passed call C already; the hard checks run again here
+    for templates and as a guard."""
     rejected: List[Tuple[str, str]] = []
     alive: List[Tuple[float, int, int, int, Candidate, str]] = []
     for order, c in enumerate(list(ai) + list(templates)):
-        reason = reject_reason(c, a)
+        reason = reject_reason(c, a, mode)
         if reason:
             rejected.append((c.text, reason))
             continue
@@ -326,7 +382,8 @@ def pick(ai: List[Candidate], templates: List[Candidate], a: AResult, *,
         # max by: score, AI before template, shorter, earlier
         alive.append((s, 1 if c.source == "llm" else 0, -char_len(t), -order, c, t))
     if not alive:
-        return BodyPick(text=f0_text(raw_count, when), source="fallback_F0", rejected=rejected)
+        return BodyPick(text=f0 if f0 is not None else f0_text(raw_count, when),
+                        source="fallback_F0", rejected=rejected)
     # Peak first (user decision 2026-10-31): when a surviving model sentence
     # cites the cover photo, the pick is made among those only; otherwise
     # among every survivor (model sentences and templates).

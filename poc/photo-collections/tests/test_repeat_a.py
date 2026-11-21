@@ -35,6 +35,14 @@ def _images(n):
     return {"P{}".format(i): jpeg(color=(30 * i, 90, 60)) for i in range(1, n + 1)}
 
 
+def _b_repeat():
+    return json.dumps({"scene": "早上的一杯咖啡", "cannot_write": False,
+                       "candidates": [{"text": "端上来那一刻，先拍了再喝", "style": "轻松",
+                                       "photo_ids": ["P3"]}],
+                       "question": {"ranked": [{"text": "下一杯咖啡，想点什么？", "type": "next_time",
+                                                "why": "下次"}]}}, ensure_ascii=False)
+
+
 def _a_repeat(n=6, bad=(), peak="P3", **over):
     photos = []
     for i in range(1, n + 1):
@@ -53,10 +61,11 @@ def _run(n=6, meta=None):
 
 
 def test_repeat_meta_accepted_without_life_fragment_fields(client, fake_model):
-    fake_model.reply("a", _a_repeat())
+    fake_model.reply("a", _a_repeat()).reply("b", _b_repeat())
     r = _submit(client, _repeat_meta(6), _files(6))
     assert r.status_code == 202
-    assert _poll(client, r.json()["job_id"]).json()["status"] == "error"
+    done = _poll(client, r.json()["job_id"]).json()
+    assert done["status"] == "ok" and done["memory"]["mode"] == "repeat"
 
 
 @pytest.mark.parametrize("n", [4, 10])
@@ -107,7 +116,7 @@ def test_compose_mode_absent_or_life_fragment_unchanged(fake_model, tmp_log):
 
 
 def test_repeat_a_prompt_has_theme_and_no_selection_task(fake_model, tmp_log):
-    fake_model.reply("a", _a_repeat())
+    fake_model.reply("a", _a_repeat()).reply("b", _b_repeat())
     _run()
     content = fake_model.calls[0]["messages"][1]["content"]
     text = "\n".join(_texts(content))
@@ -117,11 +126,21 @@ def test_repeat_a_prompt_has_theme_and_no_selection_task(fake_model, tmp_log):
     assert text.count("peak_id") >= 1
 
 
-def test_repeat_a_ok_ends_in_interim_model_error(fake_model, tmp_log):
-    fake_model.reply("a", _a_repeat())
+def test_repeat_a_prompt_skips_only_when_mostly_screenshots_or_sensitive(fake_model, tmp_log):
+    fake_model.reply("a", _a_repeat()).reply("b", _b_repeat())
+    _run()
+    text = "\n".join(_texts(fake_model.calls[0]["messages"][1]["content"]))
+    assert "只有这组大多是截图、资料，或者大多是敏感内容时，才 skip=true" in text
+    assert "只有一两张碰到敏感场景，就给它标上 flags、keep=false、drop_reason 写 sensitive" in text
+    assert "大多来自不同的日子" in text
+
+
+def test_repeat_a_ok_goes_on_to_b_and_c(fake_model, tmp_log):
+    fake_model.reply("a", _a_repeat()).reply("b", _b_repeat())
     out = _run()
-    assert out["status"] == "error" and out["reason"] == "model_error"
-    assert _log(tmp_log)["stage"] == "a_only"
+    assert out["status"] == "ok"
+    assert fake_model.count("b") == 1 and fake_model.count("c") == 1
+    assert "stage" not in _log(tmp_log)
 
 
 def test_repeat_a_drops_below_five_days_rejects(fake_model, tmp_log):

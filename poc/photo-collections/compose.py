@@ -18,6 +18,7 @@ import re
 import threading
 import time
 import traceback
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -55,7 +56,7 @@ def parse_time(value) -> Optional[datetime]:
         return None
 
 
-def _sort_key(dt: Optional[datetime]) -> float:
+def sort_key(dt: Optional[datetime]) -> float:
     if dt is None:
         return float("inf")
     if dt.tzinfo is None:
@@ -154,13 +155,25 @@ def _place(meta: dict) -> Optional[str]:
     return None
 
 
-def _result(status: str, reason: str) -> dict:
+def result_body(status: str, reason: str) -> dict:
     return {"status": status, "reason": reason, "message": texts.message(reason)}
+
+
+# call A's last failure -> the job's reason
+_A_FAILURES = {"deadline": "timeout", "timeout": "timeout", "model_error": "model_error",
+               "check_failed": "check_failed"}
+
+
+def a_failure(fail: str) -> dict:
+    """The job result when call A gave nothing usable: an unusable reply is
+    a rejection (check_failed), anything else an error."""
+    reason = _A_FAILURES[fail]
+    return result_body("rejected" if reason == "check_failed" else "error", reason)
 
 
 # ---------- prompts ----------
 
-def _image_part(data: bytes) -> dict:
+def image_part(data: bytes) -> dict:
     return {"type": "image_url", "image_url": {
         "url": "data:{};base64,{}".format(
             image_mime(data) or "image/jpeg", base64.b64encode(data).decode("ascii"))}}
@@ -184,7 +197,7 @@ def shrink(data: bytes, px: int) -> bytes:
         return data
 
 
-def _messages_shorten(cands: List[body.Candidate], scene: str) -> List[dict]:
+def messages_shorten(cands: List[body.Candidate], scene: str) -> List[dict]:
     """The shorten round: text only, the sentences cut for length."""
     names = texts.json("names")
     lines = "\n".join(names["shorten_line"].format(
@@ -198,7 +211,7 @@ def _messages_shorten(cands: List[body.Candidate], scene: str) -> List[dict]:
     ]
 
 
-def _messages_shorten_q(qs: List[questions.Question], scene: str) -> List[dict]:
+def messages_shorten_q(qs: List[questions.Question], scene: str) -> List[dict]:
     """The question shorten round (decision 2026-11-05 evening, question
     item 5): text only, the questions cut for length."""
     names = texts.json("names")
@@ -212,14 +225,14 @@ def _messages_shorten_q(qs: List[questions.Question], scene: str) -> List[dict]:
     ]
 
 
-def _split(name: str) -> Tuple[str, str, str]:
+def split_prompt(name: str) -> Tuple[str, str, str]:
     """A prompt with photo lines: (header, per-photo template, task)."""
     header, _, rest = texts.raw(name).partition("=====PHOTO=====\n")
     photo_tpl, _, task = rest.partition("=====TASK=====\n")
     return header, photo_tpl.strip("\n"), task
 
 
-def _hhmm(photo: dict) -> str:
+def hhmm(photo: dict) -> str:
     dt = parse_time(photo.get("taken_at"))
     return dt.strftime("%H:%M") if dt else ""
 
@@ -231,7 +244,7 @@ def _count_text(counts: Dict[str, int], names: dict) -> str:
 
 def _messages_a(meta: dict, photos: List[dict], images: Dict[str, bytes]) -> List[dict]:
     names = texts.json("names")
-    header, photo_tpl, task = _split("collect_a_user")
+    header, photo_tpl, task = split_prompt("collect_a_user")
     weekday = names["weekdays"].get(str(meta.get("weekday")), "")
     content: List[dict] = [{"type": "text", "text": header.format_map({
         "date": meta.get("date"),
@@ -246,14 +259,14 @@ def _messages_a(meta: dict, photos: List[dict], images: Dict[str, bytes]) -> Lis
         represents = int(p.get("represents") or 1)
         content.append({"type": "text", "text": photo_tpl.format_map({
             "id": p["id"],
-            "time": _hhmm(p),
+            "time": hhmm(p),
             "labels": names["list_sep"].join(p.get("labels") or []) or names["none"],
             "faces": int(p.get("faces") or 0),
             "favorite": names["a_favorite"] if p.get("favorite") is True else "",
             "represents": represents,
             "merged": names["a_merged"] if represents > 1 else "",
         })})
-        content.append(_image_part(images[p["id"]]))
+        content.append(image_part(images[p["id"]]))
     content.append({"type": "text", "text": task.format_map(
         {"schema_a": texts.raw("schema_a_example").strip()})})
     return [
@@ -277,18 +290,18 @@ def _messages_b(meta: dict, a: check_a.AResult, daypart: str, counts: Dict[str, 
     """Call B sees the selected photos, in time order, with call A's
     descriptions; the cover is marked (handoff 2.2)."""
     names = texts.json("names")
-    header, photo_tpl, task = _split("collect_b_user")
+    header, photo_tpl, task = split_prompt("collect_b_user")
     values = _header_values(meta, daypart, counts, names)
     values["k"] = len(a.selected)
     content: List[dict] = [{"type": "text", "text": header.format_map(values).strip("\n")}]
     for pid in a.selected:
         p = a.photos[pid]
         content.append({"type": "text", "text": photo_tpl.format_map({
-            "id": pid, "time": _hhmm(by_id[pid]),
+            "id": pid, "time": hhmm(by_id[pid]),
             "cover": names["b_cover"] if pid == a.peak else "",
             "description": p.description or names["none"], "people": p.people_count,
         })})
-        content.append(_image_part(images[pid]))
+        content.append(image_part(images[pid]))
     content.append({"type": "text", "text": task.format_map({
         "type_table": questions.prompt_types(),
         "recent_types": questions.prompt_recent(list(meta.get("recent_question_types") or [])),
@@ -308,16 +321,16 @@ def _messages_b_peak(meta: dict, a: check_a.AResult, daypart: str, counts: Dict[
     names = texts.json("names")
     long_lines = "\n".join(names["too_long_line"].format(text=t, n=body.char_len(t))
                            for t in too_long) or names["none"]
-    header, photo_tpl, task = _split("collect_b_peak_user")
+    header, photo_tpl, task = split_prompt("collect_b_peak_user")
     p = a.photos[a.peak]
     values = _header_values(meta, daypart, counts, names)
     values["scene"] = scene or names["none"]
     content: List[dict] = [
         {"type": "text", "text": header.format_map(values).strip("\n")},
         {"type": "text", "text": photo_tpl.format_map({
-            "id": a.peak, "time": _hhmm(by_id[a.peak]),
+            "id": a.peak, "time": hhmm(by_id[a.peak]),
             "description": p.description or names["none"], "people": p.people_count})},
-        _image_part(images[a.peak]),
+        image_part(images[a.peak]),
         {"type": "text", "text": task.format_map({"peak_id": a.peak, "too_long": long_lines})},
     ]
     return [
@@ -327,14 +340,15 @@ def _messages_b_peak(meta: dict, a: check_a.AResult, daypart: str, counts: Dict[
 
 
 def _messages_c(ids: List[str], cover: str, images: Dict[str, bytes],
-                sentences: List[str], qs: List[str]) -> List[dict]:
+                sentences: List[str], qs: List[str], mode: str = "life_fragment",
+                values: Optional[Dict[str, str]] = None) -> List[dict]:
     names = texts.json("names")
-    photo_tpl, task = verify.user_text(sentences, qs)
+    photo_tpl, task = verify.user_text(sentences, qs, mode, values)
     content: List[dict] = []
     for pid in ids:
         content.append({"type": "text", "text": photo_tpl.format_map({
             "id": pid, "cover": names["b_cover"] if pid == cover else ""})})
-        content.append(_image_part(images[pid]))
+        content.append(image_part(images[pid]))
     content.append({"type": "text", "text": task})
     return [
         {"role": "system", "content": texts.raw("verify_c_system").strip()},
@@ -342,14 +356,14 @@ def _messages_c(ids: List[str], cover: str, images: Dict[str, bytes],
     ]
 
 
-def _check_rewrite(text: str) -> dict:
+def check_rewrite(text: str) -> dict:
     b = check_a.parse_json(text)
     if not isinstance(b.get("candidates", []), list):
         raise check_a.CheckFailed("candidates is not a list")
     return b
 
 
-def _check_b(text: str) -> dict:
+def check_b(text: str) -> dict:
     b = check_a.parse_json(text)
     if not isinstance(b.get("candidates", []), list):
         raise check_a.CheckFailed("candidates is not a list")
@@ -361,7 +375,7 @@ def _check_b(text: str) -> dict:
 
 # ---------- the pipeline ----------
 
-class _Job:
+class Job:
     def __init__(self, meta: dict, deadline: float):
         self.meta = meta
         self.deadline = deadline
@@ -414,6 +428,11 @@ class _Job:
             return None, "deadline"
         return None, last
 
+    def log_a(self, a: check_a.AResult) -> None:
+        self.log["a"] = {"verdict": a.verdict, "selected": a.selected, "peak": a.peak,
+                         "peak_replaced_from": a.peak_replaced_from, "skip_reason": a.skip_reason,
+                         "photos": {pid: check_a.log_facts(f) for pid, f in a.photos.items()}}
+
     def finish(self, result: dict) -> dict:
         rejected = result.get("status") == "rejected"
         # A result completed after the job deadline is not delivered: the
@@ -422,7 +441,7 @@ class _Job:
                 result.get("status") == "error" and result.get("reason") == "timeout"):
             self.log["lateResult"] = True
             self.log["lateStatus"] = result.get("status")
-            result = _result("error", "timeout")
+            result = result_body("error", "timeout")
         # Call A's reply describes every photo, the sensitive ones too
         # (review of api#97). A job call A rejected (sensitive, screenshots,
         # too few) logs its verdict and each photo's fixed facts, not the
@@ -505,7 +524,7 @@ def _description_for_facts(description: str, a: check_a.AResult) -> str:
     return "".join(kept)
 
 
-def _facts_line(p: check_a.PhotoFacts, a: check_a.AResult, names: dict) -> str:
+def facts_line(p: check_a.PhotoFacts, a: check_a.AResult, names: dict) -> str:
     none = names["none"]
     return names["facts_line"].format(
         subjects=names["sep"].join(s.name for s in p.subjects) or none,
@@ -524,11 +543,11 @@ def _when(meta: dict, by_id: Dict[str, dict], peak: str, names: dict) -> Tuple[s
     return daypart, body.When(weekday=weekday, daypart=names["dayparts"][daypart])
 
 
-def _hard_bodies(ai: List[body.Candidate], a: check_a.AResult):
+def hard_bodies(ai: List[body.Candidate], a: check_a.AResult, mode: str = "life_fragment"):
     """Model sentences the program passes, and the rejected ones."""
     passed, rejected = [], []
     for c in ai:
-        reason = body.reject_reason(c, a)
+        reason = body.reject_reason(c, a, mode)
         if reason:
             rejected.append((c.text, reason))
         else:
@@ -536,21 +555,24 @@ def _hard_bodies(ai: List[body.Candidate], a: check_a.AResult):
     return passed, rejected
 
 
-def _verify(job: "_Job", ids: List[str], cover: str, images: Dict[str, bytes],
-            ai: List[body.Candidate], qs: List[questions.Question]):
+def verify_round(job: "Job", ids: List[str], cover: str, images: Dict[str, bytes],
+                 ai: List[body.Candidate], qs: List[questions.Question],
+                 mode: str = "life_fragment", values: Optional[Dict[str, str]] = None):
     """Call C on what the program passed. Returns (status, sentences, their
     rejections, questions, their rejections, log). status: skipped (nothing
     to check) | ok | failed (two failures: nothing model-written survives)
     | deadline. A sentence cites the cover exactly when C says it mentions
-    it (handoff 2.3 item 3)."""
+    it (handoff 2.3 item 3); a repeat theme's sentence that does not hold
+    for the whole theme is dropped (verify.py). `values` fill the repeat
+    prompt's theme placeholders."""
     log: Dict[str, Any] = {}
     if not ai and not qs:
         return "skipped", ai, [], qs, [], log
     texts_s = [body.clean(c.text) for c in ai]
     texts_q = [q.text for q in qs]
     result, fail = job.call(
-        "c", _messages_c(ids, cover, images, texts_s, texts_q), config.CALL_C_TIMEOUT,
-        lambda text: verify.parse(text, len(ai), len(qs)))
+        "c", _messages_c(ids, cover, images, texts_s, texts_q, mode, values),
+        config.CALL_C_TIMEOUT, lambda text: verify.parse(text, len(ai), len(qs), mode))
     if result is None:
         status = "deadline" if fail == "deadline" else "failed"
         log["failure"] = fail
@@ -560,14 +582,21 @@ def _verify(job: "_Job", ids: List[str], cover: str, images: Dict[str, bytes],
     kept_s, rej_s = [], []
     for i, c in enumerate(ai):
         v = result.sentences[verify.sentence_id(i)]
-        log["sentences"][verify.sentence_id(i)] = {
-            "text": texts_s[i], "grounded": v.grounded, "mentions_cover": v.mentions_cover,
-            "fluent": v.fluent, "reason": v.reason}
+        if mode == "repeat":
+            entry = {"text": texts_s[i], "grounded": v.grounded, "whole_theme": v.whole_theme,
+                     "fluent": v.fluent, "reason": v.reason}
+        else:
+            entry = {"text": texts_s[i], "grounded": v.grounded, "mentions_cover": v.mentions_cover,
+                     "fluent": v.fluent, "reason": v.reason}
+        log["sentences"][verify.sentence_id(i)] = entry
         if not v.grounded:
             rej_s.append((c.text, "c_ungrounded:" + v.reason[:80]))
             continue
         if not v.fluent:
             rej_s.append((c.text, "c_not_fluent:" + v.reason[:80]))
+            continue
+        if not v.whole_theme:
+            rej_s.append((c.text, "c_not_whole_theme:" + v.reason[:80]))
             continue
         ids_ = [pid for pid in c.photo_ids if pid != cover]
         if v.mentions_cover:
@@ -588,60 +617,32 @@ def _verify(job: "_Job", ids: List[str], cover: str, images: Dict[str, bytes],
     return "ok", kept_s, rej_s, kept_q, rej_q, log
 
 
-def run(meta: dict, images: Dict[str, bytes], deadline: float) -> dict:
-    """Compose one memory. meta and images are already validated. Never
-    raises: an unexpected error still writes the log line (raw output and
-    cost of the calls made so far) and answers error / model_error."""
-    if meta.get("mode") == "repeat":
-        import repeat  # late: repeat imports this module
-        return repeat.run(meta, images, deadline)
-    job = _Job(meta, deadline)
-    try:
-        return _compose(job, meta, images)
-    except Exception as error:  # noqa: BLE001 -- a bug must not lose the log
-        traceback.print_exc()
-        job.log["exception"] = "{}: {}".format(type(error).__name__, str(error)[:300])
-        return job.finish(_result("error", "model_error"))
+@dataclass
+class Draft:
+    """What calls B and C and the shorten rounds left (see draft)."""
+    b: Optional[dict]
+    scene: str
+    ai: List[body.Candidate]  # model sentences that passed the program and call C
+    too_long: List[str]  # first-round cover sentences cut only for length
+    model_qs: List[questions.Question]
+    qs: List[questions.Question]  # questions that passed the program and call C
+    q_rejected: List[Tuple[str, str]]
+    c_status: str
+    detail: body.BodyPick
+    first_rejected: List[Tuple[str, str]]
 
 
-def _compose(job: "_Job", meta: dict, images: Dict[str, bytes]) -> dict:
-    names = texts.json("names")
-
-    photos = sorted(meta["photos"], key=lambda p: _sort_key(parse_time(p.get("taken_at"))))
-    input_ids = [p["id"] for p in photos]
-    by_id = {p["id"]: p for p in photos}
-
-    # ---- call A ----
-    a, fail = job.call(
-        "a", _messages_a(meta, photos, images), config.CALL_A_TIMEOUT,
-        lambda text: check_a.validate(check_a.parse_json(text), input_ids),
-    )
-    if a is None:
-        reason = {"deadline": "timeout", "timeout": "timeout", "model_error": "model_error",
-                  "check_failed": "check_failed"}[fail]
-        status = "rejected" if reason == "check_failed" else "error"
-        return job.finish(_result(status, reason))
-    job.log["a"] = {"verdict": a.verdict, "selected": a.selected, "peak": a.peak,
-                    "peak_replaced_from": a.peak_replaced_from, "skip_reason": a.skip_reason,
-                    "photos": {pid: check_a.log_facts(f) for pid, f in a.photos.items()}}
-    if a.verdict != "ok":
-        return job.finish(_result("rejected", a.verdict))
-
-    # ---- program prep ----
-    daypart, when = _when(meta, by_id, a.peak, names)
-    counts = body.program_counts(a)
-    tpls = body.templates(a, meta, when)
-    raw_count = int(meta.get("raw_count") or 0)
-
-    # Calls B and C see smaller photos (user decision 2026-11-05).
-    images = dict(images)
-    for pid in a.selected:
-        images[pid] = shrink(images[pid], config.SMALL_IMAGE_PX)
-
+def draft(job: "Job", a: check_a.AResult, images: Dict[str, bytes], b_messages: List[dict],
+          tpls: List[body.Candidate], *, raw_count: int, when: body.When,
+          mode: str = "life_fragment", f0: Optional[str] = None,
+          c_values: Optional[Dict[str, str]] = None) -> Draft:
+    """Call B, the question shorten round, the program checks, call C, the
+    pick and the sentence shorten round: the part of the pipeline both
+    modes share. `images` are the smaller photos calls B and C see; `f0`
+    replaces F0's text and `c_values` fill call C's prompt (repeat themes)."""
     # ---- call B (failing twice, or running into the job cap, is not a
     # rejection: templates + fallback questions) ----
-    b, fail = job.call("b", _messages_b(meta, a, daypart, counts, by_id, images),
-                       config.CALL_B_TIMEOUT, _check_b)
+    b, fail = job.call("b", b_messages, config.CALL_B_TIMEOUT, check_b)
     if b is None:
         job.log["b_failure"] = fail
     # The scene line is the model's own note (decision 2026-11-05 evening,
@@ -651,9 +652,9 @@ def _compose(job: "_Job", meta: dict, images: Dict[str, bytes]) -> dict:
     first_ai = body.from_b(b)
     job.log["b_candidates"] = [{"text": c.text, "style": c.style, "photo_ids": c.photo_ids}
                                for c in first_ai]
-    ai, body_rejected = _hard_bodies(first_ai, a)
+    ai, body_rejected = hard_bodies(first_ai, a, mode)
     too_long = [body.clean(c.text) for c in first_ai
-                if a.peak in c.photo_ids and body.reject_reason(c, a) == "too_long"]
+                if a.peak in c.photo_ids and body.reject_reason(c, a, mode) == "too_long"]
     model_qs = questions.from_b(b)
 
     # Question shorten round (decision 2026-11-05 evening, question item 5):
@@ -662,20 +663,21 @@ def _compose(job: "_Job", meta: dict, images: Dict[str, bytes]) -> dict:
     # call C with the rest. Still too long -> dropped as before. It runs
     # before call C, so it only spends time C would not need (review
     # 2026-11-05: a slow reply here used to leave C no time at all).
-    long_qs = questions.too_long(model_qs, a)
+    long_qs = questions.too_long(model_qs, a, mode)
     spare = job.remaining() - config.CALL_C_TIMEOUT - CALL_MARGIN_SECONDS
     if long_qs and spare > CALL_MARGIN_SECONDS:
-        sq, _ = job.call("b", _messages_shorten_q(long_qs, scene),
-                         min(config.CALL_B_TIMEOUT, spare), _check_b, attempts=1)
+        sq, _ = job.call("b", messages_shorten_q(long_qs, scene),
+                         min(config.CALL_B_TIMEOUT, spare), check_b, attempts=1)
         replies = questions.from_b(sq)
         job.log["question_shorten"] = {"asked": [q.text for q in long_qs],
                                        "replies": [q.text for q in replies]}
         model_qs = questions.with_shortened(model_qs, long_qs, replies)
-    qs, q_rejected = questions.hard_check(model_qs, a)
+    qs, q_rejected = questions.hard_check(model_qs, a, mode)
 
     # ---- call C: only what it passes is used; two failures -> templates,
     # F0 and fallback questions only (handoff 2.4) ----
-    c_status, ai, c_rej_s, qs, c_rej_q, c_log = _verify(job, a.selected, a.peak, images, ai, qs)
+    c_status, ai, c_rej_s, qs, c_rej_q, c_log = verify_round(
+        job, a.selected, a.peak, images, ai, qs, mode, c_values)
     if c_status == "deadline":
         # Out of time before anything was checked: same as call C failing
         # twice (templates, F0 and fallback questions only).
@@ -685,7 +687,7 @@ def _compose(job: "_Job", meta: dict, images: Dict[str, bytes]) -> dict:
     q_rejected += c_rej_q
 
     # ---- detail sentence ----
-    detail = body.pick(ai, tpls, a, raw_count=raw_count, when=when)
+    detail = body.pick(ai, tpls, a, raw_count=raw_count, when=when, mode=mode, f0=f0)
     first_rejected = body_rejected + list(detail.rejected)
     detail.rejected = list(first_rejected)
 
@@ -694,13 +696,13 @@ def _compose(job: "_Job", meta: dict, images: Dict[str, bytes]) -> dict:
     # call B (no retry) shortens them, nothing added; the results keep their
     # sentence's rank and photos and go through the program checks and call
     # C like the first round. Skipped when call C failed.
-    long_ones = [c for c in first_ai if body.reject_reason(c, a) == "too_long"]
+    long_ones = [c for c in first_ai if body.reject_reason(c, a, mode) == "too_long"]
     shortened = False
     if (long_ones and not body.cites_peak(detail, a) and c_status != "failed"
             and job.remaining() > CALL_MARGIN_SECONDS):
         shortened = True
-        sb, _ = job.call("b", _messages_shorten(long_ones, scene), config.CALL_B_TIMEOUT,
-                         _check_rewrite, attempts=1)
+        sb, _ = job.call("b", messages_shorten(long_ones, scene), config.CALL_B_TIMEOUT,
+                         check_rewrite, attempts=1)
         s_new = body.from_b(sb)[:len(long_ones)]
         # A reply keeps its own photos when they are selected ones (it may
         # drop a sentence, full check 2026-11-05). The long sentences were
@@ -713,17 +715,74 @@ def _compose(job: "_Job", meta: dict, images: Dict[str, bytes]) -> dict:
                 c.rank = long_ones[i].rank
                 c.style = c.style or long_ones[i].style
         s_new = [c for c in s_new if c.photo_ids]
-        s_ai, s_rejected = _hard_bodies(s_new, a)
-        sc_status, s_ai, sc_rej, _, _, sc_log = _verify(job, a.selected, a.peak, images, s_ai, [])
+        s_ai, s_rejected = hard_bodies(s_new, a, mode)
+        sc_status, s_ai, sc_rej, _, _, sc_log = verify_round(
+            job, a.selected, a.peak, images, s_ai, [], mode, c_values)
         if sc_status == "deadline":
             s_ai = []  # optional round out of time: keep the answer we have
         job.log["shorten"] = {"asked": [body.clean(c.text) for c in long_ones],
                               "rejected": s_rejected + sc_rej, "c": dict(sc_log, status=sc_status)}
         ai = ai + s_ai
         first_rejected = first_rejected + s_rejected + sc_rej
-        detail = body.pick(ai, tpls, a, raw_count=raw_count, when=when)
+        detail = body.pick(ai, tpls, a, raw_count=raw_count, when=when, mode=mode, f0=f0)
         detail.rejected = list(first_rejected)
     job.log["shortened"] = shortened
+    return Draft(b=b, scene=scene, ai=ai, too_long=too_long, model_qs=model_qs, qs=qs,
+                 q_rejected=q_rejected, c_status=c_status, detail=detail,
+                 first_rejected=first_rejected)
+
+
+def run(meta: dict, images: Dict[str, bytes], deadline: float) -> dict:
+    """Compose one memory. meta and images are already validated. Never
+    raises: an unexpected error still writes the log line (raw output and
+    cost of the calls made so far) and answers error / model_error."""
+    if meta.get("mode") == "repeat":
+        import repeat  # late: repeat imports this module
+        return repeat.run(meta, images, deadline)
+    job = Job(meta, deadline)
+    try:
+        return _compose(job, meta, images)
+    except Exception as error:  # noqa: BLE001 -- a bug must not lose the log
+        traceback.print_exc()
+        job.log["exception"] = "{}: {}".format(type(error).__name__, str(error)[:300])
+        return job.finish(result_body("error", "model_error"))
+
+
+def _compose(job: "Job", meta: dict, images: Dict[str, bytes]) -> dict:
+    names = texts.json("names")
+
+    photos = sorted(meta["photos"], key=lambda p: sort_key(parse_time(p.get("taken_at"))))
+    input_ids = [p["id"] for p in photos]
+    by_id = {p["id"]: p for p in photos}
+
+    # ---- call A ----
+    a, fail = job.call(
+        "a", _messages_a(meta, photos, images), config.CALL_A_TIMEOUT,
+        lambda text: check_a.validate(check_a.parse_json(text), input_ids),
+    )
+    if a is None:
+        return job.finish(a_failure(fail))
+    job.log_a(a)
+    if a.verdict != "ok":
+        return job.finish(result_body("rejected", a.verdict))
+
+    # ---- program prep ----
+    daypart, when = _when(meta, by_id, a.peak, names)
+    counts = body.program_counts(a)
+    tpls = body.templates(a, meta, when)
+    raw_count = int(meta.get("raw_count") or 0)
+
+    # Calls B and C see smaller photos (user decision 2026-11-05).
+    images = dict(images)
+    for pid in a.selected:
+        images[pid] = shrink(images[pid], config.SMALL_IMAGE_PX)
+
+    # ---- calls B and C, the shorten rounds ----
+    d = draft(job, a, images, _messages_b(meta, a, daypart, counts, by_id, images), tpls,
+              raw_count=raw_count, when=when)
+    b, scene, ai, too_long, c_status = d.b, d.scene, d.ai, d.too_long, d.c_status
+    detail, first_rejected = d.detail, d.first_rejected
+    model_qs, qs, q_rejected = d.model_qs, d.qs, d.q_rejected
 
     # The body must describe the cover (user decision 2026-10-31): no model
     # sentence about the peak survived -> one extra call B for the peak only
@@ -739,9 +798,9 @@ def _compose(job: "_Job", meta: dict, images: Dict[str, bytes]) -> dict:
         peak_rewrite = True
         rb, _ = job.call("b", _messages_b_peak(meta, a, daypart, counts, by_id, images, too_long,
                                                scene),
-                         config.CALL_B_TIMEOUT, _check_rewrite, attempts=1)
-        r_ai, r_rejected = _hard_bodies(body.from_b(rb), a)
-        rc_status, r_ai, rc_rej, _, _, rc_log = _verify(job, [a.peak], a.peak, images, r_ai, [])
+                         config.CALL_B_TIMEOUT, check_rewrite, attempts=1)
+        r_ai, r_rejected = hard_bodies(body.from_b(rb), a)
+        rc_status, r_ai, rc_rej, _, _, rc_log = verify_round(job, [a.peak], a.peak, images, r_ai, [])
         if rc_status == "deadline":
             r_ai = []  # optional round out of time: keep the answer we have
         second = body.pick(r_ai, [], a, raw_count=raw_count, when=when)
@@ -818,7 +877,7 @@ def _compose(job: "_Job", meta: dict, images: Dict[str, bytes]) -> dict:
             "questions": [q.payload() for q in final_qs],
             "ctaLabel": names["cta"].format(daypart=daypart_name),
         },
-        "facts": {pid: _facts_line(a.photos[pid], a, names) for pid in a.selected},
+        "facts": {pid: facts_line(a.photos[pid], a, names) for pid in a.selected},
         "generation": {
             "bodySource": detail.source,
             "questionSource": final_qs[0].source,

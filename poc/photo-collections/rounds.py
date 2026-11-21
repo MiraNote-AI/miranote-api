@@ -217,7 +217,7 @@ def _tagged(numbers: List[int], images: Dict[int, bytes], names: dict) -> List[d
     parts: List[dict] = []
     for n in numbers:
         parts.append({"type": "text", "text": names["photo_tag"].format(n=n)})
-        parts.append(compose._image_part(images[n]))
+        parts.append(compose.image_part(images[n]))
     return parts
 
 
