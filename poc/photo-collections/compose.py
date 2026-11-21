@@ -173,6 +173,10 @@ def a_failure(fail: str) -> dict:
 
 # ---------- prompts ----------
 
+# The system prompt of calls B (and its shorten rounds) and C, by mode.
+B_SYSTEM = {"life_fragment": "collect_b_system", "repeat": "repeat_b_system"}
+C_SYSTEM = {"life_fragment": "verify_c_system", "repeat": "repeat_verify_c_system"}
+
 def image_part(data: bytes) -> dict:
     return {"type": "image_url", "image_url": {
         "url": "data:{};base64,{}".format(
@@ -197,7 +201,8 @@ def shrink(data: bytes, px: int) -> bytes:
         return data
 
 
-def messages_shorten(cands: List[body.Candidate], scene: str) -> List[dict]:
+def messages_shorten(cands: List[body.Candidate], scene: str,
+                     mode: str = "life_fragment") -> List[dict]:
     """The shorten round: text only, the sentences cut for length."""
     names = texts.json("names")
     lines = "\n".join(names["shorten_line"].format(
@@ -205,13 +210,14 @@ def messages_shorten(cands: List[body.Candidate], scene: str) -> List[dict]:
         style=c.style or names["none"],
         ids=names["list_sep"].join(c.photo_ids) or names["none"]) for i, c in enumerate(cands))
     return [
-        {"role": "system", "content": texts.raw("collect_b_system").strip()},
+        {"role": "system", "content": texts.raw(B_SYSTEM[mode]).strip()},
         {"role": "user", "content": texts.render("shorten_b_user", lines=lines,
                                                  scene=scene or names["none"])},
     ]
 
 
-def messages_shorten_q(qs: List[questions.Question], scene: str) -> List[dict]:
+def messages_shorten_q(qs: List[questions.Question], scene: str,
+                       mode: str = "life_fragment") -> List[dict]:
     """The question shorten round (decision 2026-11-05 evening, question
     item 5): text only, the questions cut for length."""
     names = texts.json("names")
@@ -219,7 +225,7 @@ def messages_shorten_q(qs: List[questions.Question], scene: str) -> List[dict]:
         i=i + 1, text=q.text, n=body.char_len(q.text), type=q.type)
         for i, q in enumerate(qs))
     return [
-        {"role": "system", "content": texts.raw("collect_b_system").strip()},
+        {"role": "system", "content": texts.raw(B_SYSTEM[mode]).strip()},
         {"role": "user", "content": texts.render("shorten_q_user", lines=lines,
                                                  scene=scene or names["none"])},
     ]
@@ -351,7 +357,7 @@ def _messages_c(ids: List[str], cover: str, images: Dict[str, bytes],
         content.append(image_part(images[pid]))
     content.append({"type": "text", "text": task})
     return [
-        {"role": "system", "content": texts.raw("verify_c_system").strip()},
+        {"role": "system", "content": texts.raw(C_SYSTEM[mode]).strip()},
         {"role": "user", "content": content},
     ]
 
@@ -666,7 +672,7 @@ def draft(job: "Job", a: check_a.AResult, images: Dict[str, bytes], b_messages: 
     long_qs = questions.too_long(model_qs, a, mode)
     spare = job.remaining() - config.CALL_C_TIMEOUT - CALL_MARGIN_SECONDS
     if long_qs and spare > CALL_MARGIN_SECONDS:
-        sq, _ = job.call("b", messages_shorten_q(long_qs, scene),
+        sq, _ = job.call("b", messages_shorten_q(long_qs, scene, mode),
                          min(config.CALL_B_TIMEOUT, spare), check_b, attempts=1)
         replies = questions.from_b(sq)
         job.log["question_shorten"] = {"asked": [q.text for q in long_qs],
@@ -701,7 +707,7 @@ def draft(job: "Job", a: check_a.AResult, images: Dict[str, bytes], b_messages: 
     if (long_ones and not body.cites_peak(detail, a) and c_status != "failed"
             and job.remaining() > CALL_MARGIN_SECONDS):
         shortened = True
-        sb, _ = job.call("b", messages_shorten(long_ones, scene), config.CALL_B_TIMEOUT,
+        sb, _ = job.call("b", messages_shorten(long_ones, scene, mode), config.CALL_B_TIMEOUT,
                          check_rewrite, attempts=1)
         s_new = body.from_b(sb)[:len(long_ones)]
         # A reply keeps its own photos when they are selected ones (it may

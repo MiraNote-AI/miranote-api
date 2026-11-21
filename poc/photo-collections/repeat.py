@@ -71,7 +71,7 @@ def _messages_a(meta: dict, photos: List[dict], images: Dict[str, bytes]) -> Lis
     content.append({"type": "text", "text": task.format_map(
         {"schema_a": texts.raw("repeat_schema_a_example").strip()})})
     return [
-        {"role": "system", "content": texts.raw("collect_a_system").strip()},
+        {"role": "system", "content": texts.raw("repeat_a_system").strip()},
         {"role": "user", "content": content},
     ]
 
@@ -106,7 +106,7 @@ def _messages_b(meta: dict, a: check_a.AResult, by_id: Dict[str, dict],
         "recent_types": questions.prompt_recent(list(meta.get("recent_question_types") or []), MODE),
     })})
     return [
-        {"role": "system", "content": texts.raw("collect_b_system").strip()},
+        {"role": "system", "content": texts.raw(compose.B_SYSTEM[MODE]).strip()},
         {"role": "user", "content": content},
     ]
 

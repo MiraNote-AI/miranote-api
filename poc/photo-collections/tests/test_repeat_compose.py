@@ -292,3 +292,39 @@ def test_compose_run_routes_repeat(fake_model, tmp_log):
     fake_model.reply("a", _a()).reply("b", _b())
     out = compose.run(_meta(), _images(), time.monotonic() + 300)
     assert out["status"] == "ok" and out["memory"]["mode"] == "repeat"
+
+
+# ---------- system prompts ----------
+
+def _systems(fake_model):
+    return [(c["call"], c["messages"][0]["content"]) for c in fake_model.calls]
+
+
+def test_repeat_calls_use_repeat_system_prompts(fake_model, tmp_log):
+    long_s = "推开窗的那一下，楼顶后面的整片天空已经烧起来了，橙红色铺满窗框"
+    long_q = {"text": "推开窗看到楼顶后面那一整片烧起来的天空，你的第一反应是什么？",
+              "type": "that_moment", "why": "那一刻"}
+    fake_model.reply("a", _a())
+    fake_model.reply("b", _b([{"text": long_s, "style": "诗意", "photo_ids": ["P4"]}], [long_q]))
+    fake_model.reply("b", _b([], [{"text": "推开窗看到它，第一反应是什么？", "type": "that_moment",
+                                   "why": "改短"}]))
+    fake_model.reply("b", _b([{"text": GOOD, "style": "诗意", "photo_ids": ["P4"]}], []))
+    m = _run()["memory"]
+    assert m["push"]["body"] == GOOD
+    want = {"a": texts.raw("repeat_a_system").strip(), "b": texts.raw("repeat_b_system").strip(),
+            "c": texts.raw("repeat_verify_c_system").strip()}
+    seen = _systems(fake_model)
+    assert [c for c, _ in seen] == ["a", "b", "b", "c", "b", "c"]
+    assert all(system == want[call] for call, system in seen)
+
+
+def test_life_fragment_calls_keep_v1_system_prompts(fake_model, tmp_log):
+    from tests.test_compose import IMAGES, _a_json, _b_json
+    from tests.test_compose import _meta as _lf_meta
+    fake_model.reply("a", _a_json()).reply("b", _b_json())
+    assert compose.run(_lf_meta(), dict(IMAGES), time.monotonic() + 300)["status"] == "ok"
+    want = {"a": texts.raw("collect_a_system").strip(), "b": texts.raw("collect_b_system").strip(),
+            "c": texts.raw("verify_c_system").strip()}
+    seen = _systems(fake_model)
+    assert {c for c, _ in seen} == {"a", "b", "c"}
+    assert all(system == want[call] for call, system in seen)

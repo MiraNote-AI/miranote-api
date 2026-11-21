@@ -222,6 +222,7 @@ def templates_repeat(theme: dict, photo_ids: List[str]) -> List[Candidate]:
     names = _names()
     noun = (theme.get("noun") or "").strip()
     daypart = (theme.get("where") or {}).get("daypart")
+    # "n photos, n different days" holds: the phone sends one photo per day.
     n = len(photo_ids)
     out: List[Candidate] = []
     if noun and daypart:
