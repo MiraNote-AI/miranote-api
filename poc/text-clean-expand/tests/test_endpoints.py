@@ -638,6 +638,14 @@ ZH_FOR_MIXED = (
 # A Chinese block with one English word: "at Starbucks, today very tired".
 ZH_WITH_STARBUCKS = chr(0x5728) + "Starbucks, " + ZH_NOTE
 
+# Short code-switched notes: "write an iOS app in Swift" (2 Han characters,
+# 3 English words) and "Dinner at <name> tonight" (3 Han, 3 words). Neither
+# is clearly one language, so neither reply is forced into the other.
+SWIFT_NOTE = "\u7528Swift\u5199iOS app"
+SWIFT_ZH_REPLY = "\u6211\u5728\u7528Swift\u5199\u4e00\u4e2aiOS app."  # "I am writing an iOS app in Swift."
+DINNER_NOTE = "Dinner at \u5168\u805a\u5fb7 tonight"
+DINNER_EN_REPLY = "Dinner at \u5168\u805a\u5fb7 tonight, with friends."
+
 TEXT_ROUTES = ["/polish", "/clean", "/shorten", "/expand", "/rewrite"]
 REPLY_FIELD = {
     "/polish": "polished",
@@ -678,18 +686,21 @@ def main_language(client):
 @pytest.mark.parametrize(
     "text, expected",
     [
-        (MIXED_EN, "en"),  # one Chinese name in an English sentence
-        (ZH_WITH_STARBUCKS, "zh"),  # one English word in a Chinese sentence
+        (MIXED_EN, "en"),  # 3 Han, 8 words: one Chinese name in an English sentence
+        ("\u6211\u4eca\u5929\u53bb\u4e86Starbucks", "zh"),  # "I went to Starbucks today"
+        (ZH_WITH_STARBUCKS, "zh"),
         ("Today was really tiring.", "en"),
         (ZH_NOTE, "zh"),
-        ("good morning " + chr(0x65E9) + chr(0x5B89), "zh"),  # an even mix leans Chinese
+        (SWIFT_NOTE, None),  # 2 Han, 3 words: code-switched, no clear main language
+        (DINNER_NOTE, None),  # 3 words and one 3-character name
+        ("good morning \u65e9\u5b89", None),  # an even mix
         ("", None),
-        (chr(0x1F382) + chr(0x1F389), None),  # emoji only
+        ("\U0001f382\U0001f389", None),  # emoji only
         ("2026-11-21 12:30", None),  # digits only
-        (chr(0x3400) + chr(0x4DBF) + " ok", "zh"),  # Extension A counts as Han
+        ("\u3400\u4dbf ok", "zh"),  # Extension A counts as Han
         # Japanese kanji are Han characters (kana are not counted), so a
         # Japanese text counts as Chinese: "kyou wa tsukareta".
-        (chr(0x4ECA) + chr(0x65E5) + chr(0x306F) + chr(0x75B2) + chr(0x308C) + chr(0x305F), "zh"),
+        ("\u4eca\u65e5\u306f\u75b2\u308c\u305f", "zh"),
     ],
 )
 def test_main_language(main_language, text, expected):
@@ -734,16 +745,17 @@ def test_chinese_block_with_one_english_word_still_corrects_an_english_reply(cli
 def test_language_is_judged_on_the_text_not_the_option_line(client, path, field, value):
     """/shorten and /caption put "Target: tweet" / "style=instagram" above
     the text. Those words are not the note's: a short Chinese note with one
-    English word stays Chinese and its Chinese reply is not retried."""
+    English word stays Chinese, so an English reply is still corrected."""
     test_client, fake_llm = client
-    text = "Starbucks" + chr(0x5F88) + chr(0x7D2F)  # "Starbucks, very tired"
-    reply = chr(0x5F88) + chr(0x7D2F) + " Starbucks"
-    fake_llm.reply_with(reply)
+    text = "\u5728Starbucks\u5f88\u7d2f"  # "at Starbucks, very tired": 3 Han, 1 word
+    fake_llm.reply_with("Very tired at Starbucks.", ZH_REPLY)
 
     r = test_client.post(path, json={"text": text, field: value})
 
     assert r.status_code == 200
-    assert len(fake_llm.chat.completions.calls) == 1
+    calls = fake_llm.chat.completions.calls
+    assert len(calls) == 2
+    assert "rewrite your entire reply in Chinese" in calls[1]["messages"][3]["content"]
 
 
 def test_keywords_terms_keep_their_own_language(client):
@@ -751,7 +763,7 @@ def test_keywords_terms_keep_their_own_language(client):
     appear in; its English key names must not make a Chinese note's
     Chinese keywords look English."""
     test_client, fake_llm = client
-    terms = [("Starbucks", 8), (ZH_NOTE[:2], 6), (ZH_NOTE[2:], 5)]
+    terms = [("Starbucks", 8), (ZH_NOTE[2:], 6)]
     fake_llm.reply_with(
         "[" + ",".join('{"term":"%s","score":%d}' % t for t in terms) + "]"
     )
@@ -781,3 +793,15 @@ def test_no_retry_when_a_side_has_no_language(client, text, reply):
     assert r.status_code == 200
     assert r.json()["polished"] == reply
     assert len(fake_llm.chat.completions.calls) == 1
+
+
+@pytest.mark.parametrize(
+    "text, reply",
+    [(SWIFT_NOTE, SWIFT_ZH_REPLY), (DINNER_NOTE, DINNER_EN_REPLY)],
+    ids=["chinese-note-with-english-terms", "english-note-with-a-chinese-name"],
+)
+@pytest.mark.parametrize("path", TEXT_ROUTES)
+def test_short_code_switched_note_is_not_forced_into_the_other_language(client, path, text, reply):
+    answer, writes = _post_block(client, path, text, reply)
+    assert answer == reply
+    assert len(writes) == 1

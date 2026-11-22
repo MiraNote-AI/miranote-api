@@ -209,17 +209,25 @@ _LATIN_WORD = re.compile("[A-Za-z]+")
 
 
 def main_language(text: str) -> Optional[str]:
-    """'zh' or 'en': the language most of `text` is written in, or None
-    when it has neither (digits, emoji). Han characters are counted against
-    Latin words; a Chinese word is about 1.5 characters, so an even mix
-    leans Chinese. Japanese kanji are Han characters too, so Japanese counts
-    as Chinese (kana are not counted); that is known and not handled (#131).
+    """'zh' or 'en' when `text` is clearly one of them, else None.
+
+    Han characters are counted against Latin words, and one side must have
+    at least twice the other: short notes switch languages all the time
+    ("write an iOS app in Swift" as 2 Han characters and 3 English terms),
+    and a mix like that has no main language to force a reply into. None
+    also when the text has neither (digits, emoji). Japanese kanji are Han
+    characters too, so Japanese counts as Chinese (kana are not counted);
+    that is known and not handled (#131).
     """
     han = len(_HAN.findall(text))
     latin = len(_LATIN_WORD.findall(text))
     if not han and not latin:
         return None
-    return "zh" if han >= latin else "en"
+    if han >= 2 * latin:
+        return "zh"
+    if latin >= 2 * han:
+        return "en"
+    return None
 
 
 # Common simplified/traditional variant pairs. Spot-checking these is enough to
@@ -255,7 +263,8 @@ def _language_correction(ref: str, reply: str, any_chinese: bool = False) -> Opt
     reference text, or None when it matches (or is indeterminate).
 
     The languages compared are main languages: an English note that names
-    one Chinese place is English. With `any_chinese` (/keywords), a text is
+    one Chinese place is English, and a mixed note has none, so its reply is
+    never retried for language. With `any_chinese` (/keywords), a text is
     Chinese when it has any Chinese character, as before #131: its reply is
     JSON whose terms each keep their own language, and the English key
     names would outvote short Chinese terms."""

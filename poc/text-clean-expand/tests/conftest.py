@@ -63,6 +63,11 @@ def client(fake_llm):
     # than the endpoint they are about. The gate's own behaviour, including
     # rejection, is covered in tests/test_beta_auth.py and test_beta_gate.py.
     os.environ["BETA_TOKENS"] = "test-token"
+    # The gate's rate limit (120 requests a minute per token) is per process,
+    # so the suite's own requests would run into it: start each test fresh.
+    import beta_auth
+
+    beta_auth._limiter._hits.clear()
 
     main_path = Path(__file__).parent.parent / "main.py"
     spec = importlib.util.spec_from_file_location("text_clean_expand_main", main_path)
