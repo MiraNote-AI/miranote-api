@@ -15,6 +15,7 @@ without a token. /chat hands each turn a client for its caller
 """
 from __future__ import annotations
 
+import uuid
 from typing import Any, Dict, Optional
 
 import httpx
@@ -39,7 +40,11 @@ class TextClient:
 
     def _post(self, path: str, payload: Dict[str, Any]) -> Dict[str, Any]:
         url = self._base_url + path
-        headers: Dict[str, str] = {}
+        # Its own id per call: ai_auth reserves a metered call under its
+        # X-Request-ID and refuses an id it has already counted (409). The
+        # chat turn's own id is already reserved for `chat`, and two tool
+        # calls in one turn are two reservations.
+        headers = {"X-Request-ID": str(uuid.uuid4())}
         if self._authorization:
             headers["Authorization"] = self._authorization
         try:

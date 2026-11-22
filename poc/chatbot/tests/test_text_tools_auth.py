@@ -12,6 +12,7 @@ from __future__ import annotations
 import base64
 import json
 import os
+import uuid
 from types import SimpleNamespace
 
 import pytest
@@ -124,6 +125,20 @@ def test_a_signed_in_writers_token_reaches_the_text_route(svc):
     assert [r["Authorization"] for r in reached] == [headers["Authorization"]]
 
 
+def test_two_tool_calls_in_one_turn_carry_different_request_ids(svc):
+    chat, reached, accounts = svc
+    headers = accounts.headers()
+    chat([
+        _calls(_call("c1", "clean_text", {"text": "mesy note"}), _call("c2", "expand_text", {"text": "a note"})),
+        _says("Done."),
+    ], headers, notes=[])
+    ids = [r["X-Request-ID"] for r in reached]
+    assert [r["path"] for r in reached] == ["/clean", "/expand"]
+    assert len({uuid.UUID(i) for i in ids}) == 2
+    # Never the chat turn's own id: the gate reserved `chat` under it.
+    assert headers["X-Request-ID"] not in ids
+
+
 def test_a_writers_expand_and_polish_are_each_metered_as_expand(svc):
     chat, reached, accounts = svc
     headers = accounts.headers()
@@ -134,6 +149,7 @@ def test_a_writers_expand_and_polish_are_each_metered_as_expand(svc):
     ], headers, notes=[])
     assert accounts.rows[headers["X-Request-ID"]] == {"feature": "chat", "status": "ok"}
     assert accounts.statuses("expand") == ["ok", "ok"]
+    assert {accounts.rows[r["X-Request-ID"]]["feature"] for r in reached} == {"expand"}
 
 
 def test_a_writer_over_the_expand_cap_gets_the_quota_as_a_tool_error(svc):

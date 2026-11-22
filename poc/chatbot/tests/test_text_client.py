@@ -1,4 +1,5 @@
 from __future__ import annotations
+import uuid
 from types import SimpleNamespace
 
 import pytest
@@ -130,3 +131,14 @@ def test_no_caller_header_sends_no_authorization(captured_post):
     TextClient("http://localhost:8001").for_caller(None).polish("hi")
     assert "Authorization" not in captured["headers"]
 
+
+def test_each_call_sends_its_own_request_id(captured_post):
+    # ai_auth reserves a metered call under its X-Request-ID; a shared id
+    # would make the second reservation a 409 duplicate_request.
+    captured, _ = captured_post
+    client = TextClient("http://localhost:8001").for_caller("Bearer writer-token")
+    client.expand("one")
+    first = captured["headers"]["X-Request-ID"]
+    client.expand("two")
+    second = captured["headers"]["X-Request-ID"]
+    assert uuid.UUID(first) != uuid.UUID(second)
