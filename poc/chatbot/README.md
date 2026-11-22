@@ -155,6 +155,12 @@ See `.env.example`. The important knobs:
   the text service's gate sees the caller: the beta token as before, or
   a signed-in writer, whose `/expand` and `/polish` calls are metered to
   them as `expand`.
+- `IMAGE_API_URL` -- URL of the image-generation server. Defaults to
+  `http://localhost:8002`. Canvas mode's `look_at_page` calls its
+  `/describe` with the `/chat` request's own `Authorization` header and
+  a fresh `X-Request-ID`, as the text tools do. `/describe` is not
+  metered; a signed-in writer's look counts toward their rate limit on
+  that service.
 - `RETRIEVAL_API_URL` -- URL of the retrieval POC server. Defaults to
   `http://localhost:8004`. The chatbot's `find_quote` tool
   HTTP-delegates to this server. Server down -> tool returns an error

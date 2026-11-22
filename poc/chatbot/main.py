@@ -189,7 +189,8 @@ async def chat(req: ChatRequest, request: Request):
     journal_mode = req.notes is not None
     message = req.message
     transient_prefix = None
-    dispatcher = _dispatcher_for(request.headers.get("Authorization"))
+    authorization = request.headers.get("Authorization")
+    dispatcher = _dispatcher_for(authorization)
     turn_tools = tools.TOOLS
     prompt = SYSTEM_PROMPT
     action_guard = None
@@ -205,7 +206,9 @@ async def chat(req: ChatRequest, request: Request):
         # session: stale coordinates and renumbered handles would have
         # the model confidently edit the wrong element.
         transient_prefix = canvas.render_page(page)
-        dispatcher = canvas.build_dispatcher(image_bytes, image_client, dispatcher)
+        # look_at_page calls the image service as the caller, like the
+        # text tools: its gate answers 401 to a call without a token.
+        dispatcher = canvas.build_dispatcher(image_bytes, image_client.for_caller(authorization), dispatcher)
         turn_tools = CANVAS_TOOLS
         prompt = CANVAS_PROMPT
         # A look with no follow-through is how a weak model "tidies" a

@@ -1,10 +1,11 @@
-"""POST /chat's text tools reach the text service as the caller (#136).
+"""POST /chat's tools reach their services as the caller (#136).
 
-The text service sits behind the same ai_auth gate as /chat and answers
-401 missing_token to a call without a token. Each test drives the real
-/chat endpoint and run_turn with a scripted fake model; the text tools go
-to a fake text service with the real gate in front of it, through a fake
-accounts service, so nothing leaves the process.
+The text and image services sit behind the same ai_auth gate as /chat and
+answer 401 missing_token to a call without a token. Each test drives the
+real /chat endpoint and run_turn with a scripted fake model; the text tools
+and canvas mode's look_at_page go to fake services with the real gate in
+front of them, through a fake accounts service, so nothing leaves the
+process.
 """
 
 from __future__ import annotations
@@ -24,10 +25,12 @@ os.environ.setdefault("BETA_TOKENS", "test-token")
 import ai_auth  # noqa: E402
 from fake_accounts import FakeAccounts  # noqa: E402
 from poc.chatbot import main, text_client  # noqa: E402
+from poc.chatbot.image_client import ImageClient  # noqa: E402
 from poc.chatbot.text_client import TextClient  # noqa: E402
 
 BETA = {"Authorization": "Bearer test-token"}
 TEXT_URL = "http://text.test"
+IMAGE_URL = "http://image.test"
 
 PAGE = {
     "width": 390,
@@ -81,6 +84,25 @@ def _text_service(reached):
     return app
 
 
+def _image_service(reached):
+    """The route canvas mode's look_at_page calls, behind the gate with the
+    metered map poc/image-generation/main.py installs (/generate, /stylize
+    and /border's ai_outline mode meter; /describe is not metered)."""
+    app = FastAPI()
+    ai_auth.install(app, metered={
+        "/generate": ai_auth.Metered("image_generate"),
+        "/stylize": ai_auth.Metered("image_edit"),
+        "/border": ai_auth.Metered("image_edit", applies=lambda r: r.query_params.get("mode") == "ai_outline"),
+    })
+
+    @app.post("/describe")
+    async def describe(request: Request):
+        reached.append({"path": "/describe", **{k: request.headers.get(k) for k in ("Authorization", "X-Request-ID")}})
+        return {"description": "a calm page with room at the bottom"}
+
+    return app
+
+
 @pytest.fixture
 def svc(monkeypatch):
     import beta_auth
@@ -92,14 +114,16 @@ def svc(monkeypatch):
     accounts.install(monkeypatch)
 
     reached = []
-    text_http = TestClient(_text_service(reached))
+    services = {TEXT_URL: TestClient(_text_service(reached)), IMAGE_URL: TestClient(_image_service(reached))}
 
-    def post(url, json=None, headers=None, timeout=None):
-        assert url.startswith(TEXT_URL), url
-        return text_http.post(url[len(TEXT_URL):], json=json, headers=headers)
+    # text_client and image_client both call httpx.post.
+    def post(url, json=None, files=None, params=None, headers=None, timeout=None):
+        base = next(b for b in services if url.startswith(b))
+        return services[base].post(url[len(base):], json=json, files=files, params=params, headers=headers)
 
     monkeypatch.setattr(text_client.httpx, "post", post)
     monkeypatch.setattr(main.config, "text_client", TextClient(TEXT_URL))
+    monkeypatch.setattr(main, "image_client", ImageClient(IMAGE_URL))
 
     def chat(script, headers, **body):
         monkeypatch.setattr(main, "client", ScriptedModel(script))
@@ -162,3 +186,31 @@ def test_a_writer_over_the_expand_cap_gets_the_quota_as_a_tool_error(svc):
     assert error.startswith("text service returned 429") and '"quota"' in error
     # The chat turn still answered, so its own unit is charged.
     assert accounts.statuses("chat") == ["ok"]
+
+
+def _look_then_edit():
+    return [
+        _calls(_call("c1", "look_at_page", {})),
+        _calls(_call("c2", "edit_page", {"changes": [{"id": "t1", "size": 36}]})),
+        _says("Made the title bigger."),
+    ]
+
+
+def test_look_at_page_reaches_describe_with_the_callers_header(svc):
+    chat, reached, _ = svc
+    body = chat(_look_then_edit(), BETA, page=PAGE)
+    look = body["tool_trace"][0]
+    assert look["name"] == "look_at_page"
+    # The description, not {"status": "could not look at the page"}.
+    assert look["result_preview"].startswith('{"description": "a calm page with room at the bottom')
+    assert [(r["path"], r["Authorization"]) for r in reached] == [("/describe", BETA["Authorization"])]
+
+
+def test_a_signed_in_writers_look_reaches_describe_unmetered(svc):
+    chat, reached, accounts = svc
+    headers = accounts.headers()
+    chat(_look_then_edit(), headers, page=PAGE)
+    assert [r["Authorization"] for r in reached] == [headers["Authorization"]]
+    assert uuid.UUID(reached[0]["X-Request-ID"]) != uuid.UUID(headers["X-Request-ID"])
+    # /describe is not metered: the turn's own chat unit is the only row.
+    assert accounts.rows == {headers["X-Request-ID"]: {"feature": "chat", "status": "ok"}}
