@@ -5,7 +5,7 @@ import json
 
 import pytest
 
-from poc.chatbot.chat_loop import run_turn, ChatTurnResult, ActionGuard
+from poc.chatbot.chat_loop import run_turn, ChatTurnResult, ActionGuard, ToolNotOffered
 from poc.chatbot.session import SessionStore
 
 
@@ -657,3 +657,40 @@ def test_a_note_made_in_answer_to_the_nudge_reaches_the_app():
     )
     assert result.reply == "I saved it as a new note."
     assert [t["name"] for t in result.tool_trace] == ["look_at_page", "create_note"]
+
+
+def test_a_refused_call_answering_the_nudge_stays_in_the_trace():
+    # #130: a call to a tool the turn did not offer is refused, never run.
+    # When KEEP drops the nudge exchange, the trace must still show the
+    # model made it; the exchange's other calls are dropped as before.
+    words = "A line for the page."
+    scripted = [
+        _resp(_msg(tool_calls=[_tool_call("c1", "look_at_page", {})])),
+        _resp(_msg(content=words)),
+        _resp(_msg(tool_calls=[
+            _tool_call("c2", "set_docs_root", {"path": "/elsewhere"}),
+            _tool_call("c3", "create_note", {"title": "x"}),
+        ])),
+        _resp(_msg(content="KEEP")),
+    ]
+
+    def dispatcher(name, args):
+        if name == "set_docs_root":
+            raise ToolNotOffered(name)
+        return {"status": "ok"}
+
+    store = SessionStore(ttl_seconds=60)
+    result = run_turn(
+        client=FakeClient(scripted), session_store=store, session_id=None,
+        user_message="write a line for this page", model="fake",
+        tools=[{"type": "function", "function": {"name": "x"}}],
+        tool_dispatcher=dispatcher,
+        max_iterations=6, max_history=40,
+        system_prompt="sys", action_guard=_guard(),
+    )
+    assert result.reply == words
+    assert [(t["name"], t["result_preview"]) for t in result.tool_trace] == [
+        ("look_at_page", '{"status": "ok"}'),
+        ("set_docs_root", '{"error": "unknown tool: set_docs_root"}'),
+    ]
+    assert store.get(result.session_id)[-1] == {"role": "assistant", "content": words}

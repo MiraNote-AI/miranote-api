@@ -10,9 +10,9 @@ import asyncio
 import base64
 import os
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from dotenv import load_dotenv
@@ -21,7 +21,9 @@ import ai_auth
 from openai import OpenAI
 
 from poc.chatbot import canvas, journal, tools
-from poc.chatbot.chat_loop import ActionGuard, ChatTurnResult, drop_unrenderable, run_turn
+from poc.chatbot.chat_loop import (
+    ActionGuard, ChatTurnResult, ToolNotOffered, drop_unrenderable, run_turn,
+)
 from poc.chatbot.config import ChatbotConfig
 from poc.chatbot.image_client import ImageClient
 from poc.chatbot.session import SessionStore
@@ -78,6 +80,24 @@ sessions = SessionStore(ttl_seconds=config.session_ttl_seconds)
 
 def _dispatcher(name: str, args: Dict[str, Any]) -> Any:
     return tools.dispatch(config, name, args)
+
+
+def _offered_only(
+    dispatcher: Callable[[str, Dict[str, Any]], Any],
+    turn_tools: List[Dict[str, Any]],
+) -> Callable[[str, Dict[str, Any]], Any]:
+    """Run only the tools this turn offered the model. Journal and canvas
+    mode withhold the docs tools, yet the dispatchers behind them still
+    know every name: a read_doc the model invents would read the docs
+    corpus into an answer about the user's own notes."""
+    offered = frozenset(t["function"]["name"] for t in turn_tools)
+
+    def dispatch(name: str, args: Dict[str, Any]) -> Any:
+        if name not in offered:
+            raise ToolNotOffered(name)
+        return dispatcher(name, args)
+
+    return dispatch
 
 
 app = FastAPI(title="MiraNote Chatbot", version="0.2.0")
@@ -192,6 +212,7 @@ async def chat(req: ChatRequest):
         )
         turn_tools = JOURNAL_TOOLS
         prompt = JOURNAL_PROMPT
+    dispatcher = _offered_only(dispatcher, turn_tools)
 
     try:
         result: ChatTurnResult = await asyncio.to_thread(
@@ -246,11 +267,19 @@ async def health():
         "status": "ok",
         "model": config.model,
         "tools": [t["function"]["name"] for t in tools.TOOLS],
-        "docs_root": str(config.docs_root),
     }
 
 
-@app.post("/config")
+def _local_dev_only() -> None:
+    """POST /config moves docs_root for every user of the process, and the
+    served app's beta token reaches it: it exists only for a server started
+    with CHATBOT_ALLOW_CONFIG=1. Otherwise it is a 404 like any unknown
+    route, whatever the body."""
+    if os.environ.get("CHATBOT_ALLOW_CONFIG") != "1":
+        raise HTTPException(status_code=404, detail="Not Found")
+
+
+@app.post("/config", dependencies=[Depends(_local_dev_only)])
 async def update_config(req: ConfigRequest):
     """Mutate runtime config. Currently only docs_root is mutable."""
     try:
