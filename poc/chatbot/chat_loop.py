@@ -6,7 +6,7 @@ import os
 import re
 import unicodedata
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Set
 
 from poc.chatbot.session import SessionStore
 
@@ -21,7 +21,9 @@ class ChatTurnResult:
 class ToolNotOffered(Exception):
     """A tool dispatcher raises this for a name the turn did not offer the
     model. run_turn answers the call with {"error": "unknown tool: <name>"},
-    and the tool never runs."""
+    and the tool never runs. The call stays in the trace even when the
+    action guard drops its nudge exchange: a response never hides a call
+    the model made."""
 
     def __init__(self, name: str):
         super().__init__("unknown tool: " + name)
@@ -37,7 +39,8 @@ class ActionGuard:
     asked for. If the model answers with it (see _says_keep) and makes no
     change, the first reply was the answer (a question, or words the user
     asked for): it is returned and the nudge exchange -- messages and tool
-    calls -- is dropped. Any other answer stands, as the model's reply to
+    calls, except calls refused as not offered (ToolNotOffered) -- is
+    dropped. Any other answer stands, as the model's reply to
     "make the change now"; the keep word itself is never shown."""
 
     look_tool: str
@@ -169,6 +172,8 @@ def run_turn(
     nudged_at: Optional[int] = None
     trace_at = 0
     first_reply = ""
+    # Trace positions of calls refused as not offered; see ToolNotOffered.
+    refused: Set[int] = set()
 
     def acted() -> bool:
         return action_guard is not None and bool(
@@ -177,7 +182,7 @@ def run_turn(
 
     def keep_first_reply() -> str:
         del history[nudged_at:]
-        del trace[trace_at:]
+        trace[trace_at:] = [t for i, t in enumerate(trace[trace_at:], trace_at) if i in refused]
         return first_reply
 
     for _ in range(max_iterations):
@@ -270,6 +275,9 @@ def run_turn(
                 args = {}
             try:
                 result = tool_dispatcher(tc.function.name, args)
+            except ToolNotOffered as e:
+                refused.add(len(trace))
+                result = {"error": str(e)}
             except Exception as e:  # noqa: BLE001
                 result = {"error": str(e)}
             result_str = json.dumps(result, ensure_ascii=False)

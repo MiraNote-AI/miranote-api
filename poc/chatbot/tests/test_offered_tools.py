@@ -138,6 +138,10 @@ def test_set_docs_root_after_the_canvas_nudge_does_not_run(svc):
     assert body["reply"] == "It looks calm to me."
     assert main.config.docs_root == root
     assert model.script == []
+    # KEEP drops the nudge exchange, but never a call the model made to
+    # a tool it was not offered.
+    assert [t["name"] for t in body["tool_trace"]] == ["look_at_page", "set_docs_root"]
+    assert body["tool_trace"][1]["result_preview"] == _unknown("set_docs_root")
 
 
 def test_offered_tools_still_run_in_every_mode(svc):
