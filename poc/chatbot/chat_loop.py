@@ -18,6 +18,15 @@ class ChatTurnResult:
     tool_trace: List[Dict[str, Any]] = field(default_factory=list)
 
 
+class ToolNotOffered(Exception):
+    """A tool dispatcher raises this for a name the turn did not offer the
+    model. run_turn answers the call with {"error": "unknown tool: <name>"},
+    and the tool never runs."""
+
+    def __init__(self, name: str):
+        super().__init__("unknown tool: " + name)
+
+
 @dataclass
 class ActionGuard:
     """One corrective turn when the model ran `look_tool` and then

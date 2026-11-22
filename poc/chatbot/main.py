@@ -10,7 +10,7 @@ import asyncio
 import base64
 import os
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -21,7 +21,9 @@ import ai_auth
 from openai import OpenAI
 
 from poc.chatbot import canvas, journal, tools
-from poc.chatbot.chat_loop import ActionGuard, ChatTurnResult, drop_unrenderable, run_turn
+from poc.chatbot.chat_loop import (
+    ActionGuard, ChatTurnResult, ToolNotOffered, drop_unrenderable, run_turn,
+)
 from poc.chatbot.config import ChatbotConfig
 from poc.chatbot.image_client import ImageClient
 from poc.chatbot.session import SessionStore
@@ -78,6 +80,24 @@ sessions = SessionStore(ttl_seconds=config.session_ttl_seconds)
 
 def _dispatcher(name: str, args: Dict[str, Any]) -> Any:
     return tools.dispatch(config, name, args)
+
+
+def _offered_only(
+    dispatcher: Callable[[str, Dict[str, Any]], Any],
+    turn_tools: List[Dict[str, Any]],
+) -> Callable[[str, Dict[str, Any]], Any]:
+    """Run only the tools this turn offered the model. Journal and canvas
+    mode withhold the docs tools, yet the dispatchers behind them still
+    know every name: a set_docs_root the model invents would move
+    docs_root for every later user of the service."""
+    offered = frozenset(t["function"]["name"] for t in turn_tools)
+
+    def dispatch(name: str, args: Dict[str, Any]) -> Any:
+        if name not in offered:
+            raise ToolNotOffered(name)
+        return dispatcher(name, args)
+
+    return dispatch
 
 
 app = FastAPI(title="MiraNote Chatbot", version="0.2.0")
@@ -192,6 +212,7 @@ async def chat(req: ChatRequest):
         )
         turn_tools = JOURNAL_TOOLS
         prompt = JOURNAL_PROMPT
+    dispatcher = _offered_only(dispatcher, turn_tools)
 
     try:
         result: ChatTurnResult = await asyncio.to_thread(
