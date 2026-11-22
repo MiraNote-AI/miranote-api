@@ -14,7 +14,7 @@ OpenAI-compatible LLM. Eight endpoints, each with its own prompt:
 | `POST /caption` | 1-2 sentence caption. `style`: instagram / diary / tweet |
 | `POST /mood` | Page mood for the star jar: `{"mood": "joyful"/"calm"/"tender"/"low"/"tense"/"neutral"}` |
 
-Bilingual: every text endpoint preserves the input language (English in -> English out, any Chinese in -> Chinese out); `/mood` always returns an English label.
+Bilingual: every text endpoint answers in the text's main language -- Chinese when it has at least as many Han characters as English words, English otherwise -- and keeps words from the other language (names, places, terms) as written. `/keywords` keeps each term in the language it appears in; `/mood` always returns an English label.
 
 ## `POST /rewrite`
 
