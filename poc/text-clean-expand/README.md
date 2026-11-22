@@ -6,7 +6,7 @@ OpenAI-compatible LLM. Eight endpoints, each with its own prompt:
 | Endpoint | Purpose |
 |---|---|
 | `POST /clean` | Restructure messy input into a readable note |
-| `POST /expand` | Develop the user's input as if they wrote a longer version |
+| `POST /expand` | Finish the note: the note exactly as written, then one or two closing sentences |
 | `POST /polish` | Final editing pass -- word choice + flow, no restructuring |
 | `POST /rewrite` | Rewrite one block following the user's own instruction ("make it warmer") |
 | `POST /shorten` | Produce a shorter version. `target`: 30% / 50% / tweet |
@@ -15,6 +15,29 @@ OpenAI-compatible LLM. Eight endpoints, each with its own prompt:
 | `POST /mood` | Page mood for the star jar: `{"mood": "joyful"/"calm"/"tender"/"low"/"tense"/"neutral"}` |
 
 Bilingual: every text endpoint answers in the text's main language and keeps words from the other language (names, places, terms) as written. A reply in the wrong language gets one rewrite only when the text is clearly Chinese or clearly English (at least twice as many Han characters as English words, or the reverse); a mixed note is left to the model. `/keywords` keeps each term in the language it appears in; `/mood` always returns an English label.
+
+## `POST /expand`
+
+Expand finishes the note; it does not rewrite it (#132).
+
+- Request: `{"text": str, "context"?: str}`. Response:
+  `{"original": str, "expanded": str}`, where `expanded` is `text`
+  unchanged, byte for byte, followed by the addition.
+- The model is asked for the addition only: one or two sentences that
+  close the note, in the writer's first-person voice, with no facts the
+  note does not state. The server builds `expanded` itself: a reply that
+  repeats the note has it taken off the front (whitespace aside), and the
+  addition is cut to its last two sentences (a sentence ends at `.` `!`
+  `?` before a space or the end, or at the full-width ones). The
+  grounding check reads the addition; invented facts get one rewrite, and
+  a failed rewrite is a 502 (not charged).
+- Joining: one space after an English note, nothing after a Chinese one;
+  a note with no main language goes by its last character. A note that
+  ends in whitespace (a line break) keeps it, with nothing added, and an
+  addition that starts with a comma or a full stop follows directly.
+- No usable addition (an empty reply, or the note repeated and nothing
+  more): `expanded` is the note as it is, still a 200, and the service
+  logs `Expand: the model gave no addition`.
 
 ## `POST /rewrite`
 

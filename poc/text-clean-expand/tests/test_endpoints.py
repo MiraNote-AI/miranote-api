@@ -353,23 +353,6 @@ def test_matching_script_does_not_retry(client):
     assert len(fake_llm.chat.completions.calls) == 1
 
 
-def test_expand_over_length_reply_triggers_retry(client):
-    test_client, fake_llm = client
-    text = "short diary note"
-    long_reply = "novelized " * 60  # 600 chars, over 2x + 150
-    fake_llm.reply_with(long_reply, "A short, grounded expansion.", "[]")
-
-    r = test_client.post("/expand", json={"text": text})
-
-    assert r.status_code == 200
-    assert r.json()["expanded"] == "A short, grounded expansion."
-    calls = fake_llm.chat.completions.calls
-    assert len(calls) == 3  # first try, length retry, grounding check
-    note = calls[1]["messages"][3]["content"]
-    assert "too long" in note
-    assert str(2 * len(text) + 150) in note
-
-
 def test_expand_within_length_does_not_retry(client):
     test_client, fake_llm = client
     fake_llm.reply_with("A short, grounded expansion.", "[]")
@@ -381,41 +364,43 @@ def test_expand_within_length_does_not_retry(client):
     assert len(fake_llm.chat.completions.calls) == 2
 
 
-def test_expand_language_and_length_violations_share_one_retry(client):
+def test_expand_wrong_language_addition_gets_one_correction_and_no_length_retry(client):
+    """The old 2x-length retry is gone (#132): a long reply in the wrong
+    language gets the language correction only."""
     test_client, fake_llm = client
-    long_chinese = ZH_REPLY * 40  # wrong language AND over length
+    long_chinese = ZH_REPLY * 40
     fake_llm.reply_with(long_chinese, "A short, grounded expansion.", "[]")
 
     r = test_client.post("/expand", json={"text": "short diary note"})
 
     assert r.status_code == 200
-    assert r.json()["expanded"] == "A short, grounded expansion."
+    assert r.json()["expanded"] == "short diary note A short, grounded expansion."
     calls = fake_llm.chat.completions.calls
     assert len(calls) == 3
     note = calls[1]["messages"][3]["content"]
     assert "wrong language" in note
-    assert "too long" in note
+    assert "too long" not in note
 
 
 def test_expand_invented_details_trigger_grounded_rewrite(client):
     test_client, fake_llm = client
     fake_llm.reply_with(
-        "Called mom; dad has been busy fixing the roof.",
-        '["dad has been busy fixing the roof"]',
-        "Called mom; it was good to hear her voice.",
+        "Dad has been busy fixing the roof.",
+        '["Dad has been busy fixing the roof"]',
+        "It was good to hear her voice.",
     )
 
     r = test_client.post("/expand", json={"text": "called mom today"})
 
     assert r.status_code == 200
-    assert r.json()["expanded"] == "Called mom; it was good to hear her voice."
+    assert r.json()["expanded"] == "called mom today It was good to hear her voice."
     calls = fake_llm.chat.completions.calls
     assert len(calls) == 3  # first try, grounding check, grounded rewrite
     checker_system = calls[1]["messages"][0]["content"]
     assert "fact checker" in checker_system
     rewrite_note = calls[2]["messages"][3]["content"]
     assert "invented" in rewrite_note
-    assert "dad has been busy fixing the roof" in rewrite_note
+    assert "Dad has been busy fixing the roof" in rewrite_note
 
 
 def test_a_failed_language_retry_keeps_the_first_reply(client):
@@ -438,7 +423,7 @@ def test_expand_grounding_checker_call_failing_fails_open(client):
     r = test_client.post("/expand", json={"text": "short diary note"})
 
     assert r.status_code == 200
-    assert r.json()["expanded"] == "A grounded expansion."
+    assert r.json()["expanded"] == "short diary note A grounded expansion."
     assert len(fake_llm.chat.completions.calls) == 2
 
 
@@ -466,7 +451,7 @@ def test_expand_grounding_checker_garbage_fails_open(client):
     r = test_client.post("/expand", json={"text": "short diary note"})
 
     assert r.status_code == 200
-    assert r.json()["expanded"] == "A grounded expansion."
+    assert r.json()["expanded"] == "short diary note A grounded expansion."
     assert len(fake_llm.chat.completions.calls) == 2
 
 
@@ -480,7 +465,7 @@ def test_expand_language_follows_text_not_context(client):
     )
 
     assert r.status_code == 200
-    assert r.json()["expanded"] == "A fine English expansion."
+    assert r.json()["expanded"] == "meeting notes about stickers A fine English expansion."
     # Composite prompt contains Chinese context, but the reply matches the
     # note's language, so no correction retry (just the grounding check).
     assert len(fake_llm.chat.completions.calls) == 2
@@ -644,7 +629,9 @@ ZH_WITH_STARBUCKS = chr(0x5728) + "Starbucks, " + ZH_NOTE
 SWIFT_NOTE = "\u7528Swift\u5199iOS app"
 SWIFT_ZH_REPLY = "\u6211\u5728\u7528Swift\u5199\u4e00\u4e2aiOS app."  # "I am writing an iOS app in Swift."
 DINNER_NOTE = "Dinner at \u5168\u805a\u5fb7 tonight"
-DINNER_EN_REPLY = "Dinner at \u5168\u805a\u5fb7 tonight, with friends."
+# Not starting with DINNER_NOTE: /expand would take a repeated note off
+# the front (that case is in the #132 tests).
+DINNER_EN_REPLY = "Tonight: dinner at \u5168\u805a\u5fb7, with friends."
 
 TEXT_ROUTES = ["/polish", "/clean", "/shorten", "/expand", "/rewrite"]
 REPLY_FIELD = {
@@ -658,8 +645,9 @@ REPLY_FIELD = {
 
 def _post_block(client, path, text, *replies):
     """POST `text` to a text route with the model's `replies` scripted.
-    Returns the reply the route answers with and the model calls that
-    wrote it (the /expand grounding check, always on, is left out)."""
+    Returns the reply the route answers with (for /expand, the addition
+    after the note) and the model calls that wrote it (the /expand
+    grounding check, always on, is left out)."""
     test_client, fake_llm = client
     fake_llm.reply_with(*replies)
     if path == "/expand":
@@ -673,7 +661,12 @@ def _post_block(client, path, text, *replies):
         c for c in fake_llm.chat.completions.calls
         if "fact checker" not in c["messages"][0]["content"]
     ]
-    return r.json()[REPLY_FIELD[path]], writes
+    answer = r.json()[REPLY_FIELD[path]]
+    if path == "/expand":
+        # The note comes back as written, the addition after it (#132).
+        assert answer.startswith(text)
+        answer = answer[len(text):].lstrip()
+    return answer, writes
 
 
 @pytest.fixture
@@ -805,3 +798,178 @@ def test_short_code_switched_note_is_not_forced_into_the_other_language(client, 
     answer, writes = _post_block(client, path, text, reply)
     assert answer == reply
     assert len(writes) == 1
+
+
+# -- api #132: Expand finishes the note; Clean up fixes and structures -------
+LANGUAGE_LINE = (
+    "- Write in the text's main language. Keep words from the other language "
+    "(names, places, terms) as written."
+)
+TRIP_NOTE = "Took the early train to the coast. Walked the pier with Mei."
+CLOSING = "It was the slow morning I needed."
+# "I slept early." / "Work again tomorrow!" / "Hope I sleep well?" / "That's it."
+ZH_SLEPT = "\u6211\u65e9\u70b9\u7761\u4e86\u3002"
+ZH_WORK = "\u660e\u5929\u8fd8\u8981\u4e0a\u73ed\uff01"
+ZH_HOPE = "\u5e0c\u671b\u80fd\u7761\u597d\uff1f"
+ZH_THATS_IT = "\u5c31\u8fd9\u6837\u5427\u3002"
+
+
+def _expand(client, text, *replies, checker="[]"):
+    """POST `text` to /expand with the model's `replies` scripted and the
+    grounding check answering `checker`. Returns the answer and the calls."""
+    test_client, fake_llm = client
+    fake_llm.reply_with(*replies, checker)
+    r = test_client.post("/expand", json={"text": text})
+    assert r.status_code == 200, r.text
+    return r.json(), fake_llm.chat.completions.calls
+
+
+def test_expand_returns_the_note_unchanged_followed_by_the_addition(client):
+    body, calls = _expand(client, TRIP_NOTE, CLOSING)
+    assert body == {"original": TRIP_NOTE, "expanded": TRIP_NOTE + " " + CLOSING}
+    assert len(calls) == 2  # the addition and the grounding check
+
+
+@pytest.mark.parametrize(
+    "note, reply, addition",
+    [
+        (
+            TRIP_NOTE,
+            "The sea was calm. I felt rested! Worth it. It cost 3.5 euros.",
+            "Worth it. It cost 3.5 euros.",
+        ),
+        (ZH_NOTE, ZH_SLEPT + ZH_WORK + ZH_HOPE + ZH_THATS_IT, ZH_HOPE + ZH_THATS_IT),
+    ],
+    ids=["english", "chinese"],
+)
+def test_expand_keeps_at_most_two_sentences_of_the_addition(client, note, reply, addition):
+    """. ! ? end a sentence before a space or the end (so 3.5 does not),
+    and the full-width ones anywhere. The closing two are kept."""
+    body, _ = _expand(client, note, reply)
+    sep = "" if note == ZH_NOTE else " "
+    assert body["expanded"] == note + sep + addition
+
+
+def test_expand_long_reply_is_cut_to_two_sentences_without_a_paid_retry(client):
+    """The two-sentence cap replaces the old 2x-length retry: a novelized
+    reply costs no correction call."""
+    body, calls = _expand(client, "short diary note", "Novelized. " * 60)
+    assert body["expanded"] == "short diary note Novelized. Novelized."
+    assert len(calls) == 2  # the addition and the grounding check, no retry
+
+
+@pytest.mark.parametrize(
+    "note, reply",
+    [
+        (TRIP_NOTE, TRIP_NOTE + " " + CLOSING),
+        (TRIP_NOTE, TRIP_NOTE + "\n\n" + CLOSING),
+        # The note's line break comes back as a space: still the note.
+        (TRIP_NOTE.replace(". ", ".\n"), TRIP_NOTE + " " + CLOSING),
+    ],
+    ids=["same", "blank-line-after", "other-whitespace"],
+)
+def test_expand_reply_that_repeats_the_note_keeps_only_what_follows_it(client, note, reply):
+    body, _ = _expand(client, note, reply)
+    assert body["expanded"] == note + " " + CLOSING
+
+
+def test_expand_reply_that_repeats_the_note_is_still_capped(client):
+    reply = TRIP_NOTE + " The sea was calm. I felt rested. " + CLOSING
+    body, _ = _expand(client, TRIP_NOTE, reply)
+    assert body["expanded"] == TRIP_NOTE + " I felt rested. " + CLOSING
+
+
+def test_expand_reply_that_rewrites_the_note_leaves_the_note_as_written(client):
+    """A reworded note cannot be taken off the front, but the note the
+    user wrote still comes back unchanged and at most two sentences follow."""
+    note = "took early train to coast. walked pier w/ mei"
+    reply = "I took the early train to the coast. I walked the pier with Mei. " + CLOSING
+    body, _ = _expand(client, note, reply)
+    assert body["expanded"] == note + " I walked the pier with Mei. " + CLOSING
+
+
+@pytest.mark.parametrize(
+    "note, reply, expanded",
+    [
+        ("Walked the pier.", "It was calm.", "Walked the pier. It was calm."),
+        (ZH_NOTE, ZH_SLEPT, ZH_NOTE + ZH_SLEPT),
+        # A trailing line break (or space) stays as it is, with nothing added.
+        ("Walked the pier.\n", "It was calm.", "Walked the pier.\nIt was calm."),
+        (ZH_NOTE + "\n\n", ZH_SLEPT, ZH_NOTE + "\n\n" + ZH_SLEPT),
+        ("  walked the pier\r\n\tgood  ", "It was calm.", "  walked the pier\r\n\tgood  It was calm."),
+        # No main language: the note's last character decides.
+        (SWIFT_NOTE, SWIFT_ZH_REPLY, SWIFT_NOTE + " " + SWIFT_ZH_REPLY),
+        ("good morning \u65e9\u5b89", ZH_SLEPT, "good morning \u65e9\u5b89" + ZH_SLEPT),
+        # The note repeated and its last sentence carried on.
+        (DINNER_NOTE, DINNER_NOTE + ", with friends.", DINNER_NOTE + ", with friends."),
+        # A note that is a word cut short is not taken off the reply's front.
+        ("Din", "Dinner was good.", "Din Dinner was good."),
+    ],
+    ids=[
+        "english-space",
+        "chinese-nothing",
+        "trailing-line-break",
+        "chinese-trailing-line-breaks",
+        "odd-whitespace-kept",
+        "mixed-ending-latin",
+        "mixed-ending-han",
+        "repeated-and-continued",
+        "word-prefix",
+    ],
+)
+def test_expand_joins_the_addition_to_the_note(client, note, reply, expanded):
+    body, _ = _expand(client, note, reply)
+    assert body["original"] == note
+    assert body["expanded"] == expanded
+
+
+@pytest.mark.parametrize("reply", ["", TRIP_NOTE, TRIP_NOTE.replace(". ", ".\n\n")])
+def test_expand_with_no_usable_addition_returns_the_note_unchanged(client, capsys, reply):
+    """An empty reply, or one that only repeats the note, leaves the note as
+    it is (a 200: the app shows the words unchanged) and is logged. The
+    grounding check is not paid for when there is nothing to check."""
+    test_client, fake_llm = client
+    fake_llm.reply_with(reply)
+    r = test_client.post("/expand", json={"text": TRIP_NOTE})
+    assert r.status_code == 200
+    assert r.json() == {"original": TRIP_NOTE, "expanded": TRIP_NOTE}
+    assert len(fake_llm.chat.completions.calls) == 1
+    assert "no addition" in capsys.readouterr().out
+
+
+def test_expand_grounding_check_reads_the_addition_not_the_note(client):
+    test_client, fake_llm = client
+    invented = "Mei brought her sister along."
+    fake_llm.reply_with(TRIP_NOTE + " " + invented, '["Mei brought her sister along"]', CLOSING)
+
+    r = test_client.post("/expand", json={"text": TRIP_NOTE})
+
+    assert r.status_code == 200
+    assert r.json()["expanded"] == TRIP_NOTE + " " + CLOSING
+    calls = fake_llm.chat.completions.calls
+    assert len(calls) == 3  # the addition, the check, the grounded rewrite
+    assert calls[1]["messages"][1]["content"] == f"NOTE:\n{TRIP_NOTE}\n\nEXPANSION:\n{invented}"
+    assert calls[2]["messages"][2] == {"role": "assistant", "content": invented}
+
+
+def test_expand_grounded_rewrite_is_capped_too(client):
+    test_client, fake_llm = client
+    fake_llm.reply_with(
+        "Mei brought her sister along.",
+        '["Mei brought her sister along"]',
+        TRIP_NOTE + " The sea was calm. I felt rested. " + CLOSING,
+    )
+    r = test_client.post("/expand", json={"text": TRIP_NOTE})
+    assert r.status_code == 200
+    assert r.json()["expanded"] == TRIP_NOTE + " I felt rested. " + CLOSING
+
+
+def test_expand_prompt_asks_for_a_closing_addition_only(client):
+    _, calls = _expand(client, TRIP_NOTE, CLOSING)
+    system = calls[0]["messages"][0]["content"]
+    assert LANGUAGE_LINE in system
+    assert "one or two sentences" in system
+    assert "first-person" in system
+    for gone in ["AS IF YOU ARE THE USER", "1.5x", "2x", "implications, trade-offs, and next steps"]:
+        assert gone not in system
+

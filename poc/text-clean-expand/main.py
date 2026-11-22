@@ -1,7 +1,7 @@
 """
 MiraNote POC -- Text Clean & Expand API
-Clean: fix typos/punctuation/grammar, preserve original meaning.
-Expand: give user ideas to continue writing, concise and inspiring.
+Clean: fix typos/punctuation/grammar and structure the text, preserve original meaning.
+Expand: finish the note -- the note as written plus one or two closing sentences.
 """
 
 from __future__ import annotations
@@ -11,7 +11,7 @@ import os
 import re
 import asyncio
 from pathlib import Path
-from typing import Annotated, List, Literal, Optional, get_args
+from typing import Annotated, Callable, List, Literal, Optional, get_args
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -398,19 +398,19 @@ async def call_llm(
     max_tokens: int = 2048,
     language_ref: Optional[str] = None,
     temperature: float = 1.0,
-    max_output_chars: Optional[int] = None,
     grounding_check: bool = False,
     reject_cut: bool = False,
     thinking_off: bool = False,
     any_chinese: bool = False,
+    shape: Optional[Callable[[str], str]] = None,
 ) -> str:
     """Call the LLM; the reply must match the main language of
     `language_ref` (defaults to `user_text`): Chinese stays Chinese
     (simplified stays simplified, traditional stays traditional), English
     stays English. `any_chinese` is for /keywords (see _language_correction).
-    `max_output_chars` additionally bounds the reply length (the model
-    ignores the prompt's length rule and novelizes; over-length replies are
-    where the invented details live).
+    `shape` turns each model reply into the part the route uses (/expand:
+    the closing addition), before it is checked, so the checks and their
+    retries read that part only.
 
     The model sometimes ignores these rules in the prompt, so violations are
     detected here and corrected with one explicit retry. If the retry
@@ -419,34 +419,26 @@ async def call_llm(
     when it fails, the answer is a 502, since the reply in hand has
     invented facts.
     """
+    if shape is None:
+        shape = lambda reply: reply  # noqa: E731
     messages = [
         {"role": "system", "content": system},
         {"role": "user", "content": user_text},
     ]
-    reply = await _completion(messages, max_tokens, temperature, reject_cut, thinking_off)
+    reply = shape(await _completion(messages, max_tokens, temperature, reject_cut, thinking_off))
 
     ref = user_text if language_ref is None else language_ref
-    notes = []
     if language_note := _language_correction(ref, reply, any_chinese):
-        notes.append(language_note)
-    if max_output_chars is not None and len(reply) > max_output_chars:
-        notes.append(
-            f"Your reply is {len(reply)} characters -- far too long for this "
-            f"note. Rewrite it in at most {max_output_chars} characters. Cut "
-            "invented details first: keep only content grounded in the note, "
-            "in the user's voice. Do not summarize the note away; just stop "
-            "adding things it never said."
-        )
-    if notes:
         messages += [
             {"role": "assistant", "content": reply},
-            {"role": "user", "content": "\n\n".join(notes)},
+            {"role": "user", "content": language_note},
         ]
-        reply = await _correction(reply, messages, max_tokens, temperature, reject_cut, thinking_off)
+        reply = shape(await _correction(reply, messages, max_tokens, temperature, reject_cut, thinking_off))
 
     # Fabrication is checked last, on whatever reply survived the retry:
     # a fact-checker pass lists invented specifics, one rewrite removes them.
-    if grounding_check:
+    # An empty reply has nothing to check.
+    if grounding_check and reply:
         violations = await _grounding_violations(user_text, reply)
         if violations:
             listed = "\n".join(f"- {v}" for v in violations)
@@ -458,20 +450,86 @@ async def call_llm(
                         "These details in your reply are NOT in the note -- "
                         f"they are invented:\n{listed}\n"
                         "Rewrite your reply without them. Keep everything that "
-                        "IS grounded in the note, same language, same voice"
-                        + (
-                            f", at most {max_output_chars} characters."
-                            if max_output_chars is not None
-                            else "."
-                        )
+                        "IS grounded in the note, same language, same voice."
                     ),
                 },
             ]
             # Not _correction: the reply in hand is the one the checker just
             # flagged as inventing facts. If the rewrite fails, a 502 (not
             # charged) beats serving it.
-            reply = await _completion(messages, max_tokens, temperature)
+            reply = shape(await _completion(messages, max_tokens, temperature))
     return reply
+
+
+# -- Expand: the note as written, then a short closing addition (#132) --
+
+EXPAND_MAX_SENTENCES = 2
+# A sentence ends at . ! ? before a space or the end of the text (so the
+# point in 3.5 does not end one), or at the full-width U+3002,
+# U+FF01, U+FF1F anywhere; closing quotes and brackets right after the mark
+# stay with its sentence.
+_SENTENCE_END = re.compile(
+    r"[.!?]+[\"')\]\u2019\u201d]*(?=\s|$)"
+    r"|[\u3002\uff01\uff1f]+[\"')\]\u2019\u201d\u300d\u300f\uff09]*"
+)
+# Marks that attach to the word before them: an addition starting with one
+# carries on the note's last sentence, with no space before it.
+_ATTACHING = frozenset(",.;:!?)]\u3001\u3002\uff0c\uff1b\uff1a\uff01\uff1f\uff09")
+# Han characters plus CJK and full-width punctuation: a note ending in one
+# takes the addition with no space.
+_CJK_END = re.compile(r"[\u3000-\u303f\u3400-\u4dbf\u4e00-\u9fff\uff00-\uffef]")
+_ASCII_ALNUM = re.compile("[A-Za-z0-9]")
+
+
+def _sentences(text: str) -> List[str]:
+    """`text` cut after each sentence end, as written; a last piece without
+    an end mark counts as a sentence too."""
+    pieces, start = [], 0
+    for end in [m.end() for m in _SENTENCE_END.finditer(text)] + [len(text)]:
+        if text[start:end].strip():
+            pieces.append(text[start:end])
+        start = end
+    return pieces
+
+
+def _after_note(reply: str, note: str) -> str:
+    """`reply` with `note` taken off its front, comparing everything but
+    whitespace; `reply` itself when it does not start with the note, or
+    when the note ends inside one of the reply's words ("Din" in
+    "Dinner")."""
+    i = 0
+    for ch in note:
+        if ch.isspace():
+            continue
+        while i < len(reply) and reply[i].isspace():
+            i += 1
+        if i == len(reply) or reply[i] != ch:
+            return reply
+        i += 1
+    if _ASCII_ALNUM.match(note.rstrip()[-1:]) and _ASCII_ALNUM.match(reply[i : i + 1]):
+        return reply
+    return reply[i:]
+
+
+def _closing_addition(note: str, reply: str) -> str:
+    """The addition in a model reply to /expand: what follows the note if
+    the reply repeats it, cut to its last EXPAND_MAX_SENTENCES sentences
+    (the ones that close the note). "" when nothing is left."""
+    return "".join(_sentences(_after_note(reply, note))[-EXPAND_MAX_SENTENCES:]).strip()
+
+
+def _join_addition(note: str, addition: str) -> str:
+    """`note`, byte for byte, then `addition`: after one space in an English
+    note, directly in a Chinese one. A note ending in whitespace (a line
+    break) already has its separator, and an addition starting with a comma
+    or full stop carries on the last sentence. With no main language, the
+    note's last character decides."""
+    if note[-1:].isspace() or addition[:1] in _ATTACHING:
+        return note + addition
+    lang = main_language(note)
+    if lang is None:
+        lang = "zh" if _CJK_END.match(note[-1:]) else "en"
+    return note + (" " if lang == "en" else "") + addition
 
 
 @app.post("/clean", response_model=CleanResponse)
@@ -483,23 +541,32 @@ async def clean_text(req: TextRequest):
 
 @app.post("/expand", response_model=ExpandResponse)
 async def expand_text(req: TextRequest):
-    """Expand on user's input: provide concise directions and ideas to continue writing."""
+    """Finish the note: the note exactly as written, then one or two closing
+    sentences in the writer's voice (#132)."""
     user_msg = req.text
     if req.context:
         user_msg = f"Context:\n{req.context}\n\nCurrent input:\n{req.text}"
+    # The model is asked for the addition only. Whatever it sends, the note
+    # never comes from the model: a reply that repeats the note loses it,
+    # and the two-sentence cut is the fence against novelizing (the prompt's
+    # own length rule alone is ignored). max_tokens stays roomy so a reply
+    # that repeats a long note still reaches its addition.
     # 0.3: some creative room, but low enough to curb invented specifics.
-    # The char cap (2x + slack) is the real fence against novelizing; the
-    # prompt's own length rule alone is ignored.
-    expanded = await call_llm(
+    addition = await call_llm(
         EXPAND_SYSTEM,
         user_msg,
         max_tokens=2048,
         language_ref=req.text,
         temperature=0.3,
-        max_output_chars=2 * len(req.text) + 150,
         grounding_check=True,
+        shape=lambda reply: _closing_addition(req.text, reply),
     )
-    return ExpandResponse(original=req.text, expanded=expanded)
+    if not addition:
+        # Empty, or the note repeated and nothing more. The note comes back
+        # as it is; the app then shows the same words under Expand.
+        print("Expand: the model gave no addition; returning the note unchanged")
+        return ExpandResponse(original=req.text, expanded=req.text)
+    return ExpandResponse(original=req.text, expanded=_join_addition(req.text, addition))
 
 
 @app.post("/polish", response_model=PolishResponse)
