@@ -215,3 +215,32 @@ def test_dispatch_find_quote_wraps_runtime_error(tmp_docs):
     out = tools.dispatch(cfg, "find_quote", {"text": "x"})
     assert "error" in out
     assert "retrieval service down" in out["error"]
+
+
+# The trigger words in each line of prompts/tool_descriptions.txt, as they
+# stood before the scope change for Expand and Clean up (#132, #136).
+@pytest.mark.parametrize("name, triggers", [
+    ("clean_text", ["'clean up'", "'tidy'", "'\u6574\u7406'"]),
+    ("expand_text", ["'expand'", "'develop'", "'\u5c55\u5f00'", "'\u6269\u5199'"]),
+])
+def test_text_tool_descriptions_keep_their_triggers(name, triggers):
+    desc = tools._TOOL_DESCRIPTIONS[name]
+    for trigger in triggers:
+        assert trigger in desc
+
+
+def test_expand_text_finishes_the_note_and_leaves_it_as_written():
+    # #132: Expand adds one or two closing sentences; it no longer
+    # rewrites the note into a fuller version.
+    desc = tools._TOOL_DESCRIPTIONS["expand_text"]
+    assert "one or two closing sentences" in desc
+    assert "stays exactly as written" in desc
+    assert "fuller version" not in desc
+
+
+def test_clean_text_fixes_and_structures_without_adding_content():
+    # #132: Clean up fixes mistakes and gives structure, nothing added.
+    desc = tools._TOOL_DESCRIPTIONS["clean_text"]
+    assert "spelling, grammar, and punctuation" in desc
+    assert "give it structure" in desc
+    assert "adding no content" in desc
