@@ -203,6 +203,25 @@ def _contains_cjk(text: str) -> bool:
     return any(chr(0x4E00) <= ch <= chr(0x9FFF) for ch in text)
 
 
+# Han characters (CJK Unified Ideographs and Extension A) and Latin words.
+_HAN = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff]")
+_LATIN_WORD = re.compile("[A-Za-z]+")
+
+
+def main_language(text: str) -> Optional[str]:
+    """'zh' or 'en': the language most of `text` is written in, or None
+    when it has neither (digits, emoji). Han characters are counted against
+    Latin words; a Chinese word is about 1.5 characters, so an even mix
+    leans Chinese. Japanese kanji are Han characters too, so Japanese counts
+    as Chinese (kana are not counted); that is known and not handled (#131).
+    """
+    han = len(_HAN.findall(text))
+    latin = len(_LATIN_WORD.findall(text))
+    if not han and not latin:
+        return None
+    return "zh" if han >= latin else "en"
+
+
 # Common simplified/traditional variant pairs. Spot-checking these is enough to
 # catch gross script drift (a fully traditional reply to a simplified note);
 # texts that hit neither set are treated as indeterminate and never retried.
@@ -231,16 +250,36 @@ def _chinese_script(text: str) -> Optional[str]:
     return None
 
 
-def _language_correction(ref: str, reply: str) -> Optional[str]:
+def _language_correction(ref: str, reply: str, any_chinese: bool = False) -> Optional[str]:
     """A corrective instruction when the reply's language does not match the
-    reference text, or None when it matches (or is indeterminate)."""
-    if _contains_cjk(ref) != _contains_cjk(reply):
-        if _contains_cjk(ref):
+    reference text, or None when it matches (or is indeterminate).
+
+    The languages compared are main languages: an English note that names
+    one Chinese place is English. With `any_chinese` (/keywords), a text is
+    Chinese when it has any Chinese character, as before #131: its reply is
+    JSON whose terms each keep their own language, and the English key
+    names would outvote short Chinese terms."""
+    if any_chinese:
+        ref_lang = "zh" if _contains_cjk(ref) else "en"
+        reply_lang = "zh" if _contains_cjk(reply) else "en"
+    else:
+        ref_lang, reply_lang = main_language(ref), main_language(reply)
+    if ref_lang and reply_lang and ref_lang != reply_lang:
+        if ref_lang == "zh":
             return (
                 "Your reply is in the wrong language. The note contains Chinese, "
                 "so rewrite your entire reply in Chinese. Keep English technical "
                 "terms as-is. Do not translate the note itself. Every other rule "
                 "in the system prompt still applies to the rewrite."
+            )
+        # An English note that names something in Chinese: the name stays,
+        # so no "no Chinese characters" here.
+        if _HAN.search(ref):
+            return (
+                "Your reply is in the wrong language. The note is written mainly "
+                "in English, so rewrite your entire reply in English. Keep words "
+                "from the other language (names, places, terms) as written. "
+                "Every other rule in the system prompt still applies to the rewrite."
             )
         return (
             "Your reply is in the wrong language. The note is entirely in "
@@ -354,10 +393,12 @@ async def call_llm(
     grounding_check: bool = False,
     reject_cut: bool = False,
     thinking_off: bool = False,
+    any_chinese: bool = False,
 ) -> str:
-    """Call the LLM; the reply must match the language of `language_ref`
-    (defaults to `user_text`): Chinese stays Chinese (simplified stays
-    simplified, traditional stays traditional), English stays English.
+    """Call the LLM; the reply must match the main language of
+    `language_ref` (defaults to `user_text`): Chinese stays Chinese
+    (simplified stays simplified, traditional stays traditional), English
+    stays English. `any_chinese` is for /keywords (see _language_correction).
     `max_output_chars` additionally bounds the reply length (the model
     ignores the prompt's length rule and novelizes; over-length replies are
     where the invented details live).
@@ -377,7 +418,7 @@ async def call_llm(
 
     ref = user_text if language_ref is None else language_ref
     notes = []
-    if language_note := _language_correction(ref, reply):
+    if language_note := _language_correction(ref, reply, any_chinese):
         notes.append(language_note)
     if max_output_chars is not None and len(reply) > max_output_chars:
         notes.append(
@@ -484,7 +525,10 @@ async def rewrite_text(req: RewriteRequest):
 async def shorten_text(req: ShortenRequest):
     """Shorten: produce a shorter version preserving meaning. Target controls aggressiveness."""
     user_msg = f"Target: {req.target}\n\n{req.text}"
-    shortened = await call_llm(SHORTEN_SYSTEM, user_msg, max_tokens=2048, temperature=0.3)
+    # language_ref: the target line's words are not the note's.
+    shortened = await call_llm(
+        SHORTEN_SYSTEM, user_msg, max_tokens=2048, language_ref=req.text, temperature=0.3
+    )
     return ShortenResponse(original=req.text, shortened=shortened, target=req.target)
 
 
@@ -492,7 +536,7 @@ async def shorten_text(req: ShortenRequest):
 async def keywords_endpoint(req: KeywordsRequest):
     """Extract 5-10 salient keywords as [{term, score}]. Score is 1-10 LLM-assigned salience."""
     user_msg = f"max={req.max}\n\n{req.text}"
-    raw = await call_llm(KEYWORDS_SYSTEM, user_msg, max_tokens=1024, temperature=0.2)
+    raw = await call_llm(KEYWORDS_SYSTEM, user_msg, max_tokens=1024, temperature=0.2, any_chinese=True)
     try:
         parsed = json.loads(raw)
     except json.JSONDecodeError:
@@ -514,7 +558,8 @@ async def keywords_endpoint(req: KeywordsRequest):
 async def caption_endpoint(req: CaptionRequest):
     """Generate a 1-2 sentence caption in the given style."""
     user_msg = f"style={req.style}\n\n{req.text}"
-    caption = await call_llm(CAPTION_SYSTEM, user_msg, max_tokens=512)
+    # language_ref: the style line's words are not the note's.
+    caption = await call_llm(CAPTION_SYSTEM, user_msg, max_tokens=512, language_ref=req.text)
     return CaptionResponse(original=req.text, caption=caption, style=req.style)
 
 
