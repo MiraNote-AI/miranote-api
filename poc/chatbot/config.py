@@ -1,9 +1,10 @@
 """Mutable runtime config for the chatbot.
 
-docs_root can be changed at runtime via POST /config or the set_docs_root
-tool. Other fields are read once at startup. A Lock guards docs_root
-writes so concurrent requests don't tear the assignment; reads rely on
-Python attribute-access atomicity.
+docs_root can be changed at runtime via POST /config, which answers only
+when the server runs with CHATBOT_ALLOW_CONFIG=1 (local dev). Other fields
+are read once at startup. A Lock guards docs_root writes so concurrent
+requests don't tear the assignment; reads rely on Python attribute-access
+atomicity.
 """
 from __future__ import annotations
 

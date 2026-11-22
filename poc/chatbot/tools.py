@@ -78,29 +78,6 @@ TOOLS: List[Dict[str, Any]] = [
     {
         "type": "function",
         "function": {
-            "name": "set_docs_root",
-            "description": (
-                "Switch the docs root directory the agent reads from. ONLY call "
-                "this when the user explicitly asks to switch to a different "
-                "folder. Do not call it speculatively. The new path must be an "
-                "existing local directory. On success, confirm the new path back "
-                "to the user."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "path": {
-                        "type": "string",
-                        "description": "Absolute local path, or '~'-prefixed home-relative path.",
-                    },
-                },
-                "required": ["path"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
             "name": "clean_text",
             "description": _TOOL_DESCRIPTIONS["clean_text"],
             "parameters": {
@@ -227,8 +204,8 @@ _TEXT_TOOL_NAMES = frozenset({
 def dispatch(config: ChatbotConfig, name: str, args: Dict[str, Any]) -> Any:
     """Route a model-issued tool call to the underlying implementation.
 
-    `config.docs_root` is read fresh on each call so set_docs_root takes
-    effect immediately for subsequent fs-tool calls in the same turn.
+    `config.docs_root` is read fresh on each call, so a POST /config
+    (local dev only) takes effect on the next fs-tool call.
 
     Always returns a JSON-serialisable value. Exceptions become
     {"error": "..."} so the model can recover on the next turn.
@@ -240,8 +217,6 @@ def dispatch(config: ChatbotConfig, name: str, args: Dict[str, Any]) -> Any:
             return tools_fs.read_doc(config.docs_root, args["path"])
         if name == "search_docs":
             return tools_fs.search_docs(config.docs_root, args["query"], int(args.get("max_hits", 20)))
-        if name == "set_docs_root":
-            return config.set_docs_root(args["path"])
         # Text tools delegate to text-clean-expand; if TEXT_API_URL was not
         # configured, text_client is None. Guard here so the model gets a
         # clear message instead of a cryptic AttributeError on None.

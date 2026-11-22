@@ -93,7 +93,8 @@ def _unknown(name):
     return json.dumps({"error": "unknown tool: " + name})
 
 
-@pytest.mark.parametrize("mode", [{"notes": []}, {"page": PAGE}])
+# Plain mode included: set_docs_root is a local-dev tool, offered nowhere.
+@pytest.mark.parametrize("mode", [{}, {"notes": []}, {"page": PAGE}])
 def test_set_docs_root_is_refused_where_it_was_not_offered(svc, mode):
     chat, elsewhere = svc
     root = main.config.docs_root

@@ -22,7 +22,9 @@ def test_tools_schema_lists_four_functions():
     # Kept for backwards compatibility as reference.
     names = [t["function"]["name"] for t in tools.TOOLS]
     assert len(names) >= 4  # At least the original 4 are still present
-    assert all(n in names for n in ["list_docs", "read_doc", "search_docs", "set_docs_root"])
+    assert all(n in names for n in ["list_docs", "read_doc", "search_docs"])
+    # Local-dev only (POST /config with CHATBOT_ALLOW_CONFIG=1), never a tool.
+    assert "set_docs_root" not in names
     for t in tools.TOOLS:
         assert t["type"] == "function"
         assert "parameters" in t["function"]
@@ -61,35 +63,13 @@ def test_dispatch_missing_required_arg(tmp_docs: Path):
     assert "error" in out
 
 
-def test_dispatch_set_docs_root_mutates_config(tmp_docs: Path, tmp_path: Path):
+def test_dispatch_does_not_know_set_docs_root(tmp_docs: Path, tmp_path: Path):
     cfg = _cfg(tmp_docs)
     new_dir = tmp_path / "newdocs"
     new_dir.mkdir()
     out = tools.dispatch(cfg, "set_docs_root", {"path": str(new_dir)})
-    assert out["docs_root"] == str(new_dir.resolve())
-    assert cfg.docs_root == new_dir.resolve()
-    # Subsequent fs calls now use the new root.
-    (new_dir / "fresh.md").write_text("from the new root", encoding="utf-8")
-    listed = tools.dispatch(cfg, "list_docs", {"subdir": "."})
-    assert [item["path"] for item in listed] == ["fresh.md"]
-
-
-def test_dispatch_set_docs_root_rejects_missing(tmp_docs: Path, tmp_path: Path):
-    cfg = _cfg(tmp_docs)
-    out = tools.dispatch(cfg, "set_docs_root", {"path": str(tmp_path / "nope")})
-    assert "error" in out
-    assert "does not exist" in out["error"]
-    # Config was NOT mutated on failure.
+    assert out == {"error": "unknown tool: set_docs_root"}
     assert cfg.docs_root == tmp_docs.resolve()
-
-
-def test_dispatch_set_docs_root_rejects_file(tmp_docs: Path, tmp_path: Path):
-    cfg = _cfg(tmp_docs)
-    f = tmp_path / "notadir.txt"
-    f.write_text("hi")
-    out = tools.dispatch(cfg, "set_docs_root", {"path": str(f)})
-    assert "error" in out
-    assert "not a directory" in out["error"]
 
 
 class _FakeTextClient:
@@ -128,10 +108,10 @@ def _cfg_with_text(tmp_docs):
     return cfg
 
 
-def test_tools_schema_exact_eleven_set():
+def test_tools_schema_exact_ten_set():
     names = [t["function"]["name"] for t in tools.TOOLS]
     assert sorted(names) == sorted([
-        "list_docs", "read_doc", "search_docs", "set_docs_root",
+        "list_docs", "read_doc", "search_docs",
         "clean_text", "expand_text", "polish_text", "shorten_text",
         "extract_keywords", "generate_caption", "find_quote",
     ])
@@ -204,10 +184,10 @@ def _cfg_with_retrieval(tmp_docs):
     return cfg
 
 
-def test_tools_schema_now_lists_eleven_functions():
+def test_tools_schema_now_lists_ten_functions():
     names = [t["function"]["name"] for t in tools.TOOLS]
     assert "find_quote" in names
-    assert len(names) == 11  # 10 from prior PRs + find_quote
+    assert len(names) == 10  # 3 docs tools, 6 text tools, find_quote
 
 
 def test_dispatch_routes_to_find_quote(tmp_docs):

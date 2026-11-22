@@ -739,7 +739,6 @@ async function chatLoadHealth() {
     var r = await fetch(CHAT_API + '/health');
     if (!r.ok) throw new Error('HTTP ' + r.status);
     var h = await r.json();
-    if (!$('c-docs-root').value) $('c-docs-root').value = h.docs_root;
     $('c-docs-status').textContent = 'model: ' + h.model;
     $('c-docs-status').className = 'status';
   } catch (e) {
@@ -796,7 +795,7 @@ async function chatSend() {
     var data = await r.json();
     chatSessionId = data.session_id;
     chatRenderTurn('assistant', data.reply, data.tool_trace);
-    // Refresh docs root in case the agent called set_docs_root.
+    // Refresh the chat server status line.
     chatLoadHealth();
   } catch (e) {
     var msg = 'Error: ' + e.message;
