@@ -150,7 +150,11 @@ See `.env.example`. The important knobs:
   `http://localhost:8001`. The chatbot's `*_text`, `extract_keywords`,
   and `generate_caption` tools HTTP-delegate to this server. If the
   text server is down, the corresponding tools return a friendly error
-  message and the agent recovers.
+  message and the agent recovers. Each call carries the `/chat`
+  request's own `Authorization` header and a fresh `X-Request-ID`, so
+  the text service's gate sees the caller: the beta token as before, or
+  a signed-in writer, whose `/expand` and `/polish` calls are metered to
+  them as `expand`.
 - `RETRIEVAL_API_URL` -- URL of the retrieval POC server. Defaults to
   `http://localhost:8004`. The chatbot's `find_quote` tool
   HTTP-delegates to this server. Server down -> tool returns an error
