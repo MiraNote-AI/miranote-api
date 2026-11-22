@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from poc.chatbot import tools_fs
 from poc.chatbot.config import ChatbotConfig
@@ -201,15 +201,22 @@ _TEXT_TOOL_NAMES = frozenset({
 })
 
 
-def dispatch(config: ChatbotConfig, name: str, args: Dict[str, Any]) -> Any:
+def dispatch(
+    config: ChatbotConfig, name: str, args: Dict[str, Any], text_client: Optional[Any] = None,
+) -> Any:
     """Route a model-issued tool call to the underlying implementation.
 
     `config.docs_root` is read fresh on each call, so a POST /config
     (local dev only) takes effect on the next fs-tool call.
 
+    `text_client` is the turn's client for the text tools (main binds the
+    /chat caller's Authorization header to it); config.text_client when
+    not given.
+
     Always returns a JSON-serialisable value. Exceptions become
     {"error": "..."} so the model can recover on the next turn.
     """
+    text = text_client if text_client is not None else config.text_client
     try:
         if name == "list_docs":
             return tools_fs.list_docs(config.docs_root, args.get("subdir", "."))
@@ -220,20 +227,20 @@ def dispatch(config: ChatbotConfig, name: str, args: Dict[str, Any]) -> Any:
         # Text tools delegate to text-clean-expand; if TEXT_API_URL was not
         # configured, text_client is None. Guard here so the model gets a
         # clear message instead of a cryptic AttributeError on None.
-        if name in _TEXT_TOOL_NAMES and config.text_client is None:
+        if name in _TEXT_TOOL_NAMES and text is None:
             return {"error": "text tools unavailable: TEXT_API_URL not configured"}
         if name == "clean_text":
-            return config.text_client.clean(args["text"], args.get("context"))
+            return text.clean(args["text"], args.get("context"))
         if name == "expand_text":
-            return config.text_client.expand(args["text"], args.get("context"))
+            return text.expand(args["text"], args.get("context"))
         if name == "polish_text":
-            return config.text_client.polish(args["text"], args.get("context"))
+            return text.polish(args["text"], args.get("context"))
         if name == "shorten_text":
-            return config.text_client.shorten(args["text"], args.get("target", "50%"))
+            return text.shorten(args["text"], args.get("target", "50%"))
         if name == "extract_keywords":
-            return config.text_client.keywords(args["text"], int(args.get("max", 10)))
+            return text.keywords(args["text"], int(args.get("max", 10)))
         if name == "generate_caption":
-            return config.text_client.caption(args["text"], args.get("style", "instagram"))
+            return text.caption(args["text"], args.get("style", "instagram"))
         if name == "create_note":
             # Journal mode: the page lives on the user's device. The app
             # reads title/body from tool_trace; this result just tells

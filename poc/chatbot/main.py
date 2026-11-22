@@ -12,7 +12,7 @@ import os
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from dotenv import load_dotenv
@@ -78,8 +78,19 @@ image_client = ImageClient(IMAGE_API_URL)
 sessions = SessionStore(ttl_seconds=config.session_ttl_seconds)
 
 
-def _dispatcher(name: str, args: Dict[str, Any]) -> Any:
-    return tools.dispatch(config, name, args)
+def _dispatcher_for(authorization: Optional[str]) -> Callable[[str, Dict[str, Any]], Any]:
+    """Tool dispatch for one /chat request. The text tools call the text
+    service with this request's own Authorization header, since its gate
+    answers 401 to a call without one (#136). The /chat gate turns away a
+    request without a token before this runs; were one to arrive anyway,
+    the text call would go out without a header, the text service would
+    answer 401, and the model would get that as the tool's error."""
+    text_client = config.text_client.for_caller(authorization) if config.text_client is not None else None
+
+    def dispatch(name: str, args: Dict[str, Any]) -> Any:
+        return tools.dispatch(config, name, args, text_client=text_client)
+
+    return dispatch
 
 
 def _offered_only(
@@ -173,12 +184,12 @@ class ConfigRequest(BaseModel):
 
 
 @app.post("/chat", response_model=ChatResponse)
-async def chat(req: ChatRequest):
+async def chat(req: ChatRequest, request: Request):
     canvas_mode = req.page is not None
     journal_mode = req.notes is not None
     message = req.message
     transient_prefix = None
-    dispatcher = _dispatcher
+    dispatcher = _dispatcher_for(request.headers.get("Authorization"))
     turn_tools = tools.TOOLS
     prompt = SYSTEM_PROMPT
     action_guard = None
@@ -194,7 +205,7 @@ async def chat(req: ChatRequest):
         # session: stale coordinates and renumbered handles would have
         # the model confidently edit the wrong element.
         transient_prefix = canvas.render_page(page)
-        dispatcher = canvas.build_dispatcher(image_bytes, image_client, _dispatcher)
+        dispatcher = canvas.build_dispatcher(image_bytes, image_client, dispatcher)
         turn_tools = CANVAS_TOOLS
         prompt = CANVAS_PROMPT
         # A look with no follow-through is how a weak model "tidies" a

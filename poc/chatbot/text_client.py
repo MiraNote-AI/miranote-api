@@ -8,6 +8,10 @@ this client is a thin shim that builds URLs and payloads.
 Synchronous (httpx.post). The dispatcher in tools.py calls into these
 methods from a sync context inside run_turn's thread pool, so no event-loop
 interaction is needed here.
+
+The text service sits behind ai_auth, like /chat, and answers 401 to a call
+without a token. /chat hands each turn a client for its caller
+(for_caller), so a text tool runs as the person chatting.
 """
 from __future__ import annotations
 
@@ -17,14 +21,29 @@ import httpx
 
 
 class TextClient:
-    def __init__(self, base_url: str, timeout: float = 30.0):
+    def __init__(self, base_url: str, timeout: float = 30.0, authorization: Optional[str] = None):
         self._base_url = base_url.rstrip("/")
         self._timeout = timeout
+        self._authorization = authorization
+
+    def for_caller(self, authorization: Optional[str]) -> "TextClient":
+        """A client that sends one caller's Authorization header.
+
+        The beta token goes through as the app sent it; a signed-in
+        writer's token makes each text call rate-limited and metered to
+        that writer, the same as the app calling the route itself. A new
+        object: the shared client never holds a token, so concurrent turns
+        never send each other's.
+        """
+        return TextClient(self._base_url, self._timeout, authorization)
 
     def _post(self, path: str, payload: Dict[str, Any]) -> Dict[str, Any]:
         url = self._base_url + path
+        headers: Dict[str, str] = {}
+        if self._authorization:
+            headers["Authorization"] = self._authorization
         try:
-            resp = httpx.post(url, json=payload, timeout=self._timeout)
+            resp = httpx.post(url, json=payload, headers=headers, timeout=self._timeout)
         except httpx.RequestError as e:
             raise RuntimeError(
                 f"text service unreachable at {self._base_url}: {e}"
