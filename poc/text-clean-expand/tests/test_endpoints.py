@@ -924,17 +924,24 @@ def test_expand_joins_the_addition_to_the_note(client, note, reply, expanded):
 
 
 @pytest.mark.parametrize("reply", ["", TRIP_NOTE, TRIP_NOTE.replace(". ", ".\n\n")])
-def test_expand_with_no_usable_addition_returns_the_note_unchanged(client, capsys, reply):
-    """An empty reply, or one that only repeats the note, leaves the note as
-    it is (a 200: the app shows the words unchanged) and is logged. The
-    grounding check is not paid for when there is nothing to check."""
+def test_expand_with_no_usable_addition_is_a_502_not_charged(client, monkeypatch, capsys, reply):
+    """An empty reply, or one that only repeats the note, is a 502 (settled
+    failed, not charged), like a failed grounded rewrite: the app keeps the
+    words and offers to try again. It is logged, and the grounding check is
+    not paid for when there is nothing to check."""
     test_client, fake_llm = client
+    accounts = FakeAccounts()
+    accounts.install(monkeypatch)
+    http = TestClient(test_client.app)
     fake_llm.reply_with(reply)
-    r = test_client.post("/expand", json={"text": TRIP_NOTE})
-    assert r.status_code == 200
-    assert r.json() == {"original": TRIP_NOTE, "expanded": TRIP_NOTE}
+
+    r = http.post("/expand", json={"text": TRIP_NOTE}, headers=accounts.headers())
+
+    assert r.status_code == 502
+    assert r.json() == {"detail": "LLM reply added nothing to the note"}
+    assert accounts.statuses("expand") == ["failed"]
     assert len(fake_llm.chat.completions.calls) == 1
-    assert "no addition" in capsys.readouterr().out
+    assert "Expand: the model gave no addition" in capsys.readouterr().out
 
 
 def test_expand_grounding_check_reads_the_addition_not_the_note(client):

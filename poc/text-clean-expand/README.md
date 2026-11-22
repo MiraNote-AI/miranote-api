@@ -36,8 +36,10 @@ Expand finishes the note; it does not rewrite it (#132).
   ends in whitespace (a line break) keeps it, with nothing added, and an
   addition that starts with a comma or a full stop follows directly.
 - No usable addition (an empty reply, or the note repeated and nothing
-  more): `expanded` is the note as it is, still a 200, and the service
-  logs `Expand: the model gave no addition`.
+  more): a 502 `{"detail": "LLM reply added nothing to the note"}`,
+  settled failed (not charged) like a failed grounded rewrite, and the
+  service logs `Expand: the model gave no addition`. A retry usually
+  brings one.
 
 ## `POST /rewrite`
 

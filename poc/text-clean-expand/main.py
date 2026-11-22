@@ -562,10 +562,13 @@ async def expand_text(req: TextRequest):
         shape=lambda reply: _closing_addition(req.text, reply),
     )
     if not addition:
-        # Empty, or the note repeated and nothing more. The note comes back
-        # as it is; the app then shows the same words under Expand.
-        print("Expand: the model gave no addition; returning the note unchanged")
-        return ExpandResponse(original=req.text, expanded=req.text)
+        # Empty, or the note repeated and nothing more. A 200 would show the
+        # same words under Expand and charge a signed-in writer for nothing;
+        # a 502, like a failed grounded rewrite, is settled failed (not
+        # charged), the app keeps the words and offers to try again, and a
+        # retry usually brings an addition.
+        print("Expand: the model gave no addition; answering 502")
+        raise HTTPException(status_code=502, detail="LLM reply added nothing to the note")
     return ExpandResponse(original=req.text, expanded=_join_addition(req.text, addition))
 
 
