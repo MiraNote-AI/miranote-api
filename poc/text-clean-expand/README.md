@@ -5,7 +5,7 @@ OpenAI-compatible LLM. Eight endpoints, each with its own prompt:
 
 | Endpoint | Purpose |
 |---|---|
-| `POST /clean` | Restructure messy input into a readable note |
+| `POST /clean` | Fix typos, grammar and punctuation, and structure long text (bullet points, line breaks). Adds nothing, and leaves correct sentences as written |
 | `POST /expand` | Finish the note: the note exactly as written, then one or two closing sentences |
 | `POST /polish` | Final editing pass -- word choice + flow, no restructuring |
 | `POST /rewrite` | Rewrite one block following the user's own instruction ("make it warmer") |

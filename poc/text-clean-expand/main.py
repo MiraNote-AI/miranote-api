@@ -534,7 +534,7 @@ def _join_addition(note: str, addition: str) -> str:
 
 @app.post("/clean", response_model=CleanResponse)
 async def clean_text(req: TextRequest):
-    """Clean up messy text: fix typos, punctuation, grammar. Minimal changes, preserve original meaning."""
+    """Clean up messy text: fix typos, punctuation, grammar and structure long text. Adds nothing (#132)."""
     cleaned = await call_llm(CLEAN_SYSTEM, req.text, max_tokens=2048, temperature=0.3)
     return CleanResponse(original=req.text, cleaned=cleaned)
 

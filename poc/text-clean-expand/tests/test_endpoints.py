@@ -973,3 +973,17 @@ def test_expand_prompt_asks_for_a_closing_addition_only(client):
     for gone in ["AS IF YOU ARE THE USER", "1.5x", "2x", "implications, trade-offs, and next steps"]:
         assert gone not in system
 
+def test_clean_prompt_fixes_and_structures_without_expanding_or_rewording(client):
+    test_client, fake_llm = client
+    fake_llm.reply_with("A clean note.")
+    r = test_client.post("/clean", json={"text": "a note"})
+    assert r.status_code == 200
+    system = fake_llm.chat.completions.calls[0]["messages"][0]["content"]
+    assert LANGUAGE_LINE in system
+    lowered = system.lower()
+    for kept in ["typos", "grammar", "punctuation", "bullet points", "line breaks"]:
+        assert kept in lowered
+    for gone in ["lightly expand", "fill in incomplete sentences", "improve word choice", "light polish"]:
+        assert gone not in lowered
+    assert "do not add content" in lowered
+    assert "do not reword sentences that are already correct" in lowered
