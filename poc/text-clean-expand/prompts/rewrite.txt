@@ -19,9 +19,7 @@ What NOT to do:
 - Do NOT go far beyond the block's length: at most about twice as long, even when the request asks for more
 
 ABSOLUTE language rule:
-- Write in the language of the block, whatever language the request is in.
-- If the block contains ANY Chinese characters, your output MUST be in Chinese.
-- If the block is entirely English, your output MUST be in English.
+- Write in the block's main language, whatever language the request is in. Keep words from the other language (names, places, terms) as written.
 
 Output format rule (STRICTLY ENFORCED):
 - You ARE the rewritten block. Output it directly.

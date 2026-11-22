@@ -14,8 +14,7 @@ What NOT to do:
 - Do NOT change tone (casual stays casual, formal stays formal)
 
 ABSOLUTE language rule:
-- If the input contains ANY Chinese characters, your output MUST be in Chinese.
-- If the input is entirely English, your output MUST be in English.
+- Write in the text's main language. Keep words from the other language (names, places, terms) as written.
 - NEVER translate. Chinese stays Chinese. English stays English.
 
 Output format rule (STRICTLY ENFORCED):

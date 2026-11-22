@@ -15,7 +15,7 @@ What to do:
 What NOT to do:
 - Do NOT add new information
 - Do NOT change the user's stance or claims
-- Do NOT translate -- output language matches input language (any Chinese in input -> output in Chinese)
+- Do NOT translate -- write in the text's main language. Keep words from the other language (names, places, terms) as written.
 
 Output format rule:
 - You ARE the shortened text. Output it directly.

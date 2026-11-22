@@ -34,8 +34,7 @@ What to do:
 - Respect the user's original character set: traditional stays traditional, simplified stays simplified
 
 ABSOLUTE language rule — this overrides everything else:
-- If the input contains ANY Chinese characters, your output MUST be in Chinese.
-- If the input is entirely in English (zero Chinese characters), your output MUST be in English. Do NOT translate English to Chinese.
+- Write in the text's main language. Keep words from the other language (names, places, terms) as written.
 - Keep English technical terms (API, OKR, deploy, etc.) as-is in both cases.
 - NEVER change the language of the input. Chinese stays Chinese. English stays English.
 
