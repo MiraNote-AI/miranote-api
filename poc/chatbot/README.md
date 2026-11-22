@@ -119,7 +119,7 @@ PYTHONPATH=. python3 -m pytest poc/chatbot/tests -v
 | `shorten_text(text, target)` | Shorter version. `target` 30%/50%/tweet. Delegates to `/shorten`. | -- |
 | `extract_keywords(text, max)` | 5-10 salient keywords with score. Delegates to `/keywords`. | max 20 |
 | `generate_caption(text, style)` | 1-2 sentence caption. `style` instagram/diary/tweet. Delegates to `/caption`. | -- |
-| `find_quote(text, max, lang)` | Find quotes/poetry that fit a mood. Delegates to retrieval POC `/quotes`. May return 0 matches. | -- |
+| `find_quote(text, max, lang)` | Find quotes/poetry that fit a mood. Delegates to retrieval POC `/quotes`. May return 0 matches. Offered only when the retrieval server answered at startup. | -- |
 
 All `read_doc`/`list_docs`/`search_docs` calls resolve paths under
 `DOCS_ROOT`; anything escaping is rejected with
@@ -163,5 +163,8 @@ See `.env.example`. The important knobs:
   that service.
 - `RETRIEVAL_API_URL` -- URL of the retrieval POC server. Defaults to
   `http://localhost:8004`. The chatbot's `find_quote` tool
-  HTTP-delegates to this server. Server down -> tool returns an error
-  and the agent recovers.
+  HTTP-delegates to this server. At startup the chatbot asks its
+  `/health` once (2 s timeout); if it does not answer, no mode offers
+  `find_quote` and the log has one warning naming the URL. Start the
+  retrieval server first, or restart the chatbot after it. Server down
+  later -> tool returns an error and the agent recovers.

@@ -5,7 +5,8 @@ answer 401 missing_token to a call without a token. Each test drives the
 real /chat endpoint and run_turn with a scripted fake model; the text tools
 and canvas mode's look_at_page go to fake services with the real gate in
 front of them, through a fake accounts service, so nothing leaves the
-process.
+process. find_quote is offered only when the retrieval service answered
+at startup; the startup tests fake its /health.
 """
 
 from __future__ import annotations
@@ -16,6 +17,7 @@ import os
 import uuid
 from types import SimpleNamespace
 
+import httpx
 import pytest
 from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
@@ -24,8 +26,9 @@ os.environ.setdefault("BETA_TOKENS", "test-token")
 
 import ai_auth  # noqa: E402
 from fake_accounts import FakeAccounts  # noqa: E402
-from poc.chatbot import main, text_client  # noqa: E402
+from poc.chatbot import main, retrieval_client, text_client  # noqa: E402
 from poc.chatbot.image_client import ImageClient  # noqa: E402
+from poc.chatbot.retrieval_client import RetrievalClient  # noqa: E402
 from poc.chatbot.text_client import TextClient  # noqa: E402
 
 BETA = {"Authorization": "Bearer test-token"}
@@ -58,9 +61,11 @@ def _says(text):
 class ScriptedModel:
     def __init__(self, script):
         self.script = list(script)
+        self.requests = []
         self.chat = SimpleNamespace(completions=SimpleNamespace(create=self._create))
 
     def _create(self, **kwargs):
+        self.requests.append(kwargs)
         return SimpleNamespace(choices=[SimpleNamespace(message=self.script.pop(0))])
 
 
@@ -214,3 +219,69 @@ def test_a_signed_in_writers_look_reaches_describe_unmetered(svc):
     assert uuid.UUID(reached[0]["X-Request-ID"]) != uuid.UUID(headers["X-Request-ID"])
     # /describe is not metered: the turn's own chat unit is the only row.
     assert accounts.rows == {headers["X-Request-ID"]: {"feature": "chat", "status": "ok"}}
+
+
+@pytest.fixture
+def startup(monkeypatch):
+    """main's app with its startup run (an entered TestClient runs the
+    lifespan) against a fake retrieval /health, up or down."""
+    import beta_auth
+
+    beta_auth._limiter._hits.clear()
+    monkeypatch.setenv("BETA_TOKENS", "test-token")
+    monkeypatch.delenv("ACCEPT_BETA_TOKENS", raising=False)
+    # Put the tool sets back after the test: the startup check replaces them.
+    monkeypatch.setattr(main, "TOOL_SETS", getattr(main, "TOOL_SETS", None), raising=False)
+    checked = []
+
+    def start(up):
+        def get(url, timeout=None):
+            checked.append((url, timeout))
+            if not up:
+                raise httpx.ConnectError("connection refused")
+            return httpx.Response(200, json={"status": "ok"}, request=httpx.Request("GET", url))
+
+        monkeypatch.setattr(retrieval_client.httpx, "get", get)
+        monkeypatch.setattr(main.config, "retrieval_client", RetrievalClient(main.RETRIEVAL_API_URL))
+        return TestClient(main.app)
+
+    return start, checked
+
+
+@pytest.mark.parametrize("up", [True, False], ids=["retrieval-up", "retrieval-down"])
+def test_find_quote_is_offered_only_when_retrieval_answered_at_startup(startup, monkeypatch, up):
+    start, checked = startup
+    offered = {}
+    with start(up) as http:
+        for mode, body in [("plain", {}), ("journal", {"notes": []}), ("canvas", {"page": PAGE})]:
+            model = ScriptedModel([_says("Hi.")])
+            monkeypatch.setattr(main, "client", model)
+            r = http.post("/chat", json=dict(message="hi", **body), headers=BETA)
+            assert r.status_code == 200, r.text
+            offered[mode] = {t["function"]["name"] for t in model.requests[0]["tools"]}
+        health = http.get("/health").json()["tools"]
+    for mode, names in offered.items():
+        assert ("find_quote" in names) == up, mode
+        assert "clean_text" in names, mode
+    assert ("find_quote" in health) == up
+    # Checked once, at startup, with a short timeout.
+    (url, timeout), = checked
+    assert url == main.RETRIEVAL_API_URL.rstrip("/") + "/health" and timeout <= 3
+
+
+def test_an_unreachable_retrieval_service_logs_one_warning_naming_its_url(startup, capsys):
+    start, _ = startup
+    with start(False):
+        pass
+    lines = [line for line in capsys.readouterr().out.splitlines() if "retrieval" in line]
+    assert lines == [
+        "[chatbot] WARNING: retrieval service at {} did not answer /health -- "
+        "find_quote is not offered".format(main.RETRIEVAL_API_URL)
+    ]
+
+
+def test_a_reachable_retrieval_service_logs_no_warning(startup, capsys):
+    start, _ = startup
+    with start(True):
+        pass
+    assert "retrieval" not in capsys.readouterr().out
