@@ -1142,3 +1142,28 @@ def test_expand_addition_of_marks_only_is_no_addition(client, monkeypatch, note,
     """The review's "Done" -> "Done.": a full stop is not an addition, so it
     is the no-addition 502 (not charged), not a charged 200."""
     _expand_502(client, monkeypatch, note, reply)
+
+
+BULLET = chr(0x2022)
+
+
+@pytest.mark.parametrize(
+    "note, expanded",
+    [
+        # The review's case: lines with no blank line between them, so the
+        # addition starts on a new line.
+        ("Groceries:\n- milk\n- eggs", "Groceries:\n- milk\n- eggs\nThat should do."),
+        # Paragraphs separated by a blank line: a new paragraph.
+        ("Groceries\n\n- milk\n- eggs", "Groceries\n\n- milk\n- eggs\n\nThat should do."),
+        ("To do:\r\n1. call mom\r\n2) pay rent", "To do:\r\n1. call mom\r\n2) pay rent\r\nThat should do."),
+        (BULLET + " ran 5 km", BULLET + " ran 5 km\nThat should do."),
+        # An item that ends in a full stop, and one with trailing spaces.
+        ("Done today:\n* ran 5 km.", "Done today:\n* ran 5 km.\nThat should do."),
+        ("Done today:\n- ran 5 km  ", "Done today:\n- ran 5 km  \nThat should do."),
+    ],
+    ids=["line-break", "blank-line", "numbered-crlf", "bullet-dot", "item-with-full-stop", "trailing-spaces"],
+)
+def test_expand_after_a_list_starts_the_addition_on_its_own_line(client, note, expanded):
+    body, _ = _expand(client, note, "That should do.")
+    assert body["original"] == note
+    assert body["expanded"] == expanded

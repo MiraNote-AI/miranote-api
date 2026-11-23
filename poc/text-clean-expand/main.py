@@ -501,6 +501,10 @@ _WORD = re.compile(rf"[{_HAN_OR_KANA}]|[^\W_{_HAN_OR_KANA}]+")
 # a repeat already under way, for the note sentence in the same place.
 _REPEAT_LIKENESS = 0.8
 _REPEAT_LIKENESS_IN_PLACE = 0.75
+# A list item: a bullet (- * + or a bullet or middle dot) or a number
+# (1. 1) or one with the Chinese enumeration comma) before its text.
+_LIST_ITEM = re.compile(r"[ \t]*(?:[-*+\u2022\u00b7]|\d{1,3}[.)\u3001])[ \t]+\S")
+_BLANK_LINE = re.compile(r"\n[ \t]*\r?\n")
 # Marks a repeat leaves before the addition once the note is taken off.
 _LEADING_MARKS = "".join(_ATTACHING) + "\t\n\r "
 
@@ -530,11 +534,25 @@ def _sentences(text: str) -> List[str]:
     return pieces
 
 
-def _note_is_open(note: str) -> bool:
-    """The note stops mid-sentence: its last line has no end mark and no
-    line break follows it."""
+def _ends_in_list_item(note: str) -> bool:
+    """The note's last line is a bullet or numbered list item, with no line
+    break after it."""
     tail = note.rstrip(" \t")
-    if not tail.strip() or tail.endswith(("\n", "\r")):
+    return not tail.endswith(("\n", "\r")) and bool(_LIST_ITEM.match(tail.rsplit("\n", 1)[-1]))
+
+
+def _line_break(note: str) -> str:
+    """How the note separates its paragraphs: a blank line if it has one,
+    else a single line break (CRLF in a CRLF note)."""
+    nl = "\r\n" if "\r\n" in note else "\n"
+    return nl * 2 if _BLANK_LINE.search(note) else nl
+
+
+def _note_is_open(note: str) -> bool:
+    """The note stops mid-sentence: its last line has no end mark, is not a
+    list item, and no line break follows it."""
+    tail = note.rstrip(" \t")
+    if not tail.strip() or tail.endswith(("\n", "\r")) or _ends_in_list_item(note):
         return False
     body = tail.rstrip()
     return len(body) not in _sentence_ends(body)
@@ -655,7 +673,11 @@ def _join_addition(note: str, addition: str) -> str:
     note's last character decides. An English note that stops on a letter
     or digit with no end mark, followed by a new sentence (not one finishing
     the note's), gets a full stop at the joint: "Met Dr. Smith today. I feel
-    better." The note itself is never changed."""
+    better." After a list item the addition starts on its own line, after
+    the note's own paragraph break (_line_break). The note itself is never
+    changed."""
+    if _ends_in_list_item(note):
+        return note + _line_break(note) + addition
     if note[-1:].isspace() or addition[:1] in _ATTACHING:
         return note + addition
     if _join_language(note) == "zh":

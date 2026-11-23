@@ -55,7 +55,11 @@ Expand finishes the note; it does not rewrite it (#132).
   English note that stops on a letter or digit with no end mark, followed
   by a new sentence, gets a full stop at the joint: `Met Dr. Smith today`
   followed by `I feel better.` gives `Met Dr. Smith today. I feel
-  better.` The note itself is never changed.
+  better.` After a list item (a last line starting with `-`, `*`, `+`, a
+  bullet, or a number such as `1.` or `2)`), the addition starts on its
+  own line, separated the way the note separates its paragraphs: a blank
+  line if the note has one, else a single line break. The note itself is
+  never changed.
 - No usable addition (an empty reply, the note repeated, reworded or cut
   short and nothing more, or an addition of marks only with no letter or
   digit, such as `Done` followed by `.`): a 502 `{"detail": "LLM reply added nothing to the note"}`,
