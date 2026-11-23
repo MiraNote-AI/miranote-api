@@ -29,10 +29,8 @@ Expand finishes the note; it does not rewrite it (#132).
   repeats the note has it taken off the front (comparing letters and
   digits only, so changed capitals, spaces or punctuation still count);
   a reply that stops inside the note (a repeat cut short) adds nothing;
-  the reply's leading sentences that are already in the note (three or
-  more of its words as written, or a sentence much like one of its
-  sentences, difflib ratio 0.8, or 0.75 for the sentence in the same
-  place once the reply is repeating the note) are dropped. The rest is
+  the reply's leading sentences that are already in the note are
+  dropped (see "Repeated sentences" below). The rest is
   cut to its last two sentences (a sentence ends at `.` `!`
   `?` before a space or the end, or at the full-width ones; the full stop
   of a title or abbreviation such as `Dr.` or `e.g.` does not end one).
@@ -60,6 +58,23 @@ Expand finishes the note; it does not rewrite it (#132).
   own line, separated the way the note separates its paragraphs: a blank
   line if the note has one, else a single line break. The note itself is
   never changed.
+- Repeated sentences: a leading reply sentence is already in the note
+  when all its words, three or more, appear in a row in the note as
+  written (the last one may be cut short when the reply stops mid-word),
+  or when it restates one of the note's sentences. Restating is judged on content
+  words, leaving out pronouns, articles, forms of be, have and do,
+  conjunctions, prepositions, a few adverbs and the common Chinese
+  function characters. A sentence restates a note sentence when it has:
+  - the same words, or the same content words;
+  - at least three content words in common, in order, with difflib's
+    ratio on the two content lists at 0.8 or more;
+  - or, once the reply is repeating the note and for the note sentence
+    in the same place, at least two shared content words that make 80%
+    of that sentence's content words and half of the reply sentence's.
+
+  A closing sentence that only shares a frame with the note is kept:
+  `It was sunny.` after `It was fun.`, `We laughed a lot.` after `We
+  talked a lot.`.
 - No usable addition (an empty reply, the note repeated, reworded or cut
   short and nothing more, or an addition of marks only with no letter or
   digit, such as `Done` followed by `.`): a 502 `{"detail": "LLM reply added nothing to the note"}`,

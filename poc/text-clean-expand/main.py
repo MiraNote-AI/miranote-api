@@ -496,11 +496,33 @@ _LAST_WORD = re.compile(r"([A-Za-z]+)[^A-Za-z]*$")
 # digits, each Han or kana character a word of its own.
 _HAN_OR_KANA = r"\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff"
 _WORD = re.compile(rf"[{_HAN_OR_KANA}]|[^\W_{_HAN_OR_KANA}]+")
-# How alike a reply sentence and a note sentence must be (difflib ratio on
-# their words) to count as the note repeated: anywhere in the reply, and in
-# a repeat already under way, for the note sentence in the same place.
+# Words that carry no content of their own: pronouns, articles, forms of
+# be/have/do, conjunctions, prepositions, a few adverbs, and the common
+# Chinese function characters (I, you, he/she/it, plural, of, done, is,
+# at, very, also, all, then, still, again, and, this, that, measure word,
+# -ing, -ed, and four question and mood particles). A reply sentence
+# restates a note sentence only by its other words, so "It was sunny." is
+# no repeat of "It was fun." (#137).
+_FRAME_WORDS = frozenset(
+    "a an the i me my we us our you your he him his she her it its they them their "
+    "this that these those is am are was were be been being do does did "
+    "have has had and or but so to of in on at for with by from as up "
+    "then too very just really".split()
+) | frozenset(
+    "\u6211\u4f60\u4ed6\u5979\u5b83\u4eec\u7684\u4e86\u662f\u5728\u5f88\u4e5f\u90fd"
+    "\u5c31\u8fd8\u53c8\u548c\u8fd9\u90a3\u4e2a\u7740\u8fc7\u5417\u5462\u5427\u554a"
+)
+# How much a reply sentence must share with a note sentence, in content
+# words, to restate it without the same words: anywhere in the reply, at
+# least _REPEAT_MIN_SHARED of them in order and difflib's ratio on the two
+# content lists at _REPEAT_LIKENESS (so one word changed in a long sentence
+# still restates it, but "Dinner with Sam was great." does not restate "Had
+# dinner with Sam."); and once the reply is repeating the note, for the
+# note sentence in the same place, at least two, being _REPEAT_COVERAGE of
+# that sentence's content words and half of the reply sentence's own.
+_REPEAT_MIN_SHARED = 3
 _REPEAT_LIKENESS = 0.8
-_REPEAT_LIKENESS_IN_PLACE = 0.75
+_REPEAT_COVERAGE = 0.8
 # A list item: a bullet (- * + or a bullet or middle dot) or a number
 # (1. 1) or one with the Chinese enumeration comma) before its text.
 _LIST_ITEM = re.compile(r"[ \t]*(?:[-*+\u2022\u00b7]|\d{1,3}[.)\u3001])[ \t]+\S")
@@ -548,14 +570,19 @@ def _line_break(note: str) -> str:
     return nl * 2 if _BLANK_LINE.search(note) else nl
 
 
+def _ends_sentence(text: str) -> bool:
+    """`text` ends with a sentence end mark (trailing whitespace aside)."""
+    body = text.rstrip()
+    return bool(body) and len(body) in _sentence_ends(body)
+
+
 def _note_is_open(note: str) -> bool:
     """The note stops mid-sentence: its last line has no end mark, is not a
     list item, and no line break follows it."""
     tail = note.rstrip(" \t")
     if not tail.strip() or tail.endswith(("\n", "\r")) or _ends_in_list_item(note):
         return False
-    body = tail.rstrip()
-    return len(body) not in _sentence_ends(body)
+    return not _ends_sentence(tail)
 
 
 def _join_language(note: str) -> str:
@@ -606,38 +633,69 @@ def _after_note(reply: str, note: str) -> str:
     return reply[i:]
 
 
-def _words(text: str) -> str:
-    """`text` as lowercase _WORD words joined by single spaces."""
-    return " ".join(_WORD.findall(text.lower()))
+def _words(text: str) -> List[str]:
+    """The lowercase _WORD words of `text`."""
+    return _WORD.findall(text.lower())
 
 
-def _alike(a: str, b: str, likeness: float) -> bool:
-    matcher = SequenceMatcher(None, a, b, autojunk=False)
+def _content(words: List[str]) -> List[str]:
+    """`words` without _FRAME_WORDS and one-letter Latin words ("I", "a",
+    the "w" of "w/")."""
+    return [w for w in words if w not in _FRAME_WORDS and (len(w) > 1 or not w.isascii())]
+
+
+def _restates(piece: tuple, unit: tuple, in_place: bool) -> bool:
+    """Whether a reply sentence restates a note sentence, each given as
+    (words, content words): the same words, the same content words, or
+    _REPEAT_MIN_SHARED content words in common, in order, with
+    _REPEAT_LIKENESS between the two content lists. `in_place` (the note
+    sentence a repeat under way has reached): also when at least two shared
+    content words make _REPEAT_COVERAGE of that sentence's and half of the
+    reply sentence's own."""
+    (words, content), (unit_words, unit_content) = piece, unit
+    if words == unit_words or (content and content == unit_content):
+        return True
+    if len(set(content) & set(unit_content)) < 2:
+        return False
+    matcher = SequenceMatcher(None, content, unit_content, autojunk=False)
+    shared = sum(block.size for block in matcher.get_matching_blocks())
+    if shared >= _REPEAT_MIN_SHARED and 2 * shared >= _REPEAT_LIKENESS * (len(content) + len(unit_content)):
+        return True
     return (
-        matcher.real_quick_ratio() >= likeness
-        and matcher.quick_ratio() >= likeness
-        and matcher.ratio() >= likeness
+        in_place
+        and shared >= 2
+        and shared >= _REPEAT_COVERAGE * len(unit_content)
+        and 2 * shared >= len(content)
     )
 
 
 def _without_repeat(pieces: List[str], note: str) -> List[str]:
     """`pieces` (reply sentences) without the leading ones that are already
-    in the note: a run of three or more of its words as written (the last
-    one may be cut short), or a sentence like one of the note's. Once the
-    reply is repeating the note, a sentence a little more reworded still
-    counts in the place of the note's sentence it stands for."""
-    units = [_words(s) for line in note.splitlines() for s in _sentences(line)]
-    units = [u for u in units if u]
-    note_words = " " + _words(note)
+    in the note: all their words, three or more, in a row in the note as
+    written (the last one may be cut short when the sentence has no end
+    mark, a reply stopped mid-word), or restating one of the note's
+    sentences (_restates). Once the reply is repeating the note, the
+    sentence in the place of the note's next one may restate it more
+    loosely. Sharing only a frame ("It was ...", "We ... a lot") is not
+    restating."""
+    units = []
+    for line in note.splitlines():
+        for sentence in _sentences(line):
+            words = _words(sentence)
+            if words:
+                units.append((words, _content(words)))
+    note_run = " " + " ".join(_words(note)) + " "
     n = 0
     while n < len(pieces):
         words = _words(pieces[n])
         if not words:
             break
+        piece = (words, _content(words))
+        run = " " + " ".join(words) + (" " if _ends_sentence(pieces[n]) else "")
         if (
-            (words.count(" ") >= 2 and (" " + words) in note_words)
-            or any(_alike(words, u, _REPEAT_LIKENESS) for u in units)
-            or (0 < n < len(units) and _alike(words, units[n], _REPEAT_LIKENESS_IN_PLACE))
+            (len(words) >= 3 and run in note_run)
+            or any(_restates(piece, unit, False) for unit in units)
+            or (0 < n < len(units) and _restates(piece, units[n], True))
         ):
             n += 1
             continue

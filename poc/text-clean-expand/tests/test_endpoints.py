@@ -1167,3 +1167,44 @@ def test_expand_after_a_list_starts_the_addition_on_its_own_line(client, note, e
     body, _ = _expand(client, note, "That should do.")
     assert body["original"] == note
     assert body["expanded"] == expanded
+
+
+# "We chatted a lot." / "We laughed a lot."
+ZH_TALKED = "".join(chr(c) for c in (0x6211, 0x4EEC, 0x804A, 0x4E86, 0x5F88, 0x591A)) + ZH_STOP
+ZH_LAUGHED = "".join(chr(c) for c in (0x6211, 0x4EEC, 0x7B11, 0x4E86, 0x5F88, 0x591A)) + ZH_STOP
+BEACH_NOTE = "Went to the beach. It was fun."
+
+
+@pytest.mark.parametrize(
+    "note, reply, expanded",
+    [
+        (BEACH_NOTE, "It was sunny.", BEACH_NOTE + " It was sunny."),
+        (BEACH_NOTE, "It was sunny. I loved it.", BEACH_NOTE + " It was sunny. I loved it."),
+        ("We talked a lot.", "We laughed a lot.", "We talked a lot. We laughed a lot."),
+        # In a reply already repeating the note, in the place of its next sentence.
+        (
+            "Went to the beach. We talked a lot.",
+            "Went to the beach. We laughed a lot.",
+            "Went to the beach. We talked a lot. We laughed a lot.",
+        ),
+        ("It was nice.", "It was late.", "It was nice. It was late."),
+        ("Felt good.", "Felt strong.", "Felt good. Felt strong."),
+        (ZH_TALKED, ZH_LAUGHED, ZH_TALKED + ZH_LAUGHED),
+        # Two of the note sentence's content words plus a new one: not a repeat.
+        ("Had dinner with Sam.", "Dinner with Sam was great.", "Had dinner with Sam. Dinner with Sam was great."),
+    ],
+    ids=["sunny", "sunny-then-more", "laughed", "laughed-in-place", "late", "strong", "chinese-laughed", "dinner-great"],
+)
+def test_expand_keeps_a_closing_sentence_that_only_shares_a_frame_with_the_note(client, note, reply, expanded):
+    """A sentence repeats the note only when it restates a note sentence by
+    its content words, not when it shares a frame such as "It was ..." or
+    "We ... a lot" (#137)."""
+    body, _ = _expand(client, note, reply)
+    assert body["expanded"] == expanded
+
+
+def test_expand_drops_a_reworded_chinese_repeat(client):
+    """"Today really very tired." restates "today very tired" (three of its
+    content characters, one added): dropped, the new sentence kept."""
+    body, _ = _expand(client, ZH_NOTE, ZH_REPLY + ZH_STOP + ZH_SLEPT)
+    assert body["expanded"] == ZH_NOTE + ZH_SLEPT
