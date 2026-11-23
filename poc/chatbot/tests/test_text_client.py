@@ -1,4 +1,5 @@
 from __future__ import annotations
+import uuid
 from types import SimpleNamespace
 
 import pytest
@@ -9,12 +10,13 @@ from poc.chatbot.text_client import TextClient
 @pytest.fixture
 def captured_post(monkeypatch):
     """Capture httpx.post calls and let tests script responses."""
-    captured = {"url": None, "json": None}
+    captured = {"url": None, "json": None, "headers": None}
     scripted = {"response": SimpleNamespace(status_code=200, json=lambda: {"ok": True})}
 
-    def fake_post(url, json=None, timeout=None):
+    def fake_post(url, json=None, headers=None, timeout=None):
         captured["url"] = url
         captured["json"] = json
+        captured["headers"] = headers
         return scripted["response"]
 
     monkeypatch.setattr("httpx.post", fake_post)
@@ -86,9 +88,57 @@ def test_non_200_raises_runtimeerror(captured_post):
 
 def test_connection_error_raises_runtimeerror(monkeypatch):
     import httpx
-    def boom(url, json=None, timeout=None):
+    def boom(url, json=None, headers=None, timeout=None):
         raise httpx.ConnectError("connection refused")
     monkeypatch.setattr("httpx.post", boom)
     c = TextClient("http://localhost:9999")
     with pytest.raises(RuntimeError, match="unreachable"):
         c.polish("x")
+
+
+# The text service's gate answers 401 to a call without a token (#136).
+# /chat binds its own request's Authorization header to the client for that
+# turn; the shared client in main.config never holds one.
+
+def test_a_client_for_a_caller_sends_that_callers_authorization(captured_post):
+    captured, _ = captured_post
+    shared = TextClient("http://localhost:8001")
+    shared.for_caller("Bearer writer-token").clean("msg")
+    assert captured["headers"]["Authorization"] == "Bearer writer-token"
+
+
+def test_a_client_for_a_caller_keeps_the_base_url_and_timeout(captured_post):
+    captured, _ = captured_post
+    shared = TextClient("http://localhost:8001/", timeout=12.0)
+    bound = shared.for_caller("Bearer writer-token")
+    bound.polish("hi")
+    assert captured["url"] == "http://localhost:8001/polish"
+    assert bound._timeout == 12.0
+
+
+def test_binding_a_caller_leaves_the_shared_client_without_a_token(captured_post):
+    # One TextClient serves every concurrent /chat request: a caller's
+    # token must never stick to it.
+    captured, _ = captured_post
+    shared = TextClient("http://localhost:8001")
+    shared.for_caller("Bearer writer-token")
+    shared.polish("hi")
+    assert "Authorization" not in captured["headers"]
+
+
+def test_no_caller_header_sends_no_authorization(captured_post):
+    captured, _ = captured_post
+    TextClient("http://localhost:8001").for_caller(None).polish("hi")
+    assert "Authorization" not in captured["headers"]
+
+
+def test_each_call_sends_its_own_request_id(captured_post):
+    # ai_auth reserves a metered call under its X-Request-ID; a shared id
+    # would make the second reservation a 409 duplicate_request.
+    captured, _ = captured_post
+    client = TextClient("http://localhost:8001").for_caller("Bearer writer-token")
+    client.expand("one")
+    first = captured["headers"]["X-Request-ID"]
+    client.expand("two")
+    second = captured["headers"]["X-Request-ID"]
+    assert uuid.UUID(first) != uuid.UUID(second)

@@ -2,7 +2,8 @@
 
 Mirrors text_client.py: thin synchronous httpx wrapper. The chatbot
 dispatcher binds this to a tool ('find_quote') so the agent can call
-the retrieval service when the user wants a quote suggestion.
+the retrieval service when the user wants a quote suggestion. main offers
+that tool only when is_up() held at startup.
 """
 from __future__ import annotations
 
@@ -33,6 +34,15 @@ class RetrievalClient:
                 f"retrieval service returned {resp.status_code}: {detail}"
             )
         return resp.json()
+
+    def is_up(self, timeout: float = 2.0) -> bool:
+        """Whether GET /health answers 200 within `timeout`. The retrieval
+        service has no gate, and /health only counts the corpus."""
+        try:
+            resp = httpx.get(self._base_url + "/health", timeout=timeout)
+        except Exception:  # noqa: BLE001 -- any failure means not reachable
+            return False
+        return resp.status_code == 200
 
     def quotes(self, text: str, max_picks: int = 3, lang: Optional[str] = None) -> Dict[str, Any]:
         payload: Dict[str, Any] = {"text": text, "max": int(max_picks)}

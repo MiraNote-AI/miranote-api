@@ -61,6 +61,9 @@ class ScriptedModel:
 
 
 class _Looks:
+    def for_caller(self, authorization):
+        return self
+
     def describe(self, image, prompt):
         return "a calm page with room at the bottom"
 

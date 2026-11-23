@@ -62,3 +62,42 @@ def test_connection_error_raises_runtimeerror(monkeypatch):
     monkeypatch.setattr("httpx.post", boom)
     with pytest.raises(RuntimeError, match="unreachable"):
         RetrievalClient("http://localhost:9999").quotes("x")
+
+
+# main checks /health once at startup and offers find_quote only when the
+# service answers (#136): the beta runs no retrieval service.
+
+def test_is_up_when_health_answers_200(monkeypatch):
+    import httpx
+    asked = []
+
+    def fake_get(url, timeout=None):
+        asked.append((url, timeout))
+        return httpx.Response(200, json={"status": "ok"}, request=httpx.Request("GET", url))
+
+    monkeypatch.setattr("httpx.get", fake_get)
+    assert RetrievalClient("http://localhost:8004/").is_up() is True
+    (url, timeout), = asked
+    assert url == "http://localhost:8004/health"
+    # Startup waits on it: a short timeout, not the 30s of a quote call.
+    assert timeout <= 3
+
+
+def test_is_not_up_when_nothing_listens(monkeypatch):
+    import httpx
+
+    def refused(url, timeout=None):
+        raise httpx.ConnectError("connection refused")
+
+    monkeypatch.setattr("httpx.get", refused)
+    assert RetrievalClient("http://localhost:8004").is_up() is False
+
+
+def test_is_not_up_when_health_answers_an_error(monkeypatch):
+    import httpx
+
+    def fake_get(url, timeout=None):
+        return httpx.Response(503, request=httpx.Request("GET", url))
+
+    monkeypatch.setattr("httpx.get", fake_get)
+    assert RetrievalClient("http://localhost:8004").is_up() is False

@@ -9,10 +9,11 @@ from __future__ import annotations
 import asyncio
 import base64
 import os
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from dotenv import load_dotenv
@@ -70,16 +71,37 @@ client = OpenAI(**client_kwargs)
 SYSTEM_PROMPT = (Path(__file__).parent / "prompts" / "system.txt").read_text(encoding="utf-8")
 JOURNAL_PROMPT = (Path(__file__).parent / "prompts" / "journal.txt").read_text(encoding="utf-8")
 CANVAS_PROMPT = canvas.CANVAS_PROMPT_PATH.read_text(encoding="utf-8")
-JOURNAL_TOOLS = journal.journal_tools(tools.TOOLS)
-CANVAS_TOOLS = canvas.canvas_tools(tools.TOOLS)
+
+
+def _tool_sets(find_quote: bool) -> Dict[str, List[Dict[str, Any]]]:
+    """The tools each mode offers the model."""
+    base = tools.TOOLS if find_quote else [t for t in tools.TOOLS if t["function"]["name"] != "find_quote"]
+    return {"plain": base, "journal": journal.journal_tools(base), "canvas": canvas.canvas_tools(base)}
+
+
+# Every mode offers find_quote until the startup check finds the retrieval
+# service unreachable (_check_retrieval). A TestClient that is not entered
+# never runs the startup.
+TOOL_SETS = _tool_sets(find_quote=True)
 
 image_client = ImageClient(IMAGE_API_URL)
 
 sessions = SessionStore(ttl_seconds=config.session_ttl_seconds)
 
 
-def _dispatcher(name: str, args: Dict[str, Any]) -> Any:
-    return tools.dispatch(config, name, args)
+def _dispatcher_for(authorization: Optional[str]) -> Callable[[str, Dict[str, Any]], Any]:
+    """Tool dispatch for one /chat request. The text tools call the text
+    service with this request's own Authorization header, since its gate
+    answers 401 to a call without one (#136). The /chat gate turns away a
+    request without a token before this runs; were one to arrive anyway,
+    the text call would go out without a header, the text service would
+    answer 401, and the model would get that as the tool's error."""
+    text_client = config.text_client.for_caller(authorization) if config.text_client is not None else None
+
+    def dispatch(name: str, args: Dict[str, Any]) -> Any:
+        return tools.dispatch(config, name, args, text_client=text_client)
+
+    return dispatch
 
 
 def _offered_only(
@@ -100,7 +122,27 @@ def _offered_only(
     return dispatch
 
 
-app = FastAPI(title="MiraNote Chatbot", version="0.2.0")
+def _check_retrieval() -> None:
+    """Once at startup: offer find_quote only if the retrieval service
+    answers /health. The beta runs none, so every find_quote there came
+    back "unreachable" after a wasted tool round trip. A service that goes
+    down later still answers through the dispatcher's "unreachable" error;
+    one that comes up later is offered after a restart."""
+    global TOOL_SETS
+    up = config.retrieval_client.is_up()
+    if not up:
+        print("[chatbot] WARNING: retrieval service at {} did not answer /health -- "
+              "find_quote is not offered".format(RETRIEVAL_API_URL))
+    TOOL_SETS = _tool_sets(find_quote=up)
+
+
+@asynccontextmanager
+async def _lifespan(app):
+    await asyncio.to_thread(_check_retrieval)
+    yield
+
+
+app = FastAPI(title="MiraNote Chatbot", version="0.2.0", lifespan=_lifespan)
 
 # Reachable from the public internet through the Cloudflare tunnel, so every
 # request needs our access token or (while ACCEPT_BETA_TOKENS is on) the beta
@@ -173,13 +215,15 @@ class ConfigRequest(BaseModel):
 
 
 @app.post("/chat", response_model=ChatResponse)
-async def chat(req: ChatRequest):
+async def chat(req: ChatRequest, request: Request):
     canvas_mode = req.page is not None
     journal_mode = req.notes is not None
     message = req.message
     transient_prefix = None
-    dispatcher = _dispatcher
-    turn_tools = tools.TOOLS
+    authorization = request.headers.get("Authorization")
+    dispatcher = _dispatcher_for(authorization)
+    tool_sets = TOOL_SETS
+    turn_tools = tool_sets["plain"]
     prompt = SYSTEM_PROMPT
     action_guard = None
 
@@ -194,8 +238,10 @@ async def chat(req: ChatRequest):
         # session: stale coordinates and renumbered handles would have
         # the model confidently edit the wrong element.
         transient_prefix = canvas.render_page(page)
-        dispatcher = canvas.build_dispatcher(image_bytes, image_client, _dispatcher)
-        turn_tools = CANVAS_TOOLS
+        # look_at_page calls the image service as the caller, like the
+        # text tools: its gate answers 401 to a call without a token.
+        dispatcher = canvas.build_dispatcher(image_bytes, image_client.for_caller(authorization), dispatcher)
+        turn_tools = tool_sets["canvas"]
         prompt = CANVAS_PROMPT
         # A look with no follow-through is how a weak model "tidies" a
         # page into a chat bubble; the guard gives it one corrective
@@ -210,7 +256,7 @@ async def chat(req: ChatRequest):
         message = journal.compose_user_message(
             req.message, [n.model_dump() for n in req.notes]
         )
-        turn_tools = JOURNAL_TOOLS
+        turn_tools = tool_sets["journal"]
         prompt = JOURNAL_PROMPT
     dispatcher = _offered_only(dispatcher, turn_tools)
 
@@ -266,7 +312,7 @@ async def health():
     return {
         "status": "ok",
         "model": config.model,
-        "tools": [t["function"]["name"] for t in tools.TOOLS],
+        "tools": [t["function"]["name"] for t in TOOL_SETS["plain"]],
     }
 
 

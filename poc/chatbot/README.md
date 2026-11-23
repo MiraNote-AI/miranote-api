@@ -113,13 +113,13 @@ PYTHONPATH=. python3 -m pytest poc/chatbot/tests -v
 | `list_docs(subdir)` | List files under a subdir of `DOCS_ROOT`. | 200 files |
 | `read_doc(path)` | Read a file. Dispatches on extension: text/markdown, PDF, DOCX, image (OCR). | 32 KB truncated |
 | `search_docs(query, max_hits)` | Case-insensitive substring search across **UTF-8 text files only** -- PDFs/DOCX/images are invisible to it; use `read_doc` for those. | 200 files, 160-char snippet |
-| `clean_text(text, context?)` | Restructure messy/stream-of-consciousness text. Delegates to text-clean-expand `/clean`. | -- |
-| `expand_text(text, context?)` | Expand brief notes in the user's voice. Delegates to `/expand`. | -- |
+| `clean_text(text, context?)` | Fix spelling, grammar and punctuation and give messy text structure, adding no content. Delegates to text-clean-expand `/clean`. | -- |
+| `expand_text(text, context?)` | Finish the note with one or two closing sentences; the note stays as written. Delegates to `/expand`. | -- |
 | `polish_text(text, context?)` | Final editing pass -- word choice + flow. Delegates to `/polish`. | -- |
 | `shorten_text(text, target)` | Shorter version. `target` 30%/50%/tweet. Delegates to `/shorten`. | -- |
 | `extract_keywords(text, max)` | 5-10 salient keywords with score. Delegates to `/keywords`. | max 20 |
 | `generate_caption(text, style)` | 1-2 sentence caption. `style` instagram/diary/tweet. Delegates to `/caption`. | -- |
-| `find_quote(text, max, lang)` | Find quotes/poetry that fit a mood. Delegates to retrieval POC `/quotes`. May return 0 matches. | -- |
+| `find_quote(text, max, lang)` | Find quotes/poetry that fit a mood. Delegates to retrieval POC `/quotes`. May return 0 matches. Offered only when the retrieval server answered at startup. | -- |
 
 All `read_doc`/`list_docs`/`search_docs` calls resolve paths under
 `DOCS_ROOT`; anything escaping is rejected with
@@ -150,8 +150,21 @@ See `.env.example`. The important knobs:
   `http://localhost:8001`. The chatbot's `*_text`, `extract_keywords`,
   and `generate_caption` tools HTTP-delegate to this server. If the
   text server is down, the corresponding tools return a friendly error
-  message and the agent recovers.
+  message and the agent recovers. Each call carries the `/chat`
+  request's own `Authorization` header and a fresh `X-Request-ID`, so
+  the text service's gate sees the caller: the beta token as before, or
+  a signed-in writer, whose `/expand` and `/polish` calls are metered to
+  them as `expand`.
+- `IMAGE_API_URL` -- URL of the image-generation server. Defaults to
+  `http://localhost:8002`. Canvas mode's `look_at_page` calls its
+  `/describe` with the `/chat` request's own `Authorization` header and
+  a fresh `X-Request-ID`, as the text tools do. `/describe` is not
+  metered; a signed-in writer's look counts toward their rate limit on
+  that service.
 - `RETRIEVAL_API_URL` -- URL of the retrieval POC server. Defaults to
   `http://localhost:8004`. The chatbot's `find_quote` tool
-  HTTP-delegates to this server. Server down -> tool returns an error
-  and the agent recovers.
+  HTTP-delegates to this server. At startup the chatbot asks its
+  `/health` once (2 s timeout); if it does not answer, no mode offers
+  `find_quote` and the log has one warning naming the URL. Start the
+  retrieval server first, or restart the chatbot after it. Server down
+  later -> tool returns an error and the agent recovers.
