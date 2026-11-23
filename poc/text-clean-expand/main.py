@@ -10,6 +10,7 @@ import json
 import os
 import re
 import asyncio
+from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Annotated, Callable, List, Literal, Optional, get_args
 
@@ -491,6 +492,17 @@ _OPEN_WORDS = frozenset(
     "a an the my our your their and or but of to with from at for by into onto than via".split()
 )
 _LAST_WORD = re.compile(r"([A-Za-z]+)[^A-Za-z]*$")
+# Words for comparing reply sentences with the note: runs of letters and
+# digits, each Han or kana character a word of its own.
+_HAN_OR_KANA = r"\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff"
+_WORD = re.compile(rf"[{_HAN_OR_KANA}]|[^\W_{_HAN_OR_KANA}]+")
+# How alike a reply sentence and a note sentence must be (difflib ratio on
+# their words) to count as the note repeated: anywhere in the reply, and in
+# a repeat already under way, for the note sentence in the same place.
+_REPEAT_LIKENESS = 0.8
+_REPEAT_LIKENESS_IN_PLACE = 0.75
+# Marks a repeat leaves before the addition once the note is taken off.
+_LEADING_MARKS = "".join(_ATTACHING) + "\t\n\r "
 
 
 def _sentence_ends(text: str) -> List[int]:
@@ -554,36 +566,84 @@ def _finishes_note(note: str, addition: str) -> bool:
 
 
 def _after_note(reply: str, note: str) -> str:
-    """`reply` with `note` taken off its front, comparing everything but
-    whitespace; `reply` itself when it does not start with the note, or
-    when the note ends inside one of the reply's words ("Din" in
-    "Dinner")."""
+    """`reply` with `note` taken off its front, comparing letters and digits
+    only (case, whitespace and punctuation aside, so a repeat with its
+    capitals or commas fixed still counts). "" when the reply stops inside
+    the note: a repeat cut short adds nothing. `reply` itself when it does
+    not start with the note, or when the note ends inside one of the
+    reply's words ("Din" in "Dinner")."""
     i = 0
     for ch in note:
-        if ch.isspace():
+        if not ch.isalnum():
             continue
-        while i < len(reply) and reply[i].isspace():
+        while i < len(reply) and not reply[i].isalnum():
             i += 1
-        if i == len(reply) or reply[i] != ch:
+        if i == len(reply):
+            return ""
+        if reply[i].lower() != ch.lower():
             return reply
         i += 1
-    if _ASCII_ALNUM.match(note.rstrip()[-1:]) and _ASCII_ALNUM.match(reply[i : i + 1]):
+    if i and _ASCII_ALNUM.match(reply[i - 1]) and _ASCII_ALNUM.match(reply[i : i + 1]):
         return reply
     return reply[i:]
 
 
+def _words(text: str) -> str:
+    """`text` as lowercase _WORD words joined by single spaces."""
+    return " ".join(_WORD.findall(text.lower()))
+
+
+def _alike(a: str, b: str, likeness: float) -> bool:
+    matcher = SequenceMatcher(None, a, b, autojunk=False)
+    return (
+        matcher.real_quick_ratio() >= likeness
+        and matcher.quick_ratio() >= likeness
+        and matcher.ratio() >= likeness
+    )
+
+
+def _without_repeat(pieces: List[str], note: str) -> List[str]:
+    """`pieces` (reply sentences) without the leading ones that are already
+    in the note: a run of three or more of its words as written (the last
+    one may be cut short), or a sentence like one of the note's. Once the
+    reply is repeating the note, a sentence a little more reworded still
+    counts in the place of the note's sentence it stands for."""
+    units = [_words(s) for line in note.splitlines() for s in _sentences(line)]
+    units = [u for u in units if u]
+    note_words = " " + _words(note)
+    n = 0
+    while n < len(pieces):
+        words = _words(pieces[n])
+        if not words:
+            break
+        if (
+            (words.count(" ") >= 2 and (" " + words) in note_words)
+            or any(_alike(words, u, _REPEAT_LIKENESS) for u in units)
+            or (0 < n < len(units) and _alike(words, units[n], _REPEAT_LIKENESS_IN_PLACE))
+        ):
+            n += 1
+            continue
+        break
+    return pieces[n:]
+
+
 def _closing_addition(note: str, reply: str) -> str:
     """The addition in a model reply to /expand: what follows the note if
-    the reply repeats it, cut to its last EXPAND_MAX_SENTENCES sentences
+    the reply repeats it (or the reply without its leading sentences that
+    repeat the note), cut to its last EXPAND_MAX_SENTENCES sentences
     (the ones that close the note). When the note stops mid-sentence and the
     first piece finishes that sentence, the piece is kept and the cap
     applies to the sentences after it. "" when nothing is left."""
-    pieces = _sentences(_after_note(reply, note))
+    pieces = _without_repeat(_sentences(_after_note(reply, note)), note)
     if pieces and _finishes_note(note, pieces[0].lstrip()):
         pieces = pieces[:1] + pieces[1:][-EXPAND_MAX_SENTENCES:]
     else:
         pieces = pieces[-EXPAND_MAX_SENTENCES:]
-    return "".join(pieces).strip()
+    addition = "".join(pieces).strip()
+    if not _note_is_open(note):
+        # The repeat's own end mark (". It was calm."): the note has one.
+        addition = addition.lstrip(_LEADING_MARKS)
+    return addition
 
 
 def _join_addition(note: str, addition: str) -> str:

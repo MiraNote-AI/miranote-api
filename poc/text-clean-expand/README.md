@@ -26,8 +26,14 @@ Expand finishes the note; it does not rewrite it (#132).
 - The model is asked for the addition only: one or two sentences that
   close the note, in the writer's first-person voice, with no facts the
   note does not state. The server builds `expanded` itself: a reply that
-  repeats the note has it taken off the front (whitespace aside), and the
-  addition is cut to its last two sentences (a sentence ends at `.` `!`
+  repeats the note has it taken off the front (comparing letters and
+  digits only, so changed capitals, spaces or punctuation still count);
+  a reply that stops inside the note (a repeat cut short) adds nothing;
+  the reply's leading sentences that are already in the note (three or
+  more of its words as written, or a sentence much like one of its
+  sentences, difflib ratio 0.8, or 0.75 for the sentence in the same
+  place once the reply is repeating the note) are dropped. The rest is
+  cut to its last two sentences (a sentence ends at `.` `!`
   `?` before a space or the end, or at the full-width ones; the full stop
   of a title or abbreviation such as `Dr.` or `e.g.` does not end one).
   The grounding check reads the addition; invented facts get one rewrite,
@@ -50,8 +56,8 @@ Expand finishes the note; it does not rewrite it (#132).
   by a new sentence, gets a full stop at the joint: `Met Dr. Smith today`
   followed by `I feel better.` gives `Met Dr. Smith today. I feel
   better.` The note itself is never changed.
-- No usable addition (an empty reply, or the note repeated and nothing
-  more): a 502 `{"detail": "LLM reply added nothing to the note"}`,
+- No usable addition (an empty reply, or the note repeated, reworded or
+  cut short, and nothing more): a 502 `{"detail": "LLM reply added nothing to the note"}`,
   settled failed (not charged) like a failed grounded rewrite, and the
   service logs `Expand: the model gave no addition`. A retry usually
   brings one.

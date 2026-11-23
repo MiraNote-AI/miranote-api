@@ -613,8 +613,11 @@ def test_mood_cuts_long_text_to_4000_code_points(client):
 # "Quanjude"), and replies to it.
 ZH_NAME = chr(0x5168) + chr(0x805A) + chr(0x5FB7)
 MIXED_EN = f"Had dinner at {ZH_NAME} with Sam, it was great."
-EN_KEEPS_NAME = f"I had dinner at {ZH_NAME} with Sam, and it was great."
-EN_DROPS_NAME = "I had dinner with Sam, and it was great."
+# English replies, with and without the name. Neither rewords the note:
+# /expand drops a reply sentence that does (#137), and these are shared by
+# every text route.
+EN_KEEPS_NAME = f"I want to go back to {ZH_NAME} with Sam soon."
+EN_DROPS_NAME = "I want to go back with Sam soon."
 # "had dinner with Sam at <name>, it was great", in Chinese.
 ZH_FOR_MIXED = (
     chr(0x548C) + "Sam" + chr(0x5728) + ZH_NAME
@@ -627,7 +630,7 @@ ZH_WITH_STARBUCKS = chr(0x5728) + "Starbucks, " + ZH_NOTE
 # 3 English words) and "Dinner at <name> tonight" (3 Han, 3 words). Neither
 # is clearly one language, so neither reply is forced into the other.
 SWIFT_NOTE = "\u7528Swift\u5199iOS app"
-SWIFT_ZH_REPLY = "\u6211\u5728\u7528Swift\u5199\u4e00\u4e2aiOS app."  # "I am writing an iOS app in Swift."
+SWIFT_ZH_REPLY = "\u6211\u60f3\u4e0b\u4e2a\u6708\u7528Swift\u5199\u5b8c\u5b83."  # "I want to finish it in Swift next month."
 DINNER_NOTE = "Dinner at \u5168\u805a\u5fb7 tonight"
 # Not starting with DINNER_NOTE: /expand would take a repeated note off
 # the front (that case is in the #132 tests).
@@ -886,11 +889,12 @@ def test_expand_reply_that_repeats_the_note_is_still_capped(client):
 
 def test_expand_reply_that_rewrites_the_note_leaves_the_note_as_written(client):
     """A reworded note cannot be taken off the front, but the note the
-    user wrote still comes back unchanged and at most two sentences follow."""
+    user wrote still comes back unchanged, and the reply's sentences that
+    reword it are dropped (#137)."""
     note = "took early train to coast. walked pier w/ mei"
     reply = "I took the early train to the coast. I walked the pier with Mei. " + CLOSING
     body, _ = _expand(client, note, reply)
-    assert body["expanded"] == note + ". I walked the pier with Mei. " + CLOSING
+    assert body["expanded"] == note + ". " + CLOSING
 
 
 @pytest.mark.parametrize(
@@ -1072,3 +1076,58 @@ def test_expand_starts_a_new_sentence_after_a_note_with_no_end_mark(client, note
 def test_expand_abbreviations_do_not_end_a_sentence(client, reply):
     body, _ = _expand(client, "Went out today.", reply)
     assert body["expanded"] == "Went out today. " + reply
+
+
+FOUR_THINGS = "First thing went fine. Second thing too. Third thing was long and I kept going"
+
+
+def _expand_502(client, monkeypatch, note, reply):
+    """POST `note` to /expand as a signed-in writer with the model's `reply`
+    scripted, and check the no-addition 502: not charged, no grounding check."""
+    test_client, fake_llm = client
+    accounts = FakeAccounts()
+    accounts.install(monkeypatch)
+    fake_llm.reply_with(reply)
+    r = TestClient(test_client.app).post("/expand", json={"text": note}, headers=accounts.headers())
+    assert r.status_code == 502, r.text
+    assert r.json() == {"detail": "LLM reply added nothing to the note"}
+    assert accounts.statuses("expand") == ["failed"]
+    assert len(fake_llm.chat.completions.calls) == 1
+
+
+@pytest.mark.parametrize(
+    "reply",
+    [
+        "Took the early train to the coast.",
+        "Took the early train to the co",
+        "took the early train to the coast, walked the pier",
+    ],
+    ids=["first-sentence", "cut-mid-word", "capitals-and-commas-changed"],
+)
+def test_expand_reply_that_is_a_prefix_of_the_note_is_no_addition(client, monkeypatch, reply):
+    _expand_502(client, monkeypatch, TRIP_NOTE, reply)
+
+
+@pytest.mark.parametrize(
+    "reply",
+    [
+        # The review's example: the note repeated with a comma added.
+        "First thing went fine. Second thing, too. Third thing was long and I kept going. So tired.",
+        # ... or with one of its sentences reworded.
+        "First thing went fine. Second thing went fine too. Third thing was long and I kept going. So tired.",
+        # Only the note's last sentence repeated, now with a full stop.
+        "Third thing was long and I kept going. So tired.",
+    ],
+    ids=["review-example", "sentence-reworded", "last-sentence-only"],
+)
+def test_expand_drops_the_note_sentences_a_reply_repeats(client, reply):
+    body, _ = _expand(client, FOUR_THINGS, reply)
+    assert body["expanded"] == FOUR_THINGS + ". So tired."
+
+
+def test_expand_keeps_a_closing_sentence_that_only_echoes_the_note(client):
+    """A guard on the likeness bar: a closing sentence about the same walk
+    is not a repeat of the note."""
+    closing = "Walking the pier with Mei was lovely."
+    body, _ = _expand(client, TRIP_NOTE, closing)
+    assert body["expanded"] == TRIP_NOTE + " " + closing
