@@ -633,7 +633,7 @@ def _closing_addition(note: str, reply: str) -> str:
     repeat the note), cut to its last EXPAND_MAX_SENTENCES sentences
     (the ones that close the note). When the note stops mid-sentence and the
     first piece finishes that sentence, the piece is kept and the cap
-    applies to the sentences after it. "" when nothing is left."""
+    applies to the sentences after it. "" when no letter or digit is left."""
     pieces = _without_repeat(_sentences(_after_note(reply, note)), note)
     if pieces and _finishes_note(note, pieces[0].lstrip()):
         pieces = pieces[:1] + pieces[1:][-EXPAND_MAX_SENTENCES:]
@@ -643,7 +643,8 @@ def _closing_addition(note: str, reply: str) -> str:
     if not _note_is_open(note):
         # The repeat's own end mark (". It was calm."): the note has one.
         addition = addition.lstrip(_LEADING_MARKS)
-    return addition
+    # Marks alone ("Done" + ".") add no words: no addition, not charged.
+    return addition if any(ch.isalnum() for ch in addition) else ""
 
 
 def _join_addition(note: str, addition: str) -> str:

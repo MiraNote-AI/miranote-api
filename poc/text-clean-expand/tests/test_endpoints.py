@@ -1131,3 +1131,14 @@ def test_expand_keeps_a_closing_sentence_that_only_echoes_the_note(client):
     closing = "Walking the pier with Mei was lovely."
     body, _ = _expand(client, TRIP_NOTE, closing)
     assert body["expanded"] == TRIP_NOTE + " " + closing
+
+
+@pytest.mark.parametrize(
+    "note, reply",
+    [("Done", "Done."), ("Done", "."), ("Walked the pier.", "..."), ("Walked the pier.", "-- !")],
+    ids=["review-example", "full-stop", "ellipsis", "dash-and-mark"],
+)
+def test_expand_addition_of_marks_only_is_no_addition(client, monkeypatch, note, reply):
+    """The review's "Done" -> "Done.": a full stop is not an addition, so it
+    is the no-addition 502 (not charged), not a charged 200."""
+    _expand_502(client, monkeypatch, note, reply)

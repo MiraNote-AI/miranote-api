@@ -56,8 +56,9 @@ Expand finishes the note; it does not rewrite it (#132).
   by a new sentence, gets a full stop at the joint: `Met Dr. Smith today`
   followed by `I feel better.` gives `Met Dr. Smith today. I feel
   better.` The note itself is never changed.
-- No usable addition (an empty reply, or the note repeated, reworded or
-  cut short, and nothing more): a 502 `{"detail": "LLM reply added nothing to the note"}`,
+- No usable addition (an empty reply, the note repeated, reworded or cut
+  short and nothing more, or an addition of marks only with no letter or
+  digit, such as `Done` followed by `.`): a 502 `{"detail": "LLM reply added nothing to the note"}`,
   settled failed (not charged) like a failed grounded rewrite, and the
   service logs `Expand: the model gave no addition`. A retry usually
   brings one.
