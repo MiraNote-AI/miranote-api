@@ -28,13 +28,28 @@ Expand finishes the note; it does not rewrite it (#132).
   note does not state. The server builds `expanded` itself: a reply that
   repeats the note has it taken off the front (whitespace aside), and the
   addition is cut to its last two sentences (a sentence ends at `.` `!`
-  `?` before a space or the end, or at the full-width ones). The
-  grounding check reads the addition; invented facts get one rewrite, and
-  a failed rewrite is a 502 (not charged).
+  `?` before a space or the end, or at the full-width ones; the full stop
+  of a title or abbreviation such as `Dr.` or `e.g.` does not end one).
+  The grounding check reads the addition; invented facts get one rewrite,
+  and a failed rewrite is a 502 (not charged).
+- A note that stops mid-sentence (no end mark on its last line): when the
+  addition's first piece finishes that sentence, it is kept and the
+  two-sentence cap applies to the sentences after it: `I went to the`
+  followed by `park with Tom. It was sunny. I loved every minute.` keeps
+  all three.
+  The first piece finishes the note when it starts with a lowercase
+  letter, a digit or a mark, when the note stops on a word no sentence
+  ends on (`a`, `the`, `my`, `and`, `with`, `to` and a few more; a capital
+  after one is a name), or when the note is Chinese (no capitals to go
+  by). Otherwise it is a new sentence.
 - Joining: one space after an English note, nothing after a Chinese one;
   a note with no main language goes by its last character. A note that
   ends in whitespace (a line break) keeps it, with nothing added, and an
-  addition that starts with a comma or a full stop follows directly.
+  addition that starts with a comma or a full stop follows directly. An
+  English note that stops on a letter or digit with no end mark, followed
+  by a new sentence, gets a full stop at the joint: `Met Dr. Smith today`
+  followed by `I feel better.` gives `Met Dr. Smith today. I feel
+  better.` The note itself is never changed.
 - No usable addition (an empty reply, or the note repeated and nothing
   more): a 502 `{"detail": "LLM reply added nothing to the note"}`,
   settled failed (not charged) like a failed grounded rewrite, and the

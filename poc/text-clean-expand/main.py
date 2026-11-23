@@ -479,17 +479,78 @@ _ATTACHING = frozenset(",.;:!?)]\u3001\u3002\uff0c\uff1b\uff1a\uff01\uff1f\uff09
 # takes the addition with no space.
 _CJK_END = re.compile(r"[\u3000-\u303f\u3400-\u4dbf\u4e00-\u9fff\uff00-\uffef]")
 _ASCII_ALNUM = re.compile("[A-Za-z0-9]")
+# A full stop after one of these ends no sentence: "Met Dr. Smith today."
+_ABBREVIATIONS = frozenset(
+    "mr mrs ms mx dr prof sr jr st mt fr rev gen col capt lt sgt vs e.g i.e cf approx".split()
+)
+_WORD_BEFORE = re.compile(r"[A-Za-z][A-Za-z.]*$")
+# Words a sentence does not stop on. After one of them, an addition that
+# starts with a capital is a name finishing the sentence ("Lunch with" +
+# "Mei and Tom."), not a new sentence.
+_OPEN_WORDS = frozenset(
+    "a an the my our your their and or but of to with from at for by into onto than via".split()
+)
+_LAST_WORD = re.compile(r"([A-Za-z]+)[^A-Za-z]*$")
+
+
+def _sentence_ends(text: str) -> List[int]:
+    """Where each sentence of `text` ends (the offset just after its end
+    mark). A full stop after a title or abbreviation ("Dr.", "e.g.") is not
+    one."""
+    ends = []
+    for m in _SENTENCE_END.finditer(text):
+        if m.group() == ".":
+            word = _WORD_BEFORE.search(text[max(0, m.start() - 10) : m.start()])
+            if word and word.group().lower() in _ABBREVIATIONS:
+                continue
+        ends.append(m.end())
+    return ends
 
 
 def _sentences(text: str) -> List[str]:
     """`text` cut after each sentence end, as written; a last piece without
     an end mark counts as a sentence too."""
     pieces, start = [], 0
-    for end in [m.end() for m in _SENTENCE_END.finditer(text)] + [len(text)]:
+    for end in _sentence_ends(text) + [len(text)]:
         if text[start:end].strip():
             pieces.append(text[start:end])
         start = end
     return pieces
+
+
+def _note_is_open(note: str) -> bool:
+    """The note stops mid-sentence: its last line has no end mark and no
+    line break follows it."""
+    tail = note.rstrip(" \t")
+    if not tail.strip() or tail.endswith(("\n", "\r")):
+        return False
+    body = tail.rstrip()
+    return len(body) not in _sentence_ends(body)
+
+
+def _join_language(note: str) -> str:
+    """The #131 main language of the note; with none, its last character
+    decides ('zh' after Han or full-width punctuation, else 'en')."""
+    lang = main_language(note)
+    if lang is None:
+        lang = "zh" if _CJK_END.match(note.rstrip()[-1:]) else "en"
+    return lang
+
+
+def _finishes_note(note: str, addition: str) -> bool:
+    """Whether `addition` starts by finishing the note's last sentence. Only
+    an open note can be finished. A first letter that is not a capital
+    (lowercase, a digit, a mark, a Han character) finishes it; a capital
+    starts a new sentence, unless the note stops on an _OPEN_WORDS word or
+    is Chinese (no capitals to go by)."""
+    if not _note_is_open(note):
+        return False
+    if not addition[:1].isupper():
+        return True
+    if _join_language(note) == "zh":
+        return True
+    last = _LAST_WORD.search(note)
+    return bool(last) and last.group(1).lower() in _OPEN_WORDS
 
 
 def _after_note(reply: str, note: str) -> str:
@@ -514,8 +575,15 @@ def _after_note(reply: str, note: str) -> str:
 def _closing_addition(note: str, reply: str) -> str:
     """The addition in a model reply to /expand: what follows the note if
     the reply repeats it, cut to its last EXPAND_MAX_SENTENCES sentences
-    (the ones that close the note). "" when nothing is left."""
-    return "".join(_sentences(_after_note(reply, note))[-EXPAND_MAX_SENTENCES:]).strip()
+    (the ones that close the note). When the note stops mid-sentence and the
+    first piece finishes that sentence, the piece is kept and the cap
+    applies to the sentences after it. "" when nothing is left."""
+    pieces = _sentences(_after_note(reply, note))
+    if pieces and _finishes_note(note, pieces[0].lstrip()):
+        pieces = pieces[:1] + pieces[1:][-EXPAND_MAX_SENTENCES:]
+    else:
+        pieces = pieces[-EXPAND_MAX_SENTENCES:]
+    return "".join(pieces).strip()
 
 
 def _join_addition(note: str, addition: str) -> str:
@@ -523,13 +591,17 @@ def _join_addition(note: str, addition: str) -> str:
     note, directly in a Chinese one. A note ending in whitespace (a line
     break) already has its separator, and an addition starting with a comma
     or full stop carries on the last sentence. With no main language, the
-    note's last character decides."""
+    note's last character decides. An English note that stops on a letter
+    or digit with no end mark, followed by a new sentence (not one finishing
+    the note's), gets a full stop at the joint: "Met Dr. Smith today. I feel
+    better." The note itself is never changed."""
     if note[-1:].isspace() or addition[:1] in _ATTACHING:
         return note + addition
-    lang = main_language(note)
-    if lang is None:
-        lang = "zh" if _CJK_END.match(note[-1:]) else "en"
-    return note + (" " if lang == "en" else "") + addition
+    if _join_language(note) == "zh":
+        return note + addition
+    if note[-1].isalnum() and _note_is_open(note) and not _finishes_note(note, addition):
+        return note + ". " + addition
+    return note + " " + addition
 
 
 @app.post("/clean", response_model=CleanResponse)
