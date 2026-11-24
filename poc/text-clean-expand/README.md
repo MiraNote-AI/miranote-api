@@ -5,8 +5,8 @@ OpenAI-compatible LLM. Eight endpoints, each with its own prompt:
 
 | Endpoint | Purpose |
 |---|---|
-| `POST /clean` | Restructure messy input into a readable note |
-| `POST /expand` | Develop the user's input as if they wrote a longer version |
+| `POST /clean` | Fix typos, grammar and punctuation, and structure long text (bullet points, line breaks). Adds nothing, and leaves correct sentences as written |
+| `POST /expand` | Finish the note: the note exactly as written, then one or two closing sentences |
 | `POST /polish` | Final editing pass -- word choice + flow, no restructuring |
 | `POST /rewrite` | Rewrite one block following the user's own instruction ("make it warmer") |
 | `POST /shorten` | Produce a shorter version. `target`: 30% / 50% / tweet |
@@ -15,6 +15,72 @@ OpenAI-compatible LLM. Eight endpoints, each with its own prompt:
 | `POST /mood` | Page mood for the star jar: `{"mood": "joyful"/"calm"/"tender"/"low"/"tense"/"neutral"}` |
 
 Bilingual: every text endpoint answers in the text's main language and keeps words from the other language (names, places, terms) as written. A reply in the wrong language gets one rewrite only when the text is clearly Chinese or clearly English (at least twice as many Han characters as English words, or the reverse); a mixed note is left to the model. `/keywords` keeps each term in the language it appears in; `/mood` always returns an English label.
+
+## `POST /expand`
+
+Expand finishes the note; it does not rewrite it (#132).
+
+- Request: `{"text": str, "context"?: str}`. Response:
+  `{"original": str, "expanded": str}`, where `expanded` is `text`
+  unchanged, byte for byte, followed by the addition.
+- The model is asked for the addition only: one or two sentences that
+  close the note, in the writer's first-person voice, with no facts the
+  note does not state. The server builds `expanded` itself: a reply that
+  repeats the note has it taken off the front (comparing letters and
+  digits only, so changed capitals, spaces or punctuation still count);
+  a reply that stops inside the note (a repeat cut short) adds nothing;
+  the reply's leading sentences that are already in the note are
+  dropped (see "Repeated sentences" below). The rest is
+  cut to its last two sentences (a sentence ends at `.` `!`
+  `?` before a space or the end, or at the full-width ones; the full stop
+  of a title or abbreviation such as `Dr.` or `e.g.` does not end one).
+  The grounding check reads the addition; invented facts get one rewrite,
+  and a failed rewrite is a 502 (not charged).
+- A note that stops mid-sentence (no end mark on its last line): when the
+  addition's first piece finishes that sentence, it is kept and the
+  two-sentence cap applies to the sentences after it: `I went to the`
+  followed by `park with Tom. It was sunny. I loved every minute.` keeps
+  all three.
+  The first piece finishes the note when it starts with a lowercase
+  letter, a digit or a mark, when the note stops on a word no sentence
+  ends on (`a`, `the`, `my`, `and`, `with`, `to` and a few more; a capital
+  after one is a name), or when the note is Chinese (no capitals to go
+  by). Otherwise it is a new sentence.
+- Joining: one space after an English note, nothing after a Chinese one;
+  a note with no main language goes by its last character. A note that
+  ends in whitespace (a line break) keeps it, with nothing added, and an
+  addition that starts with a comma or a full stop follows directly. An
+  English note that stops on a letter or digit with no end mark, followed
+  by a new sentence, gets a full stop at the joint: `Met Dr. Smith today`
+  followed by `I feel better.` gives `Met Dr. Smith today. I feel
+  better.` After a list item (a last line starting with `-`, `*`, `+`, a
+  bullet, or a number such as `1.` or `2)`), the addition starts on its
+  own line, separated the way the note separates its paragraphs: a blank
+  line if the note has one, else a single line break. The note itself is
+  never changed.
+- Repeated sentences: a leading reply sentence is already in the note
+  when all its words, three or more, appear in a row in the note as
+  written (the last one may be cut short when the reply stops mid-word),
+  or when it restates one of the note's sentences. Restating is judged on content
+  words, leaving out pronouns, articles, forms of be, have and do,
+  conjunctions, prepositions, a few adverbs and the common Chinese
+  function characters. A sentence restates a note sentence when it has:
+  - the same words, or the same content words;
+  - at least three content words in common, in order, with difflib's
+    ratio on the two content lists at 0.8 or more;
+  - or, once the reply is repeating the note and for the note sentence
+    in the same place, at least two shared content words that make 80%
+    of that sentence's content words and half of the reply sentence's.
+
+  A closing sentence that only shares a frame with the note is kept:
+  `It was sunny.` after `It was fun.`, `We laughed a lot.` after `We
+  talked a lot.`.
+- No usable addition (an empty reply, the note repeated, reworded or cut
+  short and nothing more, or an addition of marks only with no letter or
+  digit, such as `Done` followed by `.`): a 502 `{"detail": "LLM reply added nothing to the note"}`,
+  settled failed (not charged) like a failed grounded rewrite, and the
+  service logs `Expand: the model gave no addition`. A retry usually
+  brings one.
 
 ## `POST /rewrite`
 

@@ -1,7 +1,7 @@
 """
 MiraNote POC -- Text Clean & Expand API
-Clean: fix typos/punctuation/grammar, preserve original meaning.
-Expand: give user ideas to continue writing, concise and inspiring.
+Clean: fix typos/punctuation/grammar and structure the text, preserve original meaning.
+Expand: finish the note -- the note as written plus one or two closing sentences.
 """
 
 from __future__ import annotations
@@ -10,8 +10,9 @@ import json
 import os
 import re
 import asyncio
+from difflib import SequenceMatcher
 from pathlib import Path
-from typing import Annotated, List, Literal, Optional, get_args
+from typing import Annotated, Callable, List, Literal, Optional, get_args
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -398,19 +399,19 @@ async def call_llm(
     max_tokens: int = 2048,
     language_ref: Optional[str] = None,
     temperature: float = 1.0,
-    max_output_chars: Optional[int] = None,
     grounding_check: bool = False,
     reject_cut: bool = False,
     thinking_off: bool = False,
     any_chinese: bool = False,
+    shape: Optional[Callable[[str], str]] = None,
 ) -> str:
     """Call the LLM; the reply must match the main language of
     `language_ref` (defaults to `user_text`): Chinese stays Chinese
     (simplified stays simplified, traditional stays traditional), English
     stays English. `any_chinese` is for /keywords (see _language_correction).
-    `max_output_chars` additionally bounds the reply length (the model
-    ignores the prompt's length rule and novelizes; over-length replies are
-    where the invented details live).
+    `shape` turns each model reply into the part the route uses (/expand:
+    the closing addition), before it is checked, so the checks and their
+    retries read that part only.
 
     The model sometimes ignores these rules in the prompt, so violations are
     detected here and corrected with one explicit retry. If the retry
@@ -419,34 +420,26 @@ async def call_llm(
     when it fails, the answer is a 502, since the reply in hand has
     invented facts.
     """
+    if shape is None:
+        shape = lambda reply: reply  # noqa: E731
     messages = [
         {"role": "system", "content": system},
         {"role": "user", "content": user_text},
     ]
-    reply = await _completion(messages, max_tokens, temperature, reject_cut, thinking_off)
+    reply = shape(await _completion(messages, max_tokens, temperature, reject_cut, thinking_off))
 
     ref = user_text if language_ref is None else language_ref
-    notes = []
     if language_note := _language_correction(ref, reply, any_chinese):
-        notes.append(language_note)
-    if max_output_chars is not None and len(reply) > max_output_chars:
-        notes.append(
-            f"Your reply is {len(reply)} characters -- far too long for this "
-            f"note. Rewrite it in at most {max_output_chars} characters. Cut "
-            "invented details first: keep only content grounded in the note, "
-            "in the user's voice. Do not summarize the note away; just stop "
-            "adding things it never said."
-        )
-    if notes:
         messages += [
             {"role": "assistant", "content": reply},
-            {"role": "user", "content": "\n\n".join(notes)},
+            {"role": "user", "content": language_note},
         ]
-        reply = await _correction(reply, messages, max_tokens, temperature, reject_cut, thinking_off)
+        reply = shape(await _correction(reply, messages, max_tokens, temperature, reject_cut, thinking_off))
 
     # Fabrication is checked last, on whatever reply survived the retry:
     # a fact-checker pass lists invented specifics, one rewrite removes them.
-    if grounding_check:
+    # An empty reply has nothing to check.
+    if grounding_check and reply:
         violations = await _grounding_violations(user_text, reply)
         if violations:
             listed = "\n".join(f"- {v}" for v in violations)
@@ -458,48 +451,338 @@ async def call_llm(
                         "These details in your reply are NOT in the note -- "
                         f"they are invented:\n{listed}\n"
                         "Rewrite your reply without them. Keep everything that "
-                        "IS grounded in the note, same language, same voice"
-                        + (
-                            f", at most {max_output_chars} characters."
-                            if max_output_chars is not None
-                            else "."
-                        )
+                        "IS grounded in the note, same language, same voice."
                     ),
                 },
             ]
             # Not _correction: the reply in hand is the one the checker just
             # flagged as inventing facts. If the rewrite fails, a 502 (not
             # charged) beats serving it.
-            reply = await _completion(messages, max_tokens, temperature)
+            reply = shape(await _completion(messages, max_tokens, temperature))
     return reply
+
+
+# -- Expand: the note as written, then a short closing addition (#132) --
+
+EXPAND_MAX_SENTENCES = 2
+# A sentence ends at . ! ? before a space or the end of the text (so the
+# point in 3.5 does not end one), or at the full-width U+3002,
+# U+FF01, U+FF1F anywhere; closing quotes and brackets right after the mark
+# stay with its sentence.
+_SENTENCE_END = re.compile(
+    r"[.!?]+[\"')\]\u2019\u201d]*(?=\s|$)"
+    r"|[\u3002\uff01\uff1f]+[\"')\]\u2019\u201d\u300d\u300f\uff09]*"
+)
+# Marks that attach to the word before them: an addition starting with one
+# carries on the note's last sentence, with no space before it.
+_ATTACHING = frozenset(",.;:!?)]\u3001\u3002\uff0c\uff1b\uff1a\uff01\uff1f\uff09")
+# Han characters plus CJK and full-width punctuation: a note ending in one
+# takes the addition with no space.
+_CJK_END = re.compile(r"[\u3000-\u303f\u3400-\u4dbf\u4e00-\u9fff\uff00-\uffef]")
+_ASCII_ALNUM = re.compile("[A-Za-z0-9]")
+# A full stop after one of these ends no sentence: "Met Dr. Smith today."
+_ABBREVIATIONS = frozenset(
+    "mr mrs ms mx dr prof sr jr st mt fr rev gen col capt lt sgt vs e.g i.e cf approx".split()
+)
+_WORD_BEFORE = re.compile(r"[A-Za-z][A-Za-z.]*$")
+# Words a sentence does not stop on. After one of them, an addition that
+# starts with a capital is a name finishing the sentence ("Lunch with" +
+# "Mei and Tom."), not a new sentence.
+_OPEN_WORDS = frozenset(
+    "a an the my our your their and or but of to with from at for by into onto than via".split()
+)
+_LAST_WORD = re.compile(r"([A-Za-z]+)[^A-Za-z]*$")
+# Words for comparing reply sentences with the note: runs of letters and
+# digits, each Han or kana character a word of its own.
+_HAN_OR_KANA = r"\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff"
+_WORD = re.compile(rf"[{_HAN_OR_KANA}]|[^\W_{_HAN_OR_KANA}]+")
+# Words that carry no content of their own: pronouns, articles, forms of
+# be/have/do, conjunctions, prepositions, a few adverbs, and the common
+# Chinese function characters (I, you, he/she/it, plural, of, done, is,
+# at, very, also, all, then, still, again, and, this, that, measure word,
+# -ing, -ed, and four question and mood particles). A reply sentence
+# restates a note sentence only by its other words, so "It was sunny." is
+# no repeat of "It was fun." (#137).
+_FRAME_WORDS = frozenset(
+    "a an the i me my we us our you your he him his she her it its they them their "
+    "this that these those is am are was were be been being do does did "
+    "have has had and or but so to of in on at for with by from as up "
+    "then too very just really".split()
+) | frozenset(
+    "\u6211\u4f60\u4ed6\u5979\u5b83\u4eec\u7684\u4e86\u662f\u5728\u5f88\u4e5f\u90fd"
+    "\u5c31\u8fd8\u53c8\u548c\u8fd9\u90a3\u4e2a\u7740\u8fc7\u5417\u5462\u5427\u554a"
+)
+# How much a reply sentence must share with a note sentence, in content
+# words, to restate it without the same words: anywhere in the reply, at
+# least _REPEAT_MIN_SHARED of them in order and difflib's ratio on the two
+# content lists at _REPEAT_LIKENESS (so one word changed in a long sentence
+# still restates it, but "Dinner with Sam was great." does not restate "Had
+# dinner with Sam."); and once the reply is repeating the note, for the
+# note sentence in the same place, at least two, being _REPEAT_COVERAGE of
+# that sentence's content words and half of the reply sentence's own.
+_REPEAT_MIN_SHARED = 3
+_REPEAT_LIKENESS = 0.8
+_REPEAT_COVERAGE = 0.8
+# A list item: a bullet (- * + or a bullet or middle dot) or a number
+# (1. 1) or one with the Chinese enumeration comma) before its text.
+_LIST_ITEM = re.compile(r"[ \t]*(?:[-*+\u2022\u00b7]|\d{1,3}[.)\u3001])[ \t]+\S")
+_BLANK_LINE = re.compile(r"\n[ \t]*\r?\n")
+# Marks a repeat leaves before the addition once the note is taken off.
+_LEADING_MARKS = "".join(_ATTACHING) + "\t\n\r "
+
+
+def _sentence_ends(text: str) -> List[int]:
+    """Where each sentence of `text` ends (the offset just after its end
+    mark). A full stop after a title or abbreviation ("Dr.", "e.g.") is not
+    one."""
+    ends = []
+    for m in _SENTENCE_END.finditer(text):
+        if m.group() == ".":
+            word = _WORD_BEFORE.search(text[max(0, m.start() - 10) : m.start()])
+            if word and word.group().lower() in _ABBREVIATIONS:
+                continue
+        ends.append(m.end())
+    return ends
+
+
+def _sentences(text: str) -> List[str]:
+    """`text` cut after each sentence end, as written; a last piece without
+    an end mark counts as a sentence too."""
+    pieces, start = [], 0
+    for end in _sentence_ends(text) + [len(text)]:
+        if text[start:end].strip():
+            pieces.append(text[start:end])
+        start = end
+    return pieces
+
+
+def _ends_in_list_item(note: str) -> bool:
+    """The note's last line is a bullet or numbered list item, with no line
+    break after it."""
+    tail = note.rstrip(" \t")
+    return not tail.endswith(("\n", "\r")) and bool(_LIST_ITEM.match(tail.rsplit("\n", 1)[-1]))
+
+
+def _line_break(note: str) -> str:
+    """How the note separates its paragraphs: a blank line if it has one,
+    else a single line break (CRLF in a CRLF note)."""
+    nl = "\r\n" if "\r\n" in note else "\n"
+    return nl * 2 if _BLANK_LINE.search(note) else nl
+
+
+def _ends_sentence(text: str) -> bool:
+    """`text` ends with a sentence end mark (trailing whitespace aside)."""
+    body = text.rstrip()
+    return bool(body) and len(body) in _sentence_ends(body)
+
+
+def _note_is_open(note: str) -> bool:
+    """The note stops mid-sentence: its last line has no end mark, is not a
+    list item, and no line break follows it."""
+    tail = note.rstrip(" \t")
+    if not tail.strip() or tail.endswith(("\n", "\r")) or _ends_in_list_item(note):
+        return False
+    return not _ends_sentence(tail)
+
+
+def _join_language(note: str) -> str:
+    """The #131 main language of the note; with none, its last character
+    decides ('zh' after Han or full-width punctuation, else 'en')."""
+    lang = main_language(note)
+    if lang is None:
+        lang = "zh" if _CJK_END.match(note.rstrip()[-1:]) else "en"
+    return lang
+
+
+def _finishes_note(note: str, addition: str) -> bool:
+    """Whether `addition` starts by finishing the note's last sentence. Only
+    an open note can be finished. A first letter that is not a capital
+    (lowercase, a digit, a mark, a Han character) finishes it; a capital
+    starts a new sentence, unless the note stops on an _OPEN_WORDS word or
+    is Chinese (no capitals to go by)."""
+    if not _note_is_open(note):
+        return False
+    if not addition[:1].isupper():
+        return True
+    if _join_language(note) == "zh":
+        return True
+    last = _LAST_WORD.search(note)
+    return bool(last) and last.group(1).lower() in _OPEN_WORDS
+
+
+def _after_note(reply: str, note: str) -> str:
+    """`reply` with `note` taken off its front, comparing letters and digits
+    only (case, whitespace and punctuation aside, so a repeat with its
+    capitals or commas fixed still counts). "" when the reply stops inside
+    the note: a repeat cut short adds nothing. `reply` itself when it does
+    not start with the note, or when the note ends inside one of the
+    reply's words ("Din" in "Dinner")."""
+    i = 0
+    for ch in note:
+        if not ch.isalnum():
+            continue
+        while i < len(reply) and not reply[i].isalnum():
+            i += 1
+        if i == len(reply):
+            return ""
+        if reply[i].lower() != ch.lower():
+            return reply
+        i += 1
+    if i and _ASCII_ALNUM.match(reply[i - 1]) and _ASCII_ALNUM.match(reply[i : i + 1]):
+        return reply
+    return reply[i:]
+
+
+def _words(text: str) -> List[str]:
+    """The lowercase _WORD words of `text`."""
+    return _WORD.findall(text.lower())
+
+
+def _content(words: List[str]) -> List[str]:
+    """`words` without _FRAME_WORDS and one-letter Latin words ("I", "a",
+    the "w" of "w/")."""
+    return [w for w in words if w not in _FRAME_WORDS and (len(w) > 1 or not w.isascii())]
+
+
+def _restates(piece: tuple, unit: tuple, in_place: bool) -> bool:
+    """Whether a reply sentence restates a note sentence, each given as
+    (words, content words): the same words, the same content words, or
+    _REPEAT_MIN_SHARED content words in common, in order, with
+    _REPEAT_LIKENESS between the two content lists. `in_place` (the note
+    sentence a repeat under way has reached): also when at least two shared
+    content words make _REPEAT_COVERAGE of that sentence's and half of the
+    reply sentence's own."""
+    (words, content), (unit_words, unit_content) = piece, unit
+    if words == unit_words or (content and content == unit_content):
+        return True
+    if len(set(content) & set(unit_content)) < 2:
+        return False
+    matcher = SequenceMatcher(None, content, unit_content, autojunk=False)
+    shared = sum(block.size for block in matcher.get_matching_blocks())
+    if shared >= _REPEAT_MIN_SHARED and 2 * shared >= _REPEAT_LIKENESS * (len(content) + len(unit_content)):
+        return True
+    return (
+        in_place
+        and shared >= 2
+        and shared >= _REPEAT_COVERAGE * len(unit_content)
+        and 2 * shared >= len(content)
+    )
+
+
+def _without_repeat(pieces: List[str], note: str) -> List[str]:
+    """`pieces` (reply sentences) without the leading ones that are already
+    in the note: all their words, three or more, in a row in the note as
+    written (the last one may be cut short when the sentence has no end
+    mark, a reply stopped mid-word), or restating one of the note's
+    sentences (_restates). Once the reply is repeating the note, the
+    sentence in the place of the note's next one may restate it more
+    loosely. Sharing only a frame ("It was ...", "We ... a lot") is not
+    restating."""
+    units = []
+    for line in note.splitlines():
+        for sentence in _sentences(line):
+            words = _words(sentence)
+            if words:
+                units.append((words, _content(words)))
+    note_run = " " + " ".join(_words(note)) + " "
+    n = 0
+    while n < len(pieces):
+        words = _words(pieces[n])
+        if not words:
+            break
+        piece = (words, _content(words))
+        run = " " + " ".join(words) + (" " if _ends_sentence(pieces[n]) else "")
+        if (
+            (len(words) >= 3 and run in note_run)
+            or any(_restates(piece, unit, False) for unit in units)
+            or (0 < n < len(units) and _restates(piece, units[n], True))
+        ):
+            n += 1
+            continue
+        break
+    return pieces[n:]
+
+
+def _closing_addition(note: str, reply: str) -> str:
+    """The addition in a model reply to /expand: what follows the note if
+    the reply repeats it (or the reply without its leading sentences that
+    repeat the note), cut to its last EXPAND_MAX_SENTENCES sentences
+    (the ones that close the note). When the note stops mid-sentence and the
+    first piece finishes that sentence, the piece is kept and the cap
+    applies to the sentences after it. "" when no letter or digit is left."""
+    pieces = _without_repeat(_sentences(_after_note(reply, note)), note)
+    if pieces and _finishes_note(note, pieces[0].lstrip()):
+        pieces = pieces[:1] + pieces[1:][-EXPAND_MAX_SENTENCES:]
+    else:
+        pieces = pieces[-EXPAND_MAX_SENTENCES:]
+    addition = "".join(pieces).strip()
+    if not _note_is_open(note):
+        # The repeat's own end mark (". It was calm."): the note has one.
+        addition = addition.lstrip(_LEADING_MARKS)
+    # Marks alone ("Done" + ".") add no words: no addition, not charged.
+    return addition if any(ch.isalnum() for ch in addition) else ""
+
+
+def _join_addition(note: str, addition: str) -> str:
+    """`note`, byte for byte, then `addition`: after one space in an English
+    note, directly in a Chinese one. A note ending in whitespace (a line
+    break) already has its separator, and an addition starting with a comma
+    or full stop carries on the last sentence. With no main language, the
+    note's last character decides. An English note that stops on a letter
+    or digit with no end mark, followed by a new sentence (not one finishing
+    the note's), gets a full stop at the joint: "Met Dr. Smith today. I feel
+    better." After a list item the addition starts on its own line, after
+    the note's own paragraph break (_line_break). The note itself is never
+    changed."""
+    if _ends_in_list_item(note):
+        return note + _line_break(note) + addition
+    if note[-1:].isspace() or addition[:1] in _ATTACHING:
+        return note + addition
+    if _join_language(note) == "zh":
+        return note + addition
+    if note[-1].isalnum() and _note_is_open(note) and not _finishes_note(note, addition):
+        return note + ". " + addition
+    return note + " " + addition
 
 
 @app.post("/clean", response_model=CleanResponse)
 async def clean_text(req: TextRequest):
-    """Clean up messy text: fix typos, punctuation, grammar. Minimal changes, preserve original meaning."""
+    """Clean up messy text: fix typos, punctuation, grammar and structure long text. Adds nothing (#132)."""
     cleaned = await call_llm(CLEAN_SYSTEM, req.text, max_tokens=2048, temperature=0.3)
     return CleanResponse(original=req.text, cleaned=cleaned)
 
 
 @app.post("/expand", response_model=ExpandResponse)
 async def expand_text(req: TextRequest):
-    """Expand on user's input: provide concise directions and ideas to continue writing."""
+    """Finish the note: the note exactly as written, then one or two closing
+    sentences in the writer's voice (#132)."""
     user_msg = req.text
     if req.context:
         user_msg = f"Context:\n{req.context}\n\nCurrent input:\n{req.text}"
+    # The model is asked for the addition only. Whatever it sends, the note
+    # never comes from the model: a reply that repeats the note loses it,
+    # and the two-sentence cut is the fence against novelizing (the prompt's
+    # own length rule alone is ignored). max_tokens stays roomy so a reply
+    # that repeats a long note still reaches its addition.
     # 0.3: some creative room, but low enough to curb invented specifics.
-    # The char cap (2x + slack) is the real fence against novelizing; the
-    # prompt's own length rule alone is ignored.
-    expanded = await call_llm(
+    addition = await call_llm(
         EXPAND_SYSTEM,
         user_msg,
         max_tokens=2048,
         language_ref=req.text,
         temperature=0.3,
-        max_output_chars=2 * len(req.text) + 150,
         grounding_check=True,
+        shape=lambda reply: _closing_addition(req.text, reply),
     )
-    return ExpandResponse(original=req.text, expanded=expanded)
+    if not addition:
+        # Empty, or the note repeated and nothing more. A 200 would show the
+        # same words under Expand and charge a signed-in writer for nothing;
+        # a 502, like a failed grounded rewrite, is settled failed (not
+        # charged), the app keeps the words and offers to try again, and a
+        # retry usually brings an addition.
+        print("Expand: the model gave no addition; answering 502")
+        raise HTTPException(status_code=502, detail="LLM reply added nothing to the note")
+    return ExpandResponse(original=req.text, expanded=_join_addition(req.text, addition))
 
 
 @app.post("/polish", response_model=PolishResponse)
