@@ -990,6 +990,22 @@ def test_expand_prompt_asks_for_a_closing_addition_only(client):
     for gone in ["AS IF YOU ARE THE USER", "1.5x", "2x", "implications, trade-offs, and next steps"]:
         assert gone not in system
 
+
+def test_expand_prompt_says_the_first_words_must_finish_an_unfinished_sentence(client):
+    """#139: "may finish" let the model start a new sentence after a note
+    that stops on "and"."""
+    _, calls = _expand(client, TRIP_NOTE, CLOSING)
+    system = calls[0]["messages"][0]["content"]
+    assert "If the note stops mid-sentence" in system
+    assert "your first words MUST finish that sentence" in system
+    assert "not a new sentence" in system
+    assert 'start in lowercase unless your first word is a name or "I"' in system
+    assert "only what the note already says, or how the writer feels about it" in system
+    assert "may finish that sentence" not in system
+    rule = [line for line in system.splitlines() if "MUST finish that sentence" in line]
+    assert len(rule) == 1 and rule[0].isascii()
+
+
 def test_clean_prompt_fixes_and_structures_without_expanding_or_rewording(client):
     test_client, fake_llm = client
     fake_llm.reply_with("A clean note.")
@@ -1208,3 +1224,107 @@ def test_expand_drops_a_reworded_chinese_repeat(client):
     content characters, one added): dropped, the new sentence kept."""
     body, _ = _expand(client, ZH_NOTE, ZH_REPLY + ZH_STOP + ZH_SLEPT)
     assert body["expanded"] == ZH_NOTE + ZH_SLEPT
+
+
+# -- api #139: an addition carries on a note that stops on an open word ------
+KIDS_NOTE = "Took the kids to the beach this afternoon and"
+# The two beta replies to KIDS_NOTE, verbatim: each starts a new sentence
+# where the note's should carry on.
+KIDS_RAN = (
+    "The kids ran straight for the water the moment we got there, and I just "
+    "sat back and watched them. It was a good afternoon."
+)
+KIDS_HAD = (
+    "The kids had a good time, and honestly so did I. It was one of those "
+    "simple afternoons that ends up being exactly what I needed."
+)
+# "I went to" + "The Peninsula" + "for afternoon tea."
+ZH_TEA = "The Peninsula" + "\u559d\u4e0b\u5348\u8336" + ZH_STOP
+# "Went to Costco today, bought milk and " (Chinese by #131's count) and
+# "The eggs" + "were quite cheap."
+ZH_MILK_AND = "\u4eca\u5929\u53bb\u4e86 Costco \u4e70\u4e86 milk and "
+ZH_EGGS = "The eggs" + "\u8fd8\u633a\u4fbf\u5b9c\u7684" + ZH_STOP
+
+
+@pytest.mark.parametrize(
+    "note, reply, expanded",
+    [
+        # The beta's two replies: only the first letter changes.
+        (KIDS_NOTE, KIDS_RAN, KIDS_NOTE + " t" + KIDS_RAN[1:]),
+        (KIDS_NOTE, KIDS_HAD, KIDS_NOTE + " t" + KIDS_HAD[1:]),
+        # A pronoun other than "I", in a one-sentence reply.
+        (KIDS_NOTE, "It was a good afternoon.", KIDS_NOTE + " it was a good afternoon."),
+        # A note that stops on the open word and a space or a comma.
+        (KIDS_NOTE + " ", "We stayed till sunset.", KIDS_NOTE + " we stayed till sunset."),
+        (KIDS_NOTE + ",", "They loved it.", KIDS_NOTE + ", they loved it."),
+        # The cap is unchanged: the first piece, then the closing two.
+        (
+            KIDS_NOTE,
+            "The kids swam. We ate. I read. It was nice.",
+            KIDS_NOTE + " the kids swam. I read. It was nice.",
+        ),
+    ],
+    ids=["beta-ran", "beta-had", "pronoun", "trailing-space", "trailing-comma", "capped"],
+)
+def test_expand_carries_on_a_note_that_stops_on_an_open_word(client, note, reply, expanded):
+    """After a note that stops on an open word ("and", "with", "the" ...),
+    an addition that starts with a capitalised word that never names anyone
+    carries on the note's sentence in lowercase (#139)."""
+    body, _ = _expand(client, note, reply)
+    assert body == {"original": note, "expanded": expanded}
+
+
+@pytest.mark.parametrize(
+    "note, reply, expanded",
+    [
+        # A name after an open word keeps its capital (#137).
+        ("Lunch with", "Mei and Tom.", "Lunch with Mei and Tom."),
+        # "I", and "I" in a contraction, stay as they are.
+        (KIDS_NOTE, "I sat on the sand and watched them.", KIDS_NOTE + " I sat on the sand and watched them."),
+        (KIDS_NOTE, "I'm glad we went.", KIDS_NOTE + " I'm glad we went."),
+        # A word in capitals is a name or an acronym, not "it" or "us".
+        ("Sent the bug report to", "IT and they fixed it.", "Sent the bug report to IT and they fixed it."),
+        # An open note that does not stop on an open word: a full stop at
+        # the joint, as on d28e0af.
+        ("Met Dr. Lin for my checkup today", "It went fine.", "Met Dr. Lin for my checkup today. It went fine."),
+        # A closed note and a list note: as on d28e0af.
+        ("Took the kids to the beach.", "The kids loved it.", "Took the kids to the beach. The kids loved it."),
+        ("Packed:\n- towels and", "The kids carried them.", "Packed:\n- towels and\nThe kids carried them."),
+        # Chinese notes: joined directly, capitals kept, as on d28e0af.
+        (ZH_WENT_TO, ZH_TEA, ZH_WENT_TO + ZH_TEA),
+        (ZH_MILK_AND, ZH_EGGS, ZH_MILK_AND + ZH_EGGS),
+    ],
+    ids=[
+        "name-after-with",
+        "i-after-and",
+        "i-contraction",
+        "capitals",
+        "not-an-open-word",
+        "closed-note",
+        "list-note",
+        "chinese-open-note",
+        "chinese-note-ending-on-and",
+    ],
+)
+def test_expand_keeps_the_capital_that_is_not_a_new_sentence_on_an_open_word(client, note, reply, expanded):
+    body, _ = _expand(client, note, reply)
+    assert body == {"original": note, "expanded": expanded}
+
+
+def test_expand_endpoint_carries_on_the_beta_note(client):
+    """The beta's first reply through /expand: the note comes back byte for
+    byte, the addition carries on its sentence, the first piece and the
+    sentence after it are both kept (the cap is unchanged), and the
+    grounding check reads the addition as it is served."""
+    test_client, fake_llm = client
+    fake_llm.reply_with(KIDS_RAN, "[]")
+
+    r = test_client.post("/expand", json={"text": KIDS_NOTE})
+
+    assert r.status_code == 200, r.text
+    addition = "t" + KIDS_RAN[1:]
+    assert r.json() == {"original": KIDS_NOTE, "expanded": KIDS_NOTE + " " + addition}
+    assert r.json()["expanded"].startswith(KIDS_NOTE + " the kids ran straight for the water")
+    calls = fake_llm.chat.completions.calls
+    assert len(calls) == 2  # the addition and the grounding check
+    assert calls[1]["messages"][1]["content"] == f"NOTE:\n{KIDS_NOTE}\n\nEXPANSION:\n{addition}"
