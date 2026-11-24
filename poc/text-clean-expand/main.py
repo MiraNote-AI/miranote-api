@@ -487,7 +487,8 @@ _ABBREVIATIONS = frozenset(
 _WORD_BEFORE = re.compile(r"[A-Za-z][A-Za-z.]*$")
 # Words a sentence does not stop on. After one of them, an addition that
 # starts with a capital is a name finishing the sentence ("Lunch with" +
-# "Mei and Tom."), not a new sentence.
+# "Mei and Tom."), not a new sentence; a capital on a word that names no
+# one ("and" + "The kids ...") is put in lowercase (_carry_on, #139).
 _OPEN_WORDS = frozenset(
     "a an the my our your their and or but of to with from at for by into onto than via".split()
 )
@@ -512,6 +513,16 @@ _FRAME_WORDS = frozenset(
     "\u6211\u4f60\u4ed6\u5979\u5b83\u4eec\u7684\u4e86\u662f\u5728\u5f88\u4e5f\u90fd"
     "\u5c31\u8fd8\u53c8\u548c\u8fd9\u90a3\u4e2a\u7740\u8fc7\u5417\u5462\u5427\u554a"
 )
+# English words that never name anyone: _FRAME_WORDS without "I". After a
+# note that stops on an _OPEN_WORDS word, an addition that starts with one
+# of them in a capital ("...this afternoon and" + "The kids ran ...") is a
+# new sentence where the note's should carry on (#139).
+_NOT_NAMES = frozenset(w for w in _FRAME_WORDS if w.isascii()) - {"i"}
+_FIRST_WORD = re.compile(r"[^\W\d_]+")
+# The note's last word, with nothing but spaces or marks after it. The
+# lookbehind starts a match only at the start of a word: without it, a long
+# run of letters before a digit costs quadratic time.
+_STOPS_ON = re.compile(r"(?<![A-Za-z])([A-Za-z]+)\W*$")
 # How much a reply sentence must share with a note sentence, in content
 # words, to restate it without the same words: anywhere in the reply, at
 # least _REPEAT_MIN_SHARED of them in order and difflib's ratio on the two
@@ -715,12 +726,34 @@ def _closing_addition(note: str, reply: str) -> str:
         pieces = pieces[:1] + pieces[1:][-EXPAND_MAX_SENTENCES:]
     else:
         pieces = pieces[-EXPAND_MAX_SENTENCES:]
-    addition = "".join(pieces).strip()
+    addition = _carry_on(note, "".join(pieces).strip())
     if not _note_is_open(note):
         # The repeat's own end mark (". It was calm."): the note has one.
         addition = addition.lstrip(_LEADING_MARKS)
     # Marks alone ("Done" + ".") add no words: no addition, not charged.
     return addition if any(ch.isalnum() for ch in addition) else ""
+
+
+def _carry_on(note: str, addition: str) -> str:
+    """`addition` with its first letter in lowercase when it must carry on
+    the note's last sentence but starts a new one: the note is open, not
+    Chinese, and stops on an _OPEN_WORDS word, and the addition's first
+    word is a _NOT_NAMES word with a capital ("...this afternoon and" +
+    "The kids ran ..." -> "the kids ran ..."). A name ("Lunch with" + "Mei
+    and Tom."), "I" ("I'm") and a word in capitals ("IT") are kept as
+    written, and so is everything after the first letter (#139)."""
+    first = _FIRST_WORD.match(addition)
+    if not first:
+        return addition
+    word = first.group()
+    if word.lower() not in _NOT_NAMES or not word[0].isupper() or word[1:] != word[1:].lower():
+        return addition
+    if not _note_is_open(note) or _join_language(note) == "zh":
+        return addition
+    last = _STOPS_ON.search(note)
+    if not last or last.group(1).lower() not in _OPEN_WORDS:
+        return addition
+    return addition[0].lower() + addition[1:]
 
 
 def _join_addition(note: str, addition: str) -> str:
