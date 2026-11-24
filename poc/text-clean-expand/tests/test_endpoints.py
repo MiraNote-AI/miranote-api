@@ -990,6 +990,22 @@ def test_expand_prompt_asks_for_a_closing_addition_only(client):
     for gone in ["AS IF YOU ARE THE USER", "1.5x", "2x", "implications, trade-offs, and next steps"]:
         assert gone not in system
 
+
+def test_expand_prompt_says_the_first_words_must_finish_an_unfinished_sentence(client):
+    """#139: "may finish" let the model start a new sentence after a note
+    that stops on "and"."""
+    _, calls = _expand(client, TRIP_NOTE, CLOSING)
+    system = calls[0]["messages"][0]["content"]
+    assert "If the note stops mid-sentence" in system
+    assert "your first words MUST finish that sentence" in system
+    assert "not a new sentence" in system
+    assert 'start in lowercase unless your first word is a name or "I"' in system
+    assert "only what the note already says, or how the writer feels about it" in system
+    assert "may finish that sentence" not in system
+    rule = [line for line in system.splitlines() if "MUST finish that sentence" in line]
+    assert len(rule) == 1 and rule[0].isascii()
+
+
 def test_clean_prompt_fixes_and_structures_without_expanding_or_rewording(client):
     test_client, fake_llm = client
     fake_llm.reply_with("A clean note.")
