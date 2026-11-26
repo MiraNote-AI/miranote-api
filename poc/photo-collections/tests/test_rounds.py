@@ -353,7 +353,7 @@ ROUND1_PROMPT = """你是一个相册整理助手。下面的照片来自同一�
 
 ROUND2_PROMPT = """下面是一个人相册里的一个主题，以及这个主题的 15 张候选照片，每张来自不同的一天。
 请逐张检查：
-1. 属于这个主题吗？
+1. 属于这个主题吗？主题写的是一种场合（时段、地点）时，看图后面标的时间、地点来判断，不要只看画面猜；拍的是这个场合里的东西就算属于，不要求每张都拍到名字里的每一样东西。
 2. 和另一张几乎一样吗？是的话写出是哪一张。
 3. 太糊、太暗，或者看不清主体吗？
 4. 是不是药、医院、体检单、身体、证件、病历这类敏感内容？
@@ -408,3 +408,39 @@ def test_round1_log_keeps_only_validated_pile_fields(client, fake_model, tmp_log
     _post1(client, meta)
     logged = tmp_log.read_text(encoding="utf-8")
     assert "photo_count" in logged and "LEAKED_VALUE" not in logged
+
+
+def _tag_texts(call):
+    return [p["text"] for p in _parts(call)[1:] if p["type"] == "text"]
+
+
+def test_round2_renders_photo_time_and_place(client, fake_model):
+    fake_model.reply("r2", REPLY)
+    meta = _meta2(n=2)
+    meta["photos"] = [{"n": 1, "daypart": "evening", "hour": 17, "at_place": True},
+                      {"n": 2, "daypart": "night", "hour": 20, "at_place": False}]
+    assert _post2(client, meta, files=_files(2)).status_code == 200
+    assert _tag_texts(fake_model.calls[0]) == ["图 1（傍晚 17 点，在主题的地点）",
+                                               "图 2（夜晚 20 点，不在主题的地点）"]
+
+
+def test_round2_renders_each_fact_on_its_own(client, fake_model):
+    fake_model.reply("r2", REPLY)
+    meta = _meta2(n=3)
+    meta["photos"] = [{"n": 1, "daypart": "morning"}, {"n": 2, "hour": 9}, {"n": 3, "at_place": True}]
+    assert _post2(client, meta).status_code == 200
+    assert _tag_texts(fake_model.calls[0]) == ["图 1（上午）", "图 2（9 点）", "图 3（在主题的地点）"]
+
+
+def test_round2_without_facts_renders_plain_tags(client, fake_model):
+    fake_model.reply("r2", REPLY)
+    assert _post2(client, _meta2(n=1), files=_files(1)).status_code == 200
+    assert _tag_texts(fake_model.calls[0]) == ["图 1"]
+
+
+@pytest.mark.parametrize("bad", [{"daypart": "dawn"}, {"hour": 24}, {"hour": -1}, {"hour": True},
+                                 {"hour": 7.5}, {"at_place": "yes"}, {"at_place": 1}])
+def test_round2_rejects_bad_facts(client, bad):
+    meta = _meta2(n=1)
+    meta["photos"] = [dict({"n": 1}, **bad)]
+    assert _post2(client, meta, files=_files(1)).status_code == 400

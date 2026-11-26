@@ -166,6 +166,13 @@ def check_round2(raw: str) -> Optional[dict]:
     for p in photos:
         if not isinstance(p, dict) or not (_is_int(p.get("n")) and p["n"] >= 1):
             return None
+        if p.get("daypart") is not None and p["daypart"] not in DAYPARTS:
+            return None
+        hour = p.get("hour")
+        if hour is not None and not (_is_int(hour) and 0 <= hour <= 23):
+            return None
+        if p.get("at_place") is not None and not isinstance(p["at_place"], bool):
+            return None
         ns.append(p["n"])
     if len(set(ns)) != len(ns):
         return None
@@ -249,6 +256,24 @@ def _tagged(numbers: List[int], images: Dict[int, bytes], names: dict) -> List[d
     return parts
 
 
+def _round2_tag(photo: dict, names: dict) -> str:
+    """Round 2's image tag: the number, plus whichever time and place facts the photo carries."""
+    parts = []
+    when = []
+    if photo.get("daypart") is not None:
+        when.append(names["dayparts"][photo["daypart"]])
+    if photo.get("hour") is not None:
+        when.append(names["round2_hour"].format(hour=photo["hour"]))
+    if when:
+        parts.append(names["round2_when_sep"].join(when))
+    if photo.get("at_place") is not None:
+        parts.append(names["round2_at_place" if photo["at_place"] else "round2_not_at_place"])
+    tag = names["photo_tag"].format(n=photo["n"])
+    if not parts:
+        return tag
+    return names["round2_photo_tag"].format(tag=tag, parts=names["round2_fact_sep"].join(parts))
+
+
 def _messages(text: str, tail: List[dict]) -> List[dict]:
     return [
         {"role": "system", "content": texts.raw("repeat_round_system").strip()},
@@ -295,7 +320,12 @@ def messages_round2(meta: dict, images: Dict[int, bytes]) -> List[dict]:
         lines.append(names["round2_blocked"].format(names=names["sep"].join(meta["blocked"])))
     text = texts.render("repeat_round2_user", input="\n".join(lines),
                         example=texts.raw("repeat_round2_example").strip())
-    return _messages(text, _tagged(numbers, images, names))
+    by_n = {p["n"]: p for p in meta["photos"]}
+    tail: List[dict] = []
+    for n in numbers:
+        tail.append({"type": "text", "text": _round2_tag(by_n[n], names)})
+        tail.append(compose.image_part(images[n]))
+    return _messages(text, tail)
 
 
 def messages_shorten(items: List[dict]) -> List[dict]:
