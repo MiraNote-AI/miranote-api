@@ -590,7 +590,8 @@ def verify_round(job: "Job", ids: List[str], cover: str, images: Dict[str, bytes
         v = result.sentences[verify.sentence_id(i)]
         if mode == "repeat":
             entry = {"text": texts_s[i], "grounded": v.grounded, "whole_theme": v.whole_theme,
-                     "fluent": v.fluent, "reason": v.reason}
+                     "fluent": v.fluent, "natural": v.natural, "ominous": v.ominous,
+                     "reason": v.reason}
         else:
             entry = {"text": texts_s[i], "grounded": v.grounded, "mentions_cover": v.mentions_cover,
                      "fluent": v.fluent, "reason": v.reason}
@@ -603,6 +604,12 @@ def verify_round(job: "Job", ids: List[str], cover: str, images: Dict[str, bytes
             continue
         if not v.whole_theme:
             rej_s.append((c.text, "c_not_whole_theme:" + v.reason[:80]))
+            continue
+        if not v.natural:
+            rej_s.append((c.text, "c_not_natural:" + v.reason[:80]))
+            continue
+        if v.ominous:
+            rej_s.append((c.text, "c_ominous:" + v.reason[:80]))
             continue
         ids_ = [pid for pid in c.photo_ids if pid != cover]
         if v.mentions_cover:

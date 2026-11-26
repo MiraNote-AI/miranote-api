@@ -241,9 +241,9 @@ def test_repeat_c_whole_theme_false_drops_sentence(fake_model, tmp_log):
     ]))
     fake_model.reply("c", json.dumps({
         "sentences": [{"id": "S1", "grounded": True, "whole_theme": False, "fluent": True,
-                       "reason": "合集说明"},
+                       "natural": True, "ominous": False, "reason": "合集说明"},
                       {"id": "S2", "grounded": True, "whole_theme": True, "fluent": True,
-                       "reason": ""}],
+                       "natural": True, "ominous": False, "reason": ""}],
         "questions": [{"id": "Q1", "grounded": True, "safe": True, "reason": ""}],
     }, ensure_ascii=False))
     m = _run()["memory"]
@@ -269,6 +269,83 @@ def test_verify_parse_reads_whole_theme_only_in_repeat():
     assert verify.parse(reply, 1, 0).sentences["S1"].whole_theme is True
     unsure = json.dumps({"sentences": [{"id": "S1", "grounded": True, "fluent": True}]})
     assert verify.parse(unsure, 1, 0, mode="repeat").sentences["S1"].whole_theme is True
+
+
+def test_repeat_c_ominous_drops_sentence(fake_model, tmp_log):
+    bad = "它一动不动地躺着，像睡着了"
+    fake_model.c_ominous = {bad}
+    fake_model.reply("a", _a()).reply("b", _b([
+        {"text": bad, "style": "自然", "photo_ids": ["P4"]},
+        {"text": GOOD, "style": "诗意", "photo_ids": ["P4"]},
+    ]))
+    m = _run()["memory"]
+    assert m["push"]["body"] == GOOD
+    log = _log(tmp_log)
+    assert [bad, "c_ominous:"] in log["body"]["rejected"]
+    assert log["c"]["sentences"]["S1"]["ominous"] is True
+
+
+def test_repeat_c_not_natural_drops_sentence(fake_model, tmp_log):
+    bad = "天烧起来，撞进镜头里的慵懒"
+    fake_model.c_unnatural = {bad}
+    fake_model.reply("a", _a()).reply("b", _b([
+        {"text": bad, "style": "自然", "photo_ids": ["P4"]},
+        {"text": GOOD, "style": "诗意", "photo_ids": ["P4"]},
+    ]))
+    m = _run()["memory"]
+    assert m["push"]["body"] == GOOD
+    log = _log(tmp_log)
+    assert [bad, "c_not_natural:"] in log["body"]["rejected"]
+    assert log["c"]["sentences"]["S1"]["natural"] is False
+
+
+def test_repeat_missing_natural_drops_only_that_sentence(fake_model, tmp_log):
+    other = "推开窗，楼顶后面的天刚刚粉了"
+    fake_model.reply("a", _a()).reply("b", _b([
+        {"text": other, "style": "自然", "photo_ids": ["P4"]},
+        {"text": GOOD, "style": "诗意", "photo_ids": ["P4"]},
+    ]))
+    fake_model.reply("c", json.dumps({
+        "sentences": [{"id": "S1", "grounded": True, "whole_theme": True, "fluent": True,
+                       "ominous": False, "reason": ""},
+                      {"id": "S2", "grounded": True, "whole_theme": True, "fluent": True,
+                       "natural": True, "ominous": False, "reason": ""}],
+        "questions": [{"id": "Q1", "grounded": True, "safe": True, "reason": ""}],
+    }, ensure_ascii=False))
+    m = _run()["memory"]
+    assert m["push"]["body"] == GOOD
+    assert [other, "c_not_natural:"] in _log(tmp_log)["body"]["rejected"]
+
+
+def test_verify_parse_reads_natural_and_ominous_only_in_repeat():
+    unsure = json.dumps({"sentences": [{"id": "S1", "grounded": True, "fluent": "unsure",
+                                        "natural": "unsure", "ominous": None}]})
+    r = verify.parse(unsure, 1, 0, mode="repeat").sentences["S1"]
+    assert r.natural is False and r.ominous is True and r.fluent is True
+    flipped = json.dumps({"sentences": [{"id": "S1", "grounded": True, "natural": False,
+                                         "ominous": True}]})
+    life = verify.parse(flipped, 1, 0).sentences["S1"]
+    assert life.natural is True and life.ominous is False
+    ok = json.dumps({"sentences": [{"id": "S1", "grounded": True, "natural": True,
+                                    "ominous": False}]})
+    r = verify.parse(ok, 1, 0, mode="repeat").sentences["S1"]
+    assert r.natural is True and r.ominous is False
+
+
+def test_life_fragment_c_ignores_natural_and_ominous():
+    reply = json.dumps({"sentences": [{"id": "S1", "grounded": True, "mentions_cover": True,
+                                       "natural": False, "ominous": True}]})
+    v = verify.parse(reply, 1, 0).sentences["S1"]
+    assert (v.natural, v.ominous) == (True, False)
+
+
+def test_repeat_c_prompt_asks_natural_and_ominous(fake_model, tmp_log):
+    fake_model.reply("a", _a()).reply("b", _b())
+    _run()
+    c_call = next(c for c in fake_model.calls if c["call"] == "c")
+    text = "\n".join(_texts(c_call["messages"][1]["content"]))
+    assert "natural" in text and "ominous" in text
+    assert "natural 算不自然（false），ominous 算有（true）" in text
 
 
 # ---------- cover ----------

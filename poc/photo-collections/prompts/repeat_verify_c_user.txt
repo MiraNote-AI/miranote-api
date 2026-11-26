@@ -16,6 +16,8 @@
   ③ 只写了某一次：写的是只有某一天、某一张里才有的事（某一张里的一只鸟、某一天的雨），换到别的几次就不成立。
   写的是每次都会有的那一刻（「推开窗的那一下，天已经烧起来了」）就是 true；拿不准算通过（true）。
 - fluent：有没有明显读不通的地方？只抓明显的：动词和东西搭不上（「木桌盛满夜晚」「锅立在汤里」）、硬凑的鸡汤（「承托着未点的期待」）、砍成电报一样读不成句子。不评好不好听；拿不准算通过（true）。
+- natural：像不像一个正常人会发的配文？用词别扭、硬凑比喻（「天烧起来」「撞进镜头里的慵懒」）、读着像机器写的，就是 false。
+- ominous：会不会让人往死、病、受伤、离开、出事上想？写动物或人「一动不动」「不动了」「闭上眼」这一类，就是 true。
 - reason：不通过时一句话说明；whole_theme 为 false 时写明是第几种。
 
 ## 问题
@@ -27,9 +29,9 @@
   问题本来就问照片拍不到的东西（那一刻的反应、手边在忙什么、从什么时候开始），这不是这 7 种之一，不能因为这个判 false。
 - reason：不通过时一句话说明；safe 为 false 时写明是第几种。
 
-拿不准时：grounded、whole_theme 和 fluent 算通过，safe 算不通过。
+拿不准时：grounded、whole_theme 和 fluent 算通过；natural 算不自然（false），ominous 算有（true），safe 算不通过。
 
 ## 输出
 只输出一个 JSON 对象：
-{{"sentences": [{{"id": "S1", "grounded": true, "whole_theme": true, "fluent": true, "reason": ""}}], "questions": [{{"id": "Q1", "grounded": true, "safe": true, "reason": ""}}]}}
+{{"sentences": [{{"id": "S1", "grounded": true, "whole_theme": true, "fluent": true, "natural": true, "ominous": false, "reason": ""}}], "questions": [{{"id": "Q1", "grounded": true, "safe": true, "reason": ""}}]}}
 每一句、每个问题都要有一项，id 和上面的编号一致。没有细节句或没有问题时，对应的列表给空数组。

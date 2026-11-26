@@ -34,6 +34,8 @@ class Verdict:
     fluent: bool = True  # sentences only
     safe: bool = True  # questions only
     whole_theme: bool = True  # sentences of a repeat theme only
+    natural: bool = True  # repeat sentences only; unsure reads False
+    ominous: bool = False  # repeat sentences only; unsure reads True
 
 
 @dataclass
@@ -129,6 +131,8 @@ def parse(text: str, n_sentences: int, n_questions: int, mode: str = "life_fragm
                 grounded=_bool(e, "grounded", unsure=True),
                 whole_theme=_bool(e, "whole_theme", unsure=True),
                 fluent=_bool(e, "fluent", unsure=True),
+                natural=_bool(e, "natural", unsure=False),
+                ominous=_bool(e, "ominous", unsure=True),
                 reason=_reason(e),
             )
             continue
