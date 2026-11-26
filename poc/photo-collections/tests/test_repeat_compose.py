@@ -448,6 +448,15 @@ def test_repeat_examples_file_covers_every_prompt_example():
     assert [t for t in lines if t not in listed] == []
 
 
+def test_repeat_examples_file_covers_every_question_type_example():
+    listed = texts.json("repeat_examples")
+    shown = [t["example"] for t in texts.json("repeat_question_types")["types"]
+             if t["example"] != "\u2014"]
+    assert len(shown) >= 14
+    assert [e for e in shown if e not in listed] == []
+    assert len(listed) == len(set(listed))
+
+
 def test_repeat_example_copy_rejected_with_punctuation_changes(fake_model, tmp_log):
     copy = "路过书店， 看一眼橱窗！"
     c = body.Candidate(text=copy, source="llm", photo_ids=["P4"])
