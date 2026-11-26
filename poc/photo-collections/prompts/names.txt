@@ -125,6 +125,8 @@
   "round1_split_a": "【分法 A：按拍的是什么】{ids}（每组出现的天数：{days}）",
   "round1_split_b": "【分法 B：按什么时候、在哪儿】{ids}（天数：{days}）",
   "round1_group_line": "  · {id}：{where}",
+  "round1_tag_line": "      {label} 组里{inside}% / 组外{outside}%",
+  "round1_no_groups": "这一堆手机没有分小组：chosen 填 none，groups 和 drop_groups 都留空。",
   "round1_photos_head": "【每张图的组号】{items}（A0、B0 = 不在任何组）",
   "round1_photo_line": "图{n} {a}/{b}",
   "round1_labels_head": "【每张图手机认出的标签】",

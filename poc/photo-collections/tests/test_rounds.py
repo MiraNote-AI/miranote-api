@@ -90,6 +90,55 @@ def test_round1_renders_where_lines(client, fake_model):
     assert "A1：多在傍晚，18–20 点，工作日，一个固定的地点" in _text(fake_model.calls[0])
 
 
+def test_round1_renders_group_tags(client, fake_model):
+    fake_model.reply("r1", REPLY)
+    a1 = dict(_group("A1"), tags=[{"label": "cat", "in": 1.0, "out": 0.0},
+                                  {"label": "outdoor", "in": 0.95, "out": 0.8}])
+    _post1(client, _meta1(split_a=[a1, _group("A2")]))
+    lines = _text(fake_model.calls[0]).split("\n")
+    i = next(k for k, l in enumerate(lines) if l.startswith("  · A1："))
+    assert lines[i + 1] == "      cat 组里100% / 组外0%"
+    assert lines[i + 2] == "      outdoor 组里95% / 组外80%"
+    assert lines[i + 3].startswith("  · A2：")
+
+
+@pytest.mark.parametrize("tags", [
+    [{"label": "cat", "in": 1.2, "out": 0.0}],
+    [{"label": "", "in": 0.5, "out": 0.0}],
+    [{"label": "t{}".format(i), "in": 0.5, "out": 0.1} for i in range(9)],
+    "x",
+])
+def test_round1_rejects_bad_tags(client, tags):
+    meta = _meta1(split_a=[dict(_group("A1"), tags=tags)])
+    assert _post1(client, meta).status_code == 400
+
+
+def test_round1_ignores_tags_on_split_b(client, fake_model):
+    fake_model.reply("r1", REPLY)
+    b1 = dict(_group("B1"), tags=[{"label": "cat", "in": 1.0, "out": 0.0}])
+    _post1(client, _meta1(split_b=[b1]))
+    assert " / 组外" not in _text(fake_model.calls[0])
+
+
+def test_round1_without_tags_renders_no_tag_lines(client, fake_model):
+    fake_model.reply("r1", REPLY)
+    _post1(client)
+    assert " / 组外" not in _text(fake_model.calls[0])
+
+
+def test_round1_no_groups_tells_model_to_leave_groups_empty(client, fake_model):
+    import texts
+    fake_model.reply("r1", REPLY)
+    _post1(client, _meta1(split_a=[], split_b=[]))
+    text = _text(fake_model.calls[0])
+    line = texts.json("names")["round1_no_groups"]
+    assert line in text
+    assert text.index("共 51 张") < text.index(line) < text.index("【每张图的组号】")
+    fake_model.reply("r1", REPLY)
+    _post1(client)
+    assert line not in _text(fake_model.calls[1])
+
+
 def test_round1_reask_prepends_old_names(client, fake_model):
     import texts
     fake_model.reply("r1", REPLY)
@@ -270,6 +319,7 @@ ROUND1_PROMPT = """你是一个相册整理助手。下面的照片来自同一�
 
 2. 整堆的名字：2–10 个字，具体、口语，像这个人自己给相册合集起的名字。
    名字要看着这些照片起；下面和回答格式里的例子只是说明写法，不要照抄。
+   名字只写这一堆里大多数照片都有的东西；只在一两张里出现的东西不写进名字，这几张放进第 5 步「不属于这一堆」。
    不评价、不说教，不写「同一个」，不写次数。
    再给一个 2–4 个字的短名词，用在「留住这些{短名词}」这句话里。
    例：窗外的晚霞 → 晚霞；家里的晚饭 → 晚饭；各种拉花 → 拉花。
@@ -279,21 +329,21 @@ ROUND1_PROMPT = """你是一个相册整理助手。下面的照片来自同一�
    - 都说不通，就选 none，整堆就是一个主题。
 
 4. 对选中的那种分法，每个组：
-   - 起名（规则同第 2 步，要比整堆的名字更具体），并给一个短名词；
+   - 起名（规则同第 2 步），并给一个短名词。名字只写这一组大多数照片都有的东西；分法 B 的组是按时间和地点分的，名字写这个场合（「工作日的晚饭」「周末中午的便当」），不要缩成某一样菜或东西（不写「汤饭」），除非这一组几乎每张都是它；
    - 两组的名字其实是一回事，就合并；看不出共同点的，标「去掉」；
    - 只留「像一种习惯或一种收集」的组：同一个时段、地点、器具反复出现，
      或者看得出这个人在特意拍这类东西。只是那天碰巧不一样的（自己带的饭今天海鲜、
      明天肉），标「去掉」。拿不准就不拆。
    - 每个留下的组写一句「每次都一样的是什么」，不超过 20 个字（含标点），
+     只写这一组大多数照片都有的。
      例：「傍晚在家，推开窗的时候」「端上来、还没喝的那一刻」。
-   - 只有选了分法 A 时，才给每个组选 1–3 个证据标签：只能从图片后面列的手机标签里选，
-     选「有这个标签，基本就是这个组」的那几个。选不出就留空。
+   - 只有选了分法 A 时，才给每个组选 1–3 个证据标签：只能从这个组下面列的标签里选，选「组里占比高、组外占比低」的（比如组里 100%、组外 0%）；组外也很常见的标签（组里 95%、组外 80%）不要选。没有列占比时，从图片后面的手机标签里选「有这个标签，基本就是这个组」的那几个。选不出就留空。
    组号为 0 的照片不算任何组。
    用组号（A1、B2 这样）指代组，不要自己按图重新分组，也不要把照片挪到别的组。
    一个组号只能出现在一个组里，不能把一个组拆成两个。
    drop_groups 只列选中那种分法里你要去掉的组。
 
-5. 指出哪几张图明显不属于这一堆。
+5. 指出哪几张图明显不属于这一堆，或者只是一两张里出现的别的东西。
 
 6. 如果你觉得这一堆其实是两类不相干的东西（比如一半是饭、一半是书桌），
    two_kinds 填 true。

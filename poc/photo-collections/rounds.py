@@ -77,6 +77,20 @@ def check_where(where) -> bool:
     return places is None or (_is_int(places) and places >= 0)
 
 
+MAX_TAGS = 8
+
+
+def _check_tags(tags) -> bool:
+    if not isinstance(tags, list) or len(tags) > MAX_TAGS:
+        return False
+    for t in tags:
+        if not isinstance(t, dict) or not isinstance(t.get("label"), str) or not 1 <= len(t["label"]) <= 60:
+            return False
+        if not all(_is_num(t.get(k)) and 0 <= t[k] <= 1 for k in ("in", "out")):
+            return False
+    return True
+
+
 def _check_split(split, pattern) -> bool:
     if not isinstance(split, list) or len(split) > MAX_GROUPS:
         return False
@@ -87,6 +101,8 @@ def _check_split(split, pattern) -> bool:
         if g["id"].endswith("0") or not (_is_int(g.get("days")) and g["days"] >= 0):
             return False
         if not check_where(g.get("where")):
+            return False
+        if g.get("tags") is not None and not _check_tags(g["tags"]):
             return False
         ids.append(g["id"])
     return len(set(ids)) == len(ids)
@@ -209,13 +225,19 @@ def group_where(meta: dict, names: dict) -> Dict[str, str]:
     return {g["id"]: where_line(g["where"], names) for g in meta["split_a"] + meta["split_b"]}
 
 
-def _split_lines(head_key: str, split: List[dict], names: dict, wheres: Dict[str, str]) -> List[str]:
+def _split_lines(head_key: str, split: List[dict], names: dict, wheres: Dict[str, str],
+                 with_tags: bool = False) -> List[str]:
     if not split:
         return []
     ids = names["sep"].join(g["id"] for g in split)
     days = names["sep"].join(str(g["days"]) for g in split)
     out = [names[head_key].format(ids=ids, days=days)]
-    out += [names["round1_group_line"].format(id=g["id"], where=wheres[g["id"]]) for g in split]
+    for g in split:
+        out.append(names["round1_group_line"].format(id=g["id"], where=wheres[g["id"]]))
+        if with_tags:
+            out += [names["round1_tag_line"].format(label=t["label"], inside=round(t["in"] * 100),
+                                                    outside=round(t["out"] * 100))
+                    for t in g.get("tags") or []]
     return out
 
 
@@ -240,8 +262,10 @@ def messages_round1(meta: dict, images: Dict[int, bytes]) -> List[dict]:
     photos = sorted(meta["photos"], key=lambda p: p["n"])
     lines = [names["round1_pile"].format(
         count=meta["pile"]["photo_count"], days=meta["pile"]["day_count"], sent=len(photos))]
-    lines += _split_lines("round1_split_a", meta["split_a"], names, wheres)
+    lines += _split_lines("round1_split_a", meta["split_a"], names, wheres, with_tags=True)
     lines += _split_lines("round1_split_b", meta["split_b"], names, wheres)
+    if not meta["split_a"] and not meta["split_b"]:
+        lines.append(names["round1_no_groups"])
     lines.append(names["round1_photos_head"].format(items=names["sep"].join(
         names["round1_photo_line"].format(n=p["n"], a=p["a"], b=p["b"]) for p in photos)))
     labelled = [p for p in photos if p.get("labels")]
