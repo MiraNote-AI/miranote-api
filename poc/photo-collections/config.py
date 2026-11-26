@@ -63,7 +63,7 @@ ROUND2_MAX_PHOTOS = 15
 # The copy rules the memory was written under; the phone keys its AI cache
 # on it, so a change of rules never serves old copy (copy refine handoff 5.4).
 COPY_VERSION = "copy_v3"  # copy_v3: question refine 2026-11-05
-REPEAT_COPY_VERSION = "repeat_v1"  # repeat themes, decisions 2026-11-20 H1-H4
+REPEAT_COPY_VERSION = "repeat_v2"  # repeat themes, decisions 2026-11-20 H1-H4
 
 # ---------- Prices (CNY per million tokens; thinking billed as output) ----------
 PRICE_INPUT_PER_M = 0.2

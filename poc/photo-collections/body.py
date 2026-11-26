@@ -12,6 +12,7 @@ rejects before pick() sees it.
 
 from __future__ import annotations
 
+import difflib
 import functools
 import logging
 import re
@@ -287,6 +288,28 @@ def _lexicon_hit(t: str, c: Candidate, a: AResult, mode: str = "life_fragment") 
     return None
 
 
+def _plain(text: str) -> str:
+    """NFKC, then no whitespace and no punctuation (Unicode category P*)."""
+    folded = unicodedata.normalize("NFKC", text)
+    return "".join(ch for ch in folded
+                   if not ch.isspace() and not unicodedata.category(ch).startswith("P"))
+
+
+def example_copy(text: str) -> Optional[str]:
+    """The prompt example (prompts/repeat_examples.txt) this text copies:
+    equal, or at least 0.8 similar, after _plain. None when it is not a copy.
+    Repeat themes only; the model copied examples verbatim on a device run
+    (2026-11-25)."""
+    a = _plain(text)
+    if not a:
+        return None
+    for example in texts.json("repeat_examples"):
+        b = _plain(example)
+        if a == b or difflib.SequenceMatcher(None, a, b).ratio() >= 0.8:
+            return example
+    return None
+
+
 def reject_reason(c: Candidate, a: AResult, mode: str = "life_fragment") -> Optional[str]:
     """Why the program rejects this candidate, or None. Order: empty ->
     length -> lexicon (a repeat theme: then its counts) -> (model-written
@@ -296,6 +319,10 @@ def reject_reason(c: Candidate, a: AResult, mode: str = "life_fragment") -> Opti
         return "empty"
     if char_len(t) > MAX_CHARS:
         return "too_long"
+    if mode == "repeat" and c.source == "llm":
+        copied = example_copy(t)
+        if copied:
+            return "example_copy:" + copied[:40]
     hit = _lexicon_hit(t, c, a, mode)
     if not hit and mode == "repeat":
         hit = count_hit(t)

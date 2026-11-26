@@ -34,8 +34,8 @@ TAKEN = {
     "P7": "2026-11-20T17:40:00-06:00",
 }
 IDS = sorted(TAKEN)
-GOOD = "推开窗的那一下，天已经烧起来了"
-GOOD_Q = {"text": "这些傍晚里，哪一晚最让你停下脚步？", "type": "which_most", "why": "挑一晚"}
+GOOD = "楼下那排自行车，停得整整齐齐"
+GOOD_Q = {"text": "第一次注意到它，是在哪儿？", "type": "which_most", "why": "挑一晚"}
 
 
 def _meta(theme=None, order=None):
@@ -95,7 +95,7 @@ def test_repeat_memory_titles_and_cta(fake_model, tmp_log):
     assert m["ending"]["questions"] == [{"text": GOOD_Q["text"], "type": "which_most",
                                          "source": "llm"}]
     assert set(m["facts"]) == set(IDS)
-    assert m["generation"]["copyVersion"] == "repeat_v1"
+    assert m["generation"]["copyVersion"] == "repeat_v2"
     assert m["generation"]["bodySource"] == "llm"
     assert m["generation"]["peakRewrite"] is False and m["generation"]["peakSwitched"] is False
 
@@ -143,7 +143,7 @@ def test_repeat_b_prompt_without_where_says_none(fake_model, tmp_log):
     _run(_meta(dict(THEME, where=None)))
     b_call = next(c for c in fake_model.calls if c["call"] == "b")
     text = "\n".join(_texts(b_call["messages"][1]["content"]))
-    assert "遇到它的那一刻" in text
+    assert "集中在：无" in text
 
 
 # ---------- program checks ----------
@@ -272,7 +272,7 @@ def test_verify_parse_reads_whole_theme_only_in_repeat():
 
 
 def test_repeat_c_ominous_drops_sentence(fake_model, tmp_log):
-    bad = "它一动不动地躺着，像睡着了"
+    bad = "它躺在那儿，像睡着了"
     fake_model.c_ominous = {bad}
     fake_model.reply("a", _a()).reply("b", _b([
         {"text": bad, "style": "自然", "photo_ids": ["P4"]},
@@ -395,7 +395,7 @@ def test_repeat_calls_use_repeat_system_prompts(fake_model, tmp_log):
               "type": "that_moment", "why": "那一刻"}
     fake_model.reply("a", _a())
     fake_model.reply("b", _b([{"text": long_s, "style": "诗意", "photo_ids": ["P4"]}], [long_q]))
-    fake_model.reply("b", _b([], [{"text": "推开窗看到它，第一反应是什么？", "type": "that_moment",
+    fake_model.reply("b", _b([], [{"text": "这扇窗，平时一般几点会推开？", "type": "that_moment",
                                    "why": "改短"}]))
     fake_model.reply("b", _b([{"text": GOOD, "style": "诗意", "photo_ids": ["P4"]}], []))
     m = _run()["memory"]
@@ -417,3 +417,95 @@ def test_life_fragment_calls_keep_v1_system_prompts(fake_model, tmp_log):
     seen = _systems(fake_model)
     assert {c for c, _ in seen} == {"a", "b", "c"}
     assert all(system == want[call] for call, system in seen)
+
+
+# ---------- example copies, taboo words (2026-11-26) ----------
+
+EXAMPLE_TEXT = "推开窗的那一下 天已经烧起来了！"
+
+
+def _example_lines():
+    out = []
+    section = None
+    for line in texts.raw("repeat_b_user").split("\n"):
+        if line.startswith("好的例子"):
+            section = "good"
+        elif line.startswith("不好的例子"):
+            section = "bad"
+        elif line.startswith("## "):
+            section = None
+        if section == "good" and line.startswith("- "):
+            out.append(line[2:].split("（")[0].strip())
+        if section == "bad" and "✓ " in line:
+            out.append(line.split("✓ ", 1)[1].split("（")[0].strip())
+    return out
+
+
+def test_repeat_examples_file_covers_every_prompt_example():
+    listed = texts.json("repeat_examples")
+    lines = _example_lines()
+    assert len(lines) >= 20
+    assert [t for t in lines if t not in listed] == []
+
+
+def test_repeat_example_copy_rejected_with_punctuation_changes(fake_model, tmp_log):
+    copy = "路过书店， 看一眼橱窗！"
+    c = body.Candidate(text=copy, source="llm", photo_ids=["P4"])
+    assert body.reject_reason(c, _facts(), mode="repeat").startswith("example_copy:")
+    near = body.Candidate(text="路过书店，看了一眼橱窗", source="llm", photo_ids=["P4"])
+    assert body.reject_reason(near, _facts(), mode="repeat").startswith("example_copy:")
+    fake_model.reply("a", _a()).reply("b", _b([
+        {"text": copy, "style": "自然", "photo_ids": ["P4"]},
+        {"text": GOOD, "style": "自然", "photo_ids": ["P4"]},
+    ]))
+    m = _run()["memory"]
+    assert m["push"]["body"] == GOOD
+    assert [copy, "example_copy:路过书店，看一眼橱窗"] in _log(tmp_log)["body"]["rejected"]
+
+
+def test_repeat_example_copy_leaves_other_sources_and_modes_alone():
+    t = "路过书店，看一眼橱窗"
+    a = _facts()
+    assert body.reject_reason(body.Candidate(text=t, source="llm", photo_ids=["P4"]), a) is None
+    tmpl = body.Candidate(text=t, source="template_T1", photo_ids=["P4"])
+    assert body.reject_reason(tmpl, a, mode="repeat") is None
+    assert body.example_copy(GOOD) is None
+
+
+def test_life_fragment_ignores_example_guard():
+    c = body.Candidate(text="阳台的多肉，挤满了一个盆", source="llm", photo_ids=["P4"])
+    assert body.reject_reason(c, _facts()) is None
+
+
+def test_repeat_question_copy_rejected(fake_model, tmp_log):
+    copy = {"text": "下一盆，想养什么？", "type": "next_time", "why": "照抄"}
+    q = questions.Question(text=copy["text"], type="next_time", source="llm")
+    assert questions.reject_reason(q, _facts(), mode="repeat").startswith("example_copy:")
+    q2 = questions.Question(text="下一盆 想养什么", type="next_time", source="llm")
+    assert questions.reject_reason(q2, _facts(), mode="repeat").startswith("example_copy:")
+    assert questions.reject_reason(q, _facts(), mode="life_fragment") is None
+    fake_model.reply("a", _a()).reply("b", _b(ranked=[copy]))
+    m = _run()["memory"]
+    assert all(x["source"] != "llm" for x in m["ending"]["questions"])
+    assert len(m["ending"]["questions"]) == 3
+
+
+@pytest.mark.parametrize("text,rejected", [
+    ("它们就趴在那儿不动了", True),
+    ("一动不动地看着窗外", True),
+    ("换着地方睡", False),
+    ("晚霞不动声色地铺开", False),
+])
+def test_repeat_taboo_words_block_only_listed_phrases(text, rejected):
+    c = body.Candidate(text=text, source="llm", photo_ids=["P4"])
+    reason = body.reject_reason(c, _facts(), mode="repeat")
+    assert (reason is not None and reason.startswith("lexicon:")) is rejected
+    if not rejected:
+        assert reason is None
+    q = questions.Question(text=text + "？", type="that_moment", source="llm")
+    assert (questions.reject_reason(q, _facts(), mode="repeat") is not None) is rejected
+
+
+def test_repeat_copy_version_is_v2():
+    import config
+    assert config.REPEAT_COPY_VERSION == "repeat_v2"

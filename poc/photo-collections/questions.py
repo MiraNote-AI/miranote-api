@@ -20,7 +20,7 @@ from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
 import texts
-from body import char_len, count_hit, marker_leak, repeat_words, strip_echo
+from body import char_len, count_hit, example_copy, marker_leak, repeat_words, strip_echo
 from check_a import AResult
 
 MAX_CHARS = 22
@@ -102,6 +102,9 @@ def reject_reason(q: Question, a: AResult, mode: str = "life_fragment") -> Optio
         hit = next((w for w in repeat_words() if w in q.text), None) or count_hit(q.text)
         if hit:
             return "forbidden:" + hit
+        copied = example_copy(q.text)
+        if copied:
+            return "example_copy:" + copied[:40]
     rest = q.text
     for ok in names["question_pronoun_allowed"]:
         rest = rest.replace(ok, "")
