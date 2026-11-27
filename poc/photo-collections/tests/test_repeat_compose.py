@@ -35,7 +35,7 @@ TAKEN = {
 }
 IDS = sorted(TAKEN)
 GOOD = "楼下那排自行车，停得整整齐齐"
-GOOD_Q = {"text": "第一次注意到它，是在哪儿？", "type": "which_most", "why": "挑一晚"}
+GOOD_Q = {"text": "第一次注意到它，是在哪儿？", "type": "since_when", "why": "问从什么时候起"}
 
 
 def _meta(theme=None, order=None):
@@ -92,7 +92,7 @@ def test_repeat_memory_titles_and_cta(fake_model, tmp_log):
     assert m["daypart"] == "evening"  # the peak's local hour, 18:00
     assert m["push"]["body"] == m["ending"]["detail"] == GOOD
     assert m["push"]["coverPhotoId"] == "P4"
-    assert m["ending"]["questions"] == [{"text": GOOD_Q["text"], "type": "which_most",
+    assert m["ending"]["questions"] == [{"text": GOOD_Q["text"], "type": "since_when",
                                          "source": "llm"}]
     assert set(m["facts"]) == set(IDS)
     assert m["generation"]["copyVersion"] == "repeat_v2"

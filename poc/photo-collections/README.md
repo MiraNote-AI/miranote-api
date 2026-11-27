@@ -168,7 +168,9 @@ Settled by `tools/probe_model.py` against `qwen3.7-flash` on 2026-10-31
 
 Both fallbacks (`json_object`) also worked and can be switched to with
 `PHOTO_CALL_A_MODE` / `PHOTO_CALL_B_MODE` / `PHOTO_CALL_C_MODE` without a
-code change (`json_schema` for C uses `SCHEMA_C`).
+code change (`json_schema` for C uses `SCHEMA_C`). `json_schema` mode for call C is not
+supported for repeat themes: `SCHEMA_C` has no `whole_theme`, `natural` or
+`ominous`, so every repeat sentence would be rejected.
 
 Call B (the sentences and questions, and its shorten and cover rounds)
 runs on its own model, `qwen3.8-flash` by default (`PHOTO_CALL_B_MODEL`
