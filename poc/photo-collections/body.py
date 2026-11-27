@@ -295,9 +295,10 @@ def _plain(text: str) -> str:
                    if not ch.isspace() and not unicodedata.category(ch).startswith("P"))
 
 
-def example_copy(text: str) -> Optional[str]:
+def example_copy(text: str, exact: bool = False) -> Optional[str]:
     """The prompt example (prompts/repeat_examples.txt) this text copies:
-    equal, or at least 0.8 similar, after _plain. None when it is not a copy.
+    equal, or (unless exact) at least 0.8 similar, after _plain. None when
+    it is not a copy. Questions use exact: their examples are templates.
     Repeat themes only; the model copied examples verbatim on a device run
     (2026-11-25)."""
     a = _plain(text)
@@ -305,14 +306,15 @@ def example_copy(text: str) -> Optional[str]:
         return None
     for example in texts.json("repeat_examples"):
         b = _plain(example)
-        if a == b or difflib.SequenceMatcher(None, a, b).ratio() >= 0.8:
+        if a == b or (not exact and difflib.SequenceMatcher(None, a, b).ratio() >= 0.8):
             return example
     return None
 
 
 def reject_reason(c: Candidate, a: AResult, mode: str = "life_fragment") -> Optional[str]:
     """Why the program rejects this candidate, or None. Order: empty ->
-    length -> lexicon (a repeat theme: then its counts) -> (model-written
+    length -> (a repeat theme, model-written only) example copy ->
+    lexicon (a repeat theme: then its counts) -> (model-written
     only) photo id -> lianpai."""
     t = clean(c.text)
     if not t:

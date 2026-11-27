@@ -493,6 +493,10 @@ def test_repeat_question_copy_rejected(fake_model, tmp_log):
     q2 = questions.Question(text="下一盆 想养什么", type="next_time", source="llm")
     assert questions.reject_reason(q2, _facts(), mode="repeat").startswith("example_copy:")
     assert questions.reject_reason(q, _facts(), mode="life_fragment") is None
+    for template in ("这些晚霞的三个关键词？", "给这些晚霞配一首歌，会是哪首？"):
+        t = questions.Question(text=template, type="one_word" if "关键词" in template
+                               else "imagine", source="llm")
+        assert questions.reject_reason(t, _facts(), mode="repeat") is None
     fake_model.reply("a", _a()).reply("b", _b(ranked=[copy]))
     m = _run()["memory"]
     assert all(x["source"] != "llm" for x in m["ending"]["questions"])

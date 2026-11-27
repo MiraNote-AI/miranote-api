@@ -102,7 +102,7 @@ def reject_reason(q: Question, a: AResult, mode: str = "life_fragment") -> Optio
         hit = next((w for w in repeat_words() if w in q.text), None) or count_hit(q.text)
         if hit:
             return "forbidden:" + hit
-        copied = example_copy(q.text)
+        copied = example_copy(q.text, exact=True)
         if copied:
             return "example_copy:" + copied[:40]
     rest = q.text
